@@ -187,7 +187,7 @@ export function buildWorkflowBrief(
     universeId: task.universeId,
     workId: task.workId,
     chapterId: task.chapterId,
-    characterId: task.characterIds[0],
+    characterIds: task.characterIds,
   });
   const readiness = workflowTaskReadiness(workspace, task);
   const lines = [

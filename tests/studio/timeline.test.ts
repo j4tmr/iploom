@@ -75,6 +75,71 @@ describe("story timeline", () => {
     expect(brief).not.toContain("thirteen-pendulum space");
   });
 
+  test("keeps prop-subject events anchored to the selected chapter", () => {
+    const workspace = createDemoWorkspace("en");
+    const propState = structuredClone(workspace.timelineEvents[0]!);
+    propState.id = "timeline_prop_chapter_state";
+    propState.chapterId = "chapter_tide_001";
+    propState.subjectKind = "object";
+    propState.subjectId = "object_brass_key";
+    propState.relatedCharacterIds = [];
+    propState.relatedLocationIds = [];
+    propState.relatedObjectIds = [];
+    workspace.timelineEvents.push(propState);
+
+    const events = relevantTimelineEvents(workspace, {
+      workId: "work_tide_clock",
+      chapterId: "chapter_tide_001",
+    });
+    expect(events.canon.map((event) => event.id)).toContain(propState.id);
+  });
+
+  test("keeps time-only events relevant to the selected chapter cast", () => {
+    const workspace = createDemoWorkspace("en");
+    const timed = structuredClone(workspace.timelineEvents[0]!);
+    timed.id = "timeline_time_only_costume";
+    timed.chapterId = undefined;
+    timed.storyTime = "Rainy night 22:45";
+    timed.subjectKind = "character";
+    timed.subjectId = "char_lin";
+    timed.relatedCharacterIds = [];
+    timed.relatedLocationIds = [];
+    timed.relatedObjectIds = [];
+    workspace.timelineEvents.push(timed);
+
+    const events = relevantTimelineEvents(workspace, {
+      workId: "work_tide_clock",
+      chapterId: "chapter_tide_002",
+    });
+    expect(events.canon.map((event) => event.id)).toContain(timed.id);
+  });
+
+  test("scopes timeline facts to every character assigned to a task", () => {
+    const workspace = createDemoWorkspace("en");
+    const shenOnly = structuredClone(workspace.timelineEvents[0]!);
+    shenOnly.id = "timeline_shen_only";
+    shenOnly.subjectKind = "character";
+    shenOnly.subjectId = "char_shen";
+    shenOnly.relatedCharacterIds = [];
+    shenOnly.relatedLocationIds = [];
+    shenOnly.relatedObjectIds = [];
+    shenOnly.title = {
+      zh: "沈雁独自确认怀表",
+      en: "Shen checks the watch alone",
+    };
+    workspace.timelineEvents.push(shenOnly);
+
+    const brief = buildWorkflowBrief(workspace, "task_review_first", "en");
+    expect(brief).toContain("Shen checks the watch alone");
+
+    const linOnly = relevantTimelineEvents(workspace, {
+      workId: "work_tide_clock",
+      chapterId: "chapter_tide_001",
+      characterId: "char_lin",
+    });
+    expect(linOnly.canon.map((event) => event.id)).not.toContain(shenOnly.id);
+  });
+
   test("drops scene subjects and clears scene anchors when a scene is removed", () => {
     const workspace = createDemoWorkspace("en");
     const chapter = workspace.works[0]!.chapters[0]!;

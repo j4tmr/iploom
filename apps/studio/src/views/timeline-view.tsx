@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { displayText } from "../core/factory.ts";
 import {
   sortTimelineEvents,
@@ -12,7 +12,11 @@ import type {
   TimelineSubjectKind,
   UiLocale,
 } from "../core/types.ts";
-import type { Translate } from "../i18n.ts";
+import {
+  timelineEventLabels,
+  timelineSubjectLabels,
+  type Translate,
+} from "../i18n.ts";
 import { Icon, type IconName } from "../components/icon.tsx";
 import {
   Badge,
@@ -23,25 +27,12 @@ import {
   TextInput,
 } from "../components/ui.tsx";
 
-const subjectMeta: Record<TimelineSubjectKind, {
-  label: [string, string];
-  icon: IconName;
-}> = {
-  character: { label: ["人物", "Character"], icon: "users" },
-  scene: { label: ["场景", "Scene"], icon: "grid" },
-  location: { label: ["地点", "Location"], icon: "world" },
-  object: { label: ["物件", "Prop"], icon: "package" },
+const subjectIcons: Record<TimelineSubjectKind, IconName> = {
+  character: "users",
+  scene: "grid",
+  location: "world",
+  object: "package",
 };
-
-const eventLabels = {
-  introduction: ["首次出现", "Introduction"],
-  "state-change": ["状态变化", "State change"],
-  transfer: ["转移", "Transfer"],
-  reveal: ["揭示", "Reveal"],
-  loss: ["遗失", "Loss"],
-  recovery: ["恢复", "Recovery"],
-  other: ["其他", "Other"],
-} as const;
 
 export function TimelineView({
   workspace,
@@ -82,7 +73,12 @@ export function TimelineView({
   const [canonStatus, setCanonStatus] = useState<"all" | "canon" | "proposed">("all");
   const [query, setQuery] = useState("");
 
-  const work = workspace.works.find((item) => item.id === workId);
+  useEffect(() => {
+    if (!initialUniverseId) return;
+    setUniverseId(initialUniverseId);
+    setWorkId("");
+  }, [initialUniverseId]);
+
   const works = workspace.works.filter((item) => item.universeId === universeId);
   const objects = workspace.storyObjects.filter(
     (item) => item.universeId === universeId,
@@ -190,8 +186,8 @@ export function TimelineView({
           }
         >
           <option value="all">{en ? "All state owners" : "全部主体"}</option>
-          {(Object.keys(subjectMeta) as TimelineSubjectKind[]).map((kind) => (
-            <option key={kind} value={kind}>{subjectMeta[kind].label[en ? 1 : 0]}</option>
+          {(Object.keys(timelineSubjectLabels[locale]) as TimelineSubjectKind[]).map((kind) => (
+            <option key={kind} value={kind}>{timelineSubjectLabels[locale][kind]}</option>
           ))}
         </Select>
         <Select
@@ -222,20 +218,20 @@ export function TimelineView({
       <div className="timeline-layout">
         <section className="timeline-stream" aria-label={en ? "Story timeline" : "故事时间线"}>
           {events.length ? events.map((event) => {
-            const meta = subjectMeta[event.subjectKind];
+            const icon = subjectIcons[event.subjectKind];
             const labels = relatedNames(event);
             const work = workspace.works.find((item) => item.id === event.workId);
             return (
               <article className={`timeline-event ${event.canonStatus}`} key={event.id}>
                 <div className="timeline-rail">
-                  <span className="timeline-marker"><Icon name={meta.icon} size={16} /></span>
+                  <span className="timeline-marker"><Icon name={icon} size={16} /></span>
                   <i />
                 </div>
                 <div className="timeline-event-card">
                   <header>
                     <div className="timeline-event-kicker">
-                      <span>{meta.label[en ? 1 : 0]}</span>
-                      <span>{eventLabels[event.eventKind][en ? 1 : 0]}</span>
+                      <span>{timelineSubjectLabels[locale][event.subjectKind]}</span>
+                      <span>{timelineEventLabels[locale][event.eventKind]}</span>
                       <Badge tone={event.canonStatus === "canon" ? "green" : "amber"} dot>
                         {event.canonStatus === "canon"
                           ? (en ? "Canon" : "既定事实")

@@ -108,20 +108,26 @@ export function relevantTimelineEvents(
       ]
     : [];
   const sceneIds = chapter?.scenes.map((scene) => scene.id) ?? [];
+  const characterIds = scope.characterIds?.length
+    ? scope.characterIds
+    : scope.characterId
+      ? [scope.characterId]
+      : [];
   const events = workspace.timelineEvents.filter((event) => {
     if (universeId && event.universeId !== universeId) return false;
     if (scope.workId && event.workId !== scope.workId) return false;
     if (
       chapter &&
+      event.chapterId &&
       chapterNumber(workspace, event) > currentChapterNumber
     ) {
       return false;
     }
-    if (scope.characterId) {
+    if (characterIds.length) {
       return (
         (event.subjectKind === "character" &&
-          event.subjectId === scope.characterId) ||
-        event.relatedCharacterIds.includes(scope.characterId)
+          characterIds.includes(event.subjectId)) ||
+        intersects(event.relatedCharacterIds, characterIds)
       );
     }
     if (!chapter) return true;
@@ -130,6 +136,7 @@ export function relevantTimelineEvents(
       (event.subjectKind === "location" &&
         [...castIds, ...locationIds].includes(event.subjectId)) ||
       (event.subjectKind === "scene" && sceneIds.includes(event.subjectId)) ||
+      (event.subjectKind === "object" && event.chapterId === chapter.id) ||
       intersects(event.relatedCharacterIds, castIds) ||
       intersects(event.relatedLocationIds, locationIds)
     );

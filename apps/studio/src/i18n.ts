@@ -3,6 +3,8 @@ import type {
   LoreCategory,
   RelationshipStatus,
   RelationshipType,
+  TimelineEventKind,
+  TimelineSubjectKind,
   UiLocale,
   WorkStatus,
 } from "./core/types.ts";
@@ -785,6 +787,48 @@ export const loreLabels: Record<UiLocale, Record<LoreCategory, string>> = {
     technology: "Technology",
     power: "Power system",
     mystery: "Mystery",
+  },
+};
+
+export const timelineSubjectLabels: Record<
+  UiLocale,
+  Record<TimelineSubjectKind, string>
+> = {
+  "zh-CN": {
+    character: "人物",
+    scene: "场景",
+    location: "地点",
+    object: "物件",
+  },
+  en: {
+    character: "Character",
+    scene: "Scene",
+    location: "Location",
+    object: "Prop",
+  },
+};
+
+export const timelineEventLabels: Record<
+  UiLocale,
+  Record<TimelineEventKind, string>
+> = {
+  "zh-CN": {
+    introduction: "首次出现",
+    "state-change": "状态变化",
+    transfer: "转移 / 交接",
+    reveal: "揭示",
+    loss: "遗失 / 损坏",
+    recovery: "恢复 / 找回",
+    other: "其他",
+  },
+  en: {
+    introduction: "Introduction",
+    "state-change": "State change",
+    transfer: "Transfer",
+    reveal: "Reveal",
+    loss: "Loss",
+    recovery: "Recovery",
+    other: "Other",
   },
 };
 

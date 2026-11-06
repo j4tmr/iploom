@@ -366,6 +366,9 @@ export const workspaceSchema = z
     const characters = new Set(workspace.characters.map((item) => item.id));
     const locations = new Set(workspace.locations.map((item) => item.id));
     const storyObjects = new Set(workspace.storyObjects.map((item) => item.id));
+    const charactersById = new Map(workspace.characters.map((item) => [item.id, item]));
+    const locationsById = new Map(workspace.locations.map((item) => [item.id, item]));
+    const storyObjectsById = new Map(workspace.storyObjects.map((item) => [item.id, item]));
 
     const issue = (path: (string | number)[], message: string) =>
       ctx.addIssue({ code: "custom", path, message });
@@ -512,19 +515,19 @@ export const workspaceSchema = z
           issue(["timelineEvents", index, "sceneId"], "unknown scene");
       }
       if (event.subjectKind === "character") {
-        const subject = workspace.characters.find((item) => item.id === event.subjectId);
+        const subject = charactersById.get(event.subjectId);
         if (!subject)
           issue(["timelineEvents", index, "subjectId"], "unknown character");
         else if (!subject.universeIds.includes(event.universeId))
           issue(["timelineEvents", index, "subjectId"], "character belongs to another universe");
       } else if (event.subjectKind === "location") {
-        const subject = workspace.locations.find((item) => item.id === event.subjectId);
+        const subject = locationsById.get(event.subjectId);
         if (!subject)
           issue(["timelineEvents", index, "subjectId"], "unknown location");
         else if (subject.universeId !== event.universeId)
           issue(["timelineEvents", index, "subjectId"], "location belongs to another universe");
       } else if (event.subjectKind === "object") {
-        const subject = workspace.storyObjects.find((item) => item.id === event.subjectId);
+        const subject = storyObjectsById.get(event.subjectId);
         if (!subject)
           issue(["timelineEvents", index, "subjectId"], "unknown object");
         else if (subject.universeId !== event.universeId)
@@ -536,21 +539,21 @@ export const workspaceSchema = z
           issue(["timelineEvents", index, "subjectId"], "unknown scene subject");
       }
       for (const characterId of event.relatedCharacterIds) {
-        const character = workspace.characters.find((item) => item.id === characterId);
+        const character = charactersById.get(characterId);
         if (!character)
           issue(["timelineEvents", index, "relatedCharacterIds"], "unknown character");
         else if (!character.universeIds.includes(event.universeId))
           issue(["timelineEvents", index, "relatedCharacterIds"], "character belongs to another universe");
       }
       for (const locationId of event.relatedLocationIds) {
-        const location = workspace.locations.find((item) => item.id === locationId);
+        const location = locationsById.get(locationId);
         if (!location)
           issue(["timelineEvents", index, "relatedLocationIds"], "unknown location");
         else if (location.universeId !== event.universeId)
           issue(["timelineEvents", index, "relatedLocationIds"], "location belongs to another universe");
       }
       for (const objectId of event.relatedObjectIds) {
-        const object = workspace.storyObjects.find((item) => item.id === objectId);
+        const object = storyObjectsById.get(objectId);
         if (!object)
           issue(["timelineEvents", index, "relatedObjectIds"], "unknown object");
         else if (object.universeId !== event.universeId)

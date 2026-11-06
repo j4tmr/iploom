@@ -18,28 +18,12 @@ import {
   TextArea,
   TextInput,
 } from "./ui.tsx";
+import { timelineEventLabels, timelineSubjectLabels } from "../i18n.ts";
 
 type Base = {
   open: boolean;
   onClose: () => void;
   locale: UiLocale;
-};
-
-const eventKindLabels: Record<TimelineEventKind, [string, string]> = {
-  introduction: ["首次出现", "Introduction"],
-  "state-change": ["状态变化", "State change"],
-  transfer: ["转移 / 交接", "Transfer"],
-  reveal: ["揭示", "Reveal"],
-  loss: ["遗失 / 损坏", "Loss"],
-  recovery: ["恢复 / 找回", "Recovery"],
-  other: ["其他", "Other"],
-};
-
-const subjectKindLabels: Record<TimelineSubjectKind, [string, string]> = {
-  character: ["人物状态", "Character"],
-  scene: ["场景状态", "Scene"],
-  location: ["地点变化", "Location"],
-  object: ["物件状态", "Prop"],
 };
 
 export function StoryObjectModal({
@@ -110,8 +94,16 @@ export function StoryObjectModal({
       }
     >
       <FieldGrid>
-        <Field label={en ? "Universe" : "所属宇宙"} wide>
-          <Select value={universeId} onChange={(event) => setUniverseId(event.target.value)}>
+        <Field
+          label={en ? "Universe" : "所属宇宙"}
+          hint={initial ? (en ? "The universe is fixed after creation." : "创建后不可更改所属宇宙。") : undefined}
+          wide
+        >
+          <Select
+            value={universeId}
+            disabled={Boolean(initial)}
+            onChange={(event) => setUniverseId(event.target.value)}
+          >
             {workspace.universes.map((item) => (
               <option key={item.id} value={item.id}>{displayText(item.name, locale)}</option>
             ))}
@@ -383,8 +375,8 @@ export function TimelineEventModal({
               setSubjectId("");
             }}
           >
-            {(Object.keys(subjectKindLabels) as TimelineSubjectKind[]).map((kind) => (
-              <option key={kind} value={kind}>{subjectKindLabels[kind][en ? 1 : 0]}</option>
+            {(Object.keys(timelineSubjectLabels[locale]) as TimelineSubjectKind[]).map((kind) => (
+              <option key={kind} value={kind}>{timelineSubjectLabels[locale][kind]}</option>
             ))}
           </Select>
         </Field>
@@ -398,8 +390,8 @@ export function TimelineEventModal({
         </Field>
         <Field label={en ? "Event kind" : "事件类型"}>
           <Select value={eventKind} onChange={(event) => setEventKind(event.target.value as TimelineEventKind)}>
-            {(Object.keys(eventKindLabels) as TimelineEventKind[]).map((kind) => (
-              <option key={kind} value={kind}>{eventKindLabels[kind][en ? 1 : 0]}</option>
+            {(Object.keys(timelineEventLabels[locale]) as TimelineEventKind[]).map((kind) => (
+              <option key={kind} value={kind}>{timelineEventLabels[locale][kind]}</option>
             ))}
           </Select>
         </Field>
