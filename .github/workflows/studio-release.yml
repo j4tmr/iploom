@@ -25,7 +25,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: .bun-version
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
       - name: Verify tag matches package version
@@ -73,7 +73,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: .bun-version
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
       - run: bun install --frozen-lockfile
@@ -111,7 +111,7 @@ jobs:
       - run: bun run studio:verify-mcp --packaged
       - name: Upload macOS packages
         if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: studio-macos-packages
           path: |
@@ -122,7 +122,7 @@ jobs:
           retention-days: 14
       - name: Upload Windows packages
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: studio-windows-packages
           path: |
@@ -140,7 +140,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
       - uses: actions/download-artifact@v4
