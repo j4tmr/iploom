@@ -61,6 +61,15 @@ const workflowTaskKindSchema = z.enum([
   "adaptation",
 ]);
 const workflowTaskStatusSchema = z.enum(["queued", "active", "review", "done"]);
+const standardKindSchema = z.enum([
+  "style",
+  "format",
+  "naming",
+  "numeric",
+  "entity-prompt",
+  "continuity",
+]);
+const standardStatusSchema = z.enum(["draft", "active", "disabled"]);
 const timelineSubjectKindSchema = z.enum([
   "character",
   "scene",
@@ -309,6 +318,46 @@ export const exportRecordSchema = z
   })
   .strict();
 
+export const standardRefSchema = z
+  .object({
+    id: identifier,
+    version: positiveInt,
+  })
+  .strict();
+
+export const standardSchema = z
+  .object({
+    id: identifier,
+    title: localizedSchema,
+    kind: standardKindSchema,
+    universeId: identifier.optional(),
+    body: z
+      .object({
+        zh: z.string().max(20_000).default(""),
+        en: z.string().max(20_000).default(""),
+      })
+      .strict(),
+    status: standardStatusSchema,
+    version: positiveInt,
+    createdAt: isoDate,
+    updatedAt: isoDate,
+  })
+  .strict()
+  .superRefine((standard, ctx) => {
+    if (!standard.title.zh.trim() && !standard.title.en.trim())
+      ctx.addIssue({
+        code: "custom",
+        path: ["title"],
+        message: "standard title is required",
+      });
+    if (!standard.body.zh.trim() && !standard.body.en.trim())
+      ctx.addIssue({
+        code: "custom",
+        path: ["body"],
+        message: "standard body is required",
+      });
+  });
+
 export const workflowTaskSchema = z
   .object({
     id: identifier,
@@ -324,6 +373,7 @@ export const workflowTaskSchema = z
     parentId: identifier.optional(),
     characterIds: z.array(identifier).max(100).default([]),
     dependsOnIds: z.array(identifier).max(100).default([]),
+    standardRefs: z.array(standardRefSchema).max(100).default([]),
     createdAt: isoDate,
     updatedAt: isoDate,
   })
@@ -348,6 +398,7 @@ export const workspaceSchema = z
     updatedAt: isoDate,
     lastOpenedWorkId: identifier.optional(),
     settings: settingsSchema,
+    standards: z.array(standardSchema).max(1_000),
     universes: z.array(universeSchema).max(1_000),
     characters: z.array(characterSchema).max(20_000),
     locations: z.array(locationSchema).max(20_000),
@@ -363,6 +414,7 @@ export const workspaceSchema = z
   .strict()
   .superRefine((workspace, ctx) => {
     const universes = new Set(workspace.universes.map((item) => item.id));
+    const standards = new Map(workspace.standards.map((item) => [item.id, item]));
     const characters = new Set(workspace.characters.map((item) => item.id));
     const locations = new Set(workspace.locations.map((item) => item.id));
     const storyObjects = new Set(workspace.storyObjects.map((item) => item.id));
@@ -386,6 +438,7 @@ export const workspaceSchema = z
       }
     };
     unique(workspace.universes, "universes", (item) => item.id);
+    unique(workspace.standards, "standards", (item) => item.id);
     unique(workspace.characters, "characters", (item) => item.id);
     unique(workspace.locations, "locations", (item) => item.id);
     unique(workspace.storyObjects, "storyObjects", (item) => item.id);
@@ -462,6 +515,10 @@ export const workspaceSchema = z
           }
         }
       }
+    }
+    for (const [index, standard] of workspace.standards.entries()) {
+      if (standard.universeId && !universes.has(standard.universeId))
+        issue(["standards", index, "universeId"], "unknown universe");
     }
     for (const [index, character] of workspace.characters.entries()) {
       if (!character.universeIds.length)
@@ -612,6 +669,30 @@ export const workspaceSchema = z
           issue(
             ["workflowTasks", index, "characterIds"],
             "character belongs to another universe",
+          );
+      }
+      const standardIds = new Set<string>();
+      for (const ref of task.standardRefs) {
+        if (standardIds.has(ref.id))
+          issue(
+            ["workflowTasks", index, "standardRefs"],
+            `duplicate standard: ${ref.id}`,
+          );
+        standardIds.add(ref.id);
+        const standard = standards.get(ref.id);
+        if (!standard)
+          issue(
+            ["workflowTasks", index, "standardRefs"],
+            `unknown standard: ${ref.id}`,
+          );
+        else if (
+          standard.universeId &&
+          task.universeId &&
+          standard.universeId !== task.universeId
+        )
+          issue(
+            ["workflowTasks", index, "standardRefs"],
+            "standard belongs to another universe",
           );
       }
     }

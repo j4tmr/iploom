@@ -119,11 +119,12 @@ describe("studio domain", () => {
     delete legacy.storyObjects;
     delete legacy.timelineEvents;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(3);
-    expect(migrated.revision).toBe(42);
+    expect(migrated.schema_version).toBe(4);
+    expect(migrated.revision).toBe(43);
     expect(migrated.workflowTasks).toEqual([]);
     expect(migrated.storyObjects).toEqual([]);
     expect(migrated.timelineEvents).toEqual([]);
+    expect(migrated.standards.length).toBe(6);
   });
 
   test("migrates schema v2 workspaces by adding timeline collections", () => {
@@ -135,8 +136,8 @@ describe("studio domain", () => {
     delete legacy.storyObjects;
     delete legacy.timelineEvents;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(3);
-    expect(migrated.revision).toBe(11);
+    expect(migrated.schema_version).toBe(4);
+    expect(migrated.revision).toBe(12);
     expect(migrated.storyObjects).toEqual([]);
     expect(migrated.timelineEvents).toEqual([]);
   });
@@ -470,15 +471,15 @@ describe("workspace store", () => {
       await Bun.write(file, JSON.stringify(legacy));
       const store = new WorkspaceStore(file);
       const loaded = await store.load();
-      expect(loaded.workspace.schema_version).toBe(3);
+      expect(loaded.workspace.schema_version).toBe(4);
       expect(loaded.workspace.workflowTasks).toEqual([]);
-      expect(loaded.workspace.revision).toBe(5);
+      expect(loaded.workspace.revision).toBe(6);
       await store.save(loaded.workspace);
       const persisted = JSON.parse(readFileSync(file, "utf8")) as {
         schema_version: number;
         workflowTasks: unknown[];
       };
-      expect(persisted.schema_version).toBe(3);
+      expect(persisted.schema_version).toBe(4);
       expect(persisted.workflowTasks).toEqual([]);
     } finally {
       rmSync(root, { recursive: true, force: true });

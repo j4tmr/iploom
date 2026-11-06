@@ -23,12 +23,14 @@ import type {
   StoryObject,
   StoryUniverse,
   StoryWork,
+  StandardStatus,
   TimelineEvent,
   ThemeMode,
   UiLocale,
   WorkflowTask,
   WorkflowTaskStatus,
   WorkspaceSettings,
+  WorkspaceStandard,
 } from "./core/types.ts";
 import {
   dictionaries,
@@ -49,6 +51,7 @@ import {
   CharacterModal,
   NovelModal,
   RelationshipModal,
+  StandardModal,
   UniverseModal,
   WorkflowTaskModal,
 } from "./components/forms.tsx";
@@ -65,6 +68,7 @@ import { ExportsView } from "./views/exports-view.tsx";
 import { LibraryView } from "./views/library-view.tsx";
 import { RelationshipsView } from "./views/relationships-view.tsx";
 import { SettingsView } from "./views/settings-view.tsx";
+import { FoundationView } from "./views/foundation-view.tsx";
 import { UniverseView } from "./views/universe-view.tsx";
 import { WorkView } from "./views/work-view.tsx";
 import { WorkflowView } from "./views/workflow-view.tsx";
@@ -73,6 +77,7 @@ import { ManuscriptImport } from "./components/manuscript-import.tsx";
 import { mergeManuscriptImport } from "./core/manuscript.ts";
 import { StoryObjectModal, TimelineEventModal } from "./components/timeline-forms.tsx";
 import { TimelineView } from "./views/timeline-view.tsx";
+import type { StandardCandidate } from "./core/standards.ts";
 
 type ModalState =
   | { kind: "import" }
@@ -102,7 +107,8 @@ type ModalState =
       universeId?: string;
       workId?: string;
     }
-  | { kind: "mcp" };
+  | { kind: "mcp" }
+  | { kind: "standard"; initial?: WorkspaceStandard };
 
 export function App() {
   const state = useStudioWorkspace();
@@ -213,6 +219,8 @@ export function App() {
       return { eyebrow: "STORY STATE / 故事状态", title: t("timeline") };
     if (route.name === "workflow")
       return { eyebrow: "AI WORKFLOW / 创作流水线", title: t("workflow") };
+    if (route.name === "foundation")
+      return { eyebrow: "FOUNDATION / 基础规则", title: t("foundation") };
     if (route.name === "exports")
       return { eyebrow: "ARCREEL / 漫剧交付", title: t("exports") };
     if (route.name === "settings")
@@ -289,6 +297,14 @@ export function App() {
           )
           .map((task) => task.id),
       );
+      const removedStandards = new Set(
+        draft.standards
+          .filter((item) => item.universeId === target.id)
+          .map((item) => item.id),
+      );
+      draft.standards = draft.standards.filter(
+        (item) => !removedStandards.has(item.id),
+      );
       draft.workflowTasks = draft.workflowTasks
         .filter((task) => !removedTasks.has(task.id))
         .map((task) => ({
@@ -299,6 +315,9 @@ export function App() {
               : task.parentId,
           dependsOnIds: task.dependsOnIds.filter(
             (id) => !removedTasks.has(id),
+          ),
+          standardRefs: task.standardRefs.filter(
+            (ref) => !removedStandards.has(ref.id),
           ),
         }));
       if (draft.lastOpenedWorkId && deletedWorks.has(draft.lastOpenedWorkId))
@@ -533,6 +552,60 @@ export function App() {
       target.updatedAt = new Date().toISOString();
     });
     notify(t("saved"));
+  };
+
+  const saveStandard = (next: WorkspaceStandard) => {
+    mutate((draft) => {
+      const index = draft.standards.findIndex((item) => item.id === next.id);
+      if (index >= 0) draft.standards[index] = next;
+      else draft.standards.push(next);
+    });
+    notify(t("saved"));
+  };
+
+  const changeStandardStatus = (
+    standard: WorkspaceStandard,
+    status: StandardStatus,
+  ) => {
+    mutate((draft) => {
+      const target = draft.standards.find((item) => item.id === standard.id);
+      if (!target || target.status === status) return;
+      target.status = status;
+      target.updatedAt = new Date().toISOString();
+    });
+  };
+
+  const registerStandardCandidates = (candidates: StandardCandidate[]) => {
+    if (candidates.length === 0) return;
+    const room = Math.max(0, 1_000 - workspace.standards.length);
+    const accepted = candidates.slice(0, room);
+    if (accepted.length === 0) {
+      notify(t("foundationLimitReached"));
+      return;
+    }
+    const now = new Date().toISOString();
+    mutate((draft) => {
+      for (const candidate of accepted.slice(
+        0,
+        Math.max(0, 1_000 - draft.standards.length),
+      )) {
+        draft.standards.push({
+          id: createId("std"),
+          kind: candidate.kind,
+          title: candidate.title,
+          body: candidate.body,
+          status: "draft",
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    });
+    notify(
+      accepted.length < candidates.length
+        ? t("foundationLimitReached")
+        : t("foundationRegistered"),
+    );
   };
 
   const deleteAtlas = (kind: "location" | "faction" | "lore", id: string) => {
@@ -931,6 +1004,21 @@ export function App() {
             />
           ) : null}
 
+          {route.name === "foundation" ? (
+            <FoundationView
+              workspace={workspace}
+              locale={locale}
+              t={t}
+              aiInfo={aiInfo}
+              onNewStandard={() => setModal({ kind: "standard" })}
+              onEditStandard={(initial) => setModal({ kind: "standard", initial })}
+              onStatusChange={changeStandardStatus}
+              onRegisterCandidates={registerStandardCandidates}
+              onOpenWorkflow={() => navigate({ name: "workflow" })}
+              onOpenSettings={() => navigate({ name: "settings" })}
+            />
+          ) : null}
+
           {route.name === "workflow" ? (
             <WorkflowView
               workspace={workspace}
@@ -1116,6 +1204,18 @@ export function App() {
           locale={locale}
         />
       ) : null}
+      {modal?.kind === "standard" ? (
+        <StandardModal
+          key={`standard-${modal.initial?.id ?? "new"}`}
+          open
+          onClose={() => setModal(null)}
+          t={t}
+          locale={locale}
+          workspace={workspace}
+          initial={modal.initial}
+          onSave={saveStandard}
+        />
+      ) : null}
       {modal?.kind === "task" ? (
         <WorkflowTaskModal
           key={`task-${modal.initial?.id ?? "new"}-${modal.parentId ?? ""}`}
@@ -1174,6 +1274,10 @@ function McpModal({
     "get_relationship_graph",
     "list_workflow_tasks",
     "get_workflow_brief",
+    "list_standards",
+    "get_standard",
+    "create_standard",
+    "update_standard",
     "export_arcreel_bundle",
   ];
   return (

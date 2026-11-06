@@ -7,6 +7,7 @@ export type StudioRoute =
   | { name: "graph"; universeId?: string }
   | { name: "timeline"; universeId?: string }
   | { name: "workflow" }
+  | { name: "foundation" }
   | { name: "exports" }
   | { name: "settings" };
 

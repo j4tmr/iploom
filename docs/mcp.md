@@ -31,9 +31,13 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 | `get_relationship_graph` | yes | Return graph nodes, edges, degrees and warnings |
 | `list_workflow_tasks` | yes | List AI authoring tasks with readiness, blockers and optional world/novel/status filters |
 | `get_workflow_brief` | yes | Generate a deterministic, task-scoped bilingual Markdown brief |
+| `list_standards` | yes | List foundation standards with kind, status, scope and pinned task count |
+| `get_standard` | yes | Read one standard, its applied scope and the tasks that pin its version |
+| `create_standard` | no | Register a foundation standard as a draft (or active) with schema validation |
+| `update_standard` | no | Update a standard; content changes bump its version, status-only changes do not |
 | `export_arcreel_bundle` | no | Write an ArcReel-style handoff package |
 
-Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision.
+Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The three write tools (`create_standard`, `update_standard`, `export_arcreel_bundle`) are the only ones that can change local state; writes are serialized and re-validated against the workspace schema.
 
 ## Example prompts
 
@@ -89,4 +93,4 @@ bun run studio:verify-mcp
 
 ## Safety
 
-The server reads the workspace on every call and only writes through `export_arcreel_bundle`. It does not call a model, network service or cloud API. MCP clients can still read all text in the active workspace, so only connect clients you trust.
+The server reads the workspace on every call. It only changes local state through `create_standard`, `update_standard` and `export_arcreel_bundle`. It does not call a model, network service or cloud API. MCP clients can still read all text in the active workspace, so only connect clients you trust.

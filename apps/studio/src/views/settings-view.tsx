@@ -29,6 +29,12 @@ const mcpTools = [
   "get_chapter",
   "search_ip",
   "get_relationship_graph",
+  "list_workflow_tasks",
+  "get_workflow_brief",
+  "list_standards",
+  "get_standard",
+  "create_standard",
+  "update_standard",
   "export_arcreel_bundle",
 ];
 
