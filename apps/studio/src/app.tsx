@@ -4,6 +4,11 @@ import { buildRelationshipGraph } from "./core/graph.ts";
 import { taskDescendantIds } from "./core/workflow.ts";
 import { removeSceneReferences } from "./core/timeline.ts";
 import {
+  deleteUniverseFromDraft,
+  saveWorkFromEditor,
+  unlinkCharacterFromUniverse,
+} from "./core/integrity.ts";
+import {
   createId,
   displayText,
   findWork,
@@ -23,6 +28,7 @@ import type {
   StoryObject,
   StoryUniverse,
   StoryWork,
+  StudioWorkspace,
   StandardStatus,
   TimelineEvent,
   ThemeMode,
@@ -230,6 +236,17 @@ export function App() {
 
   const mutate = state.mutate;
 
+  /**
+   * Structural edits must leave a workspace that can still be saved. Rejected
+   * changes keep the previous state intact and tell the user what blocked them.
+   */
+  const mutateChecked = (change: (draft: StudioWorkspace) => void): boolean => {
+    const problem = state.applyChange(change);
+    if (!problem) return true;
+    notify(`${t("changeRejected")} ${problem}`);
+    return false;
+  };
+
   const saveUniverse = (next: StoryUniverse) => {
     const exists = workspace.universes.some((item) => item.id === next.id);
     mutate((draft) => {
@@ -243,86 +260,16 @@ export function App() {
 
   const saveNovel = (next: StoryWork) => {
     const exists = workspace.works.some((item) => item.id === next.id);
-    mutate((draft) => {
-      const index = draft.works.findIndex((item) => item.id === next.id);
-      if (index >= 0) draft.works[index] = next;
-      else draft.works.push(next);
-      draft.lastOpenedWorkId = next.id;
-    });
+    const applied = mutateChecked((draft) => saveWorkFromEditor(draft, next));
+    if (!applied) return;
     if (!exists) navigate({ name: "work", workId: next.id });
     notify(t("saved"));
   };
 
   const deleteUniverse = (target: StoryUniverse) => {
     if (!window.confirm(t("confirmDeleteWorld"))) return;
-    const deletedWorks = new Set(
-      workspace.works
-        .filter((item) => item.universeId === target.id)
-        .map((item) => item.id),
-    );
-    mutate((draft) => {
-      draft.universes = draft.universes.filter((item) => item.id !== target.id);
-      draft.works = draft.works.filter((item) => item.universeId !== target.id);
-      draft.locations = draft.locations.filter(
-        (item) => item.universeId !== target.id,
-      );
-      draft.storyObjects = draft.storyObjects.filter(
-        (item) => item.universeId !== target.id,
-      );
-      draft.factions = draft.factions.filter(
-        (item) => item.universeId !== target.id,
-      );
-      draft.lore = draft.lore.filter((item) => item.universeId !== target.id);
-      draft.relationships = draft.relationships.filter(
-        (item) => item.universeId !== target.id,
-      );
-      draft.timelineEvents = draft.timelineEvents.filter(
-        (item) => item.universeId !== target.id,
-      );
-      draft.characters = draft.characters
-        .map((character) => ({
-          ...character,
-          universeIds: character.universeIds.filter((id) => id !== target.id),
-        }))
-        .filter((character) => character.universeIds.length > 0);
-      draft.exports = draft.exports.filter(
-        (record) => !deletedWorks.has(record.workId),
-      );
-      const removedTasks = new Set(
-        draft.workflowTasks
-          .filter(
-            (task) =>
-              task.universeId === target.id ||
-              (task.workId ? deletedWorks.has(task.workId) : false),
-          )
-          .map((task) => task.id),
-      );
-      const removedStandards = new Set(
-        draft.standards
-          .filter((item) => item.universeId === target.id)
-          .map((item) => item.id),
-      );
-      draft.standards = draft.standards.filter(
-        (item) => !removedStandards.has(item.id),
-      );
-      draft.workflowTasks = draft.workflowTasks
-        .filter((task) => !removedTasks.has(task.id))
-        .map((task) => ({
-          ...task,
-          parentId:
-            task.parentId && removedTasks.has(task.parentId)
-              ? undefined
-              : task.parentId,
-          dependsOnIds: task.dependsOnIds.filter(
-            (id) => !removedTasks.has(id),
-          ),
-          standardRefs: task.standardRefs.filter(
-            (ref) => !removedStandards.has(ref.id),
-          ),
-        }));
-      if (draft.lastOpenedWorkId && deletedWorks.has(draft.lastOpenedWorkId))
-        draft.lastOpenedWorkId = undefined;
-    });
+    if (!mutateChecked((draft) => deleteUniverseFromDraft(draft, target.id)))
+      return;
     replaceRoute({ name: "dashboard" });
     setHistory([]);
     notify(t("saved"));
@@ -330,7 +277,7 @@ export function App() {
 
   const deleteNovel = (target: StoryWork) => {
     if (!window.confirm(t("confirmDeleteNovel"))) return;
-    mutate((draft) => {
+    const applied = mutateChecked((draft) => {
       const removedTasks = new Set(
         draft.workflowTasks
           .filter((task) => task.workId === target.id)
@@ -358,21 +305,28 @@ export function App() {
       if (draft.lastOpenedWorkId === target.id)
         draft.lastOpenedWorkId = undefined;
     });
+    if (!applied) return;
     replaceRoute({ name: "universe", id: target.universeId, tab: "stories" });
     notify(t("saved"));
   };
 
   const saveCharacter = (next: Character) => {
-    mutate((draft) => {
+    mutateChecked((draft) => {
       const index = draft.characters.findIndex((item) => item.id === next.id);
+      const previous = index >= 0 ? draft.characters[index] : undefined;
+      const removedUniverses = previous
+        ? previous.universeIds.filter((id) => !next.universeIds.includes(id))
+        : [];
       if (index >= 0) draft.characters[index] = next;
       else draft.characters.push(next);
+      for (const universeId of removedUniverses)
+        unlinkCharacterFromUniverse(draft, next.id, universeId);
     });
   };
 
   const deleteCharacter = (character: Character) => {
     if (!window.confirm(t("confirmDelete"))) return;
-    mutate((draft) => {
+    mutateChecked((draft) => {
       draft.characters = draft.characters.filter((item) => item.id !== character.id);
       draft.relationships = draft.relationships.filter(
         (item) =>
@@ -409,7 +363,7 @@ export function App() {
   };
 
   const saveRelationship = (relationship: Relationship) => {
-    mutate((draft) => {
+    mutateChecked((draft) => {
       const index = draft.relationships.findIndex((item) => item.id === relationship.id);
       if (index < 0) draft.relationships.push(relationship);
       else draft.relationships[index] = relationship;
@@ -417,17 +371,17 @@ export function App() {
   };
 
   const saveTimelineEvent = (event: TimelineEvent) => {
-    mutate((draft) => {
+    const applied = mutateChecked((draft) => {
       const index = draft.timelineEvents.findIndex((item) => item.id === event.id);
       if (index >= 0) draft.timelineEvents[index] = event;
       else draft.timelineEvents.push(event);
     });
-    notify(t("saved"));
+    if (applied) notify(t("saved"));
   };
 
   const deleteTimelineEvent = (event: TimelineEvent) => {
     if (!window.confirm(t("confirmDelete"))) return;
-    mutate((draft) => {
+    mutateChecked((draft) => {
       draft.timelineEvents = draft.timelineEvents.filter(
         (item) => item.id !== event.id,
       );
@@ -435,17 +389,17 @@ export function App() {
   };
 
   const saveObject = (object: StoryObject) => {
-    mutate((draft) => {
+    const applied = mutateChecked((draft) => {
       const index = draft.storyObjects.findIndex((item) => item.id === object.id);
       if (index >= 0) draft.storyObjects[index] = object;
       else draft.storyObjects.push(object);
     });
-    notify(t("saved"));
+    if (applied) notify(t("saved"));
   };
 
   const deleteObject = (object: StoryObject) => {
     if (!window.confirm(t("confirmDelete"))) return;
-    mutate((draft) => {
+    mutateChecked((draft) => {
       draft.storyObjects = draft.storyObjects.filter(
         (item) => item.id !== object.id,
       );
@@ -477,7 +431,7 @@ export function App() {
           updatedAt: string;
         },
   ) => {
-    mutate((draft) => {
+    mutateChecked((draft) => {
       if ("body" in value) {
         const index = draft.lore.findIndex((item) => item.id === value.id);
         if (index >= 0) draft.lore[index] = value as LoreEntry;
@@ -495,12 +449,12 @@ export function App() {
   };
 
   const saveWorkflowTask = (next: WorkflowTask) => {
-    mutate((draft) => {
+    const applied = mutateChecked((draft) => {
       const index = draft.workflowTasks.findIndex((item) => item.id === next.id);
       if (index >= 0) draft.workflowTasks[index] = next;
       else draft.workflowTasks.push(next);
     });
-    notify(t("saved"));
+    if (applied) notify(t("saved"));
   };
 
   const deleteWorkflowTask = (task: WorkflowTask) => {
@@ -515,7 +469,7 @@ export function App() {
           : `确定删除此任务及其 ${removed.size - 1} 个子任务吗？`
         : t("confirmDelete");
     if (!window.confirm(message)) return;
-    mutate((draft) => {
+    mutateChecked((draft) => {
       draft.workflowTasks = draft.workflowTasks
         .filter((item) => !removed.has(item.id))
         .map((item) => ({
@@ -555,12 +509,12 @@ export function App() {
   };
 
   const saveStandard = (next: WorkspaceStandard) => {
-    mutate((draft) => {
+    const applied = mutateChecked((draft) => {
       const index = draft.standards.findIndex((item) => item.id === next.id);
       if (index >= 0) draft.standards[index] = next;
       else draft.standards.push(next);
     });
-    notify(t("saved"));
+    if (applied) notify(t("saved"));
   };
 
   const changeStandardStatus = (
@@ -610,7 +564,7 @@ export function App() {
 
   const deleteAtlas = (kind: "location" | "faction" | "lore", id: string) => {
     if (!window.confirm(t("confirmDelete"))) return;
-    mutate((draft) => {
+    mutateChecked((draft) => {
       if (kind === "location") {
         draft.locations = draft.locations.filter((item) => item.id !== id);
         draft.timelineEvents = draft.timelineEvents
@@ -640,7 +594,7 @@ export function App() {
   };
 
   const addChapter = (workId: string, chapter: Chapter) => {
-    mutate((draft) => {
+    mutateChecked((draft) => {
       const target = draft.works.find((item) => item.id === workId);
       if (!target) return;
       target.chapters.push(chapter);
@@ -650,7 +604,7 @@ export function App() {
 
   const deleteChapter = (workId: string, chapter: Chapter) => {
     if (!window.confirm(t("confirmDelete"))) return;
-    mutate((draft) => {
+    mutateChecked((draft) => {
       const target = draft.works.find((item) => item.id === workId);
       if (!target) return;
       target.chapters = target.chapters.filter((item) => item.id !== chapter.id);
