@@ -340,6 +340,42 @@ const zh = {
   sortUpdated: "最近更新",
   sortWords: "字数",
   sortTitle: "标题",
+
+  modelLabel: "模型",
+  modelNotConfigured: "设置模型",
+  modelConfiguredStatus: "本次会话已配置",
+  modelSettings: "模型设置",
+  openModelSettings: "打开模型设置",
+  modelSetupTitle: "尚未配置模型",
+  modelSetupBody:
+    "连接兼容 Chat Completions 的模型后即可发送制作提示词；其余功能均可本地使用。",
+  modelCurrent: "当前模型",
+  modelEndpoint: "接口地址",
+  modelIdentifier: "模型标识",
+
+  updates: "版本更新",
+  updateTitle: "应用更新",
+  checkUpdates: "检查更新",
+  checkingUpdates: "检查中…",
+  updateIdle:
+    "仅在你主动点击时查询 GitHub Releases，不会自动安装任何内容。",
+  updateAvailable: "发现更新的稳定版本：{version}。",
+  updateCurrent: "当前已是最新稳定版本（{version}）。",
+  updateNoRelease: "暂未找到稳定版本。",
+  updateUnavailable: "更新检查未能完成。",
+  updateReasonTimeout: "请求超时，请稍后重试。",
+  updateReasonNetwork: "无法连接 GitHub，请检查网络后重试。",
+  updateReasonHttp: "GitHub 返回 HTTP {status}。",
+  updateReasonVersion: "当前版本号无法解析，无法比较版本。",
+  updateReasonDesktopOnly: "更新检查仅在桌面版可用。",
+  releaseNotes: "版本说明",
+  openReleases: "全部版本",
+  downloadForPlatform: "下载当前平台版本",
+  downloadNotAvailable: "该平台暂无已发布安装包。",
+  recentReleases: "最近的稳定版本",
+  updateTrustNote:
+    "只会打开 GitHub 发布链接；IPloom 不会安装或运行下载的文件。",
+  checkedAt: "检查于 {time}",
 } as const;
 
 type MessageKey = keyof typeof zh;
@@ -685,6 +721,43 @@ const en: Record<MessageKey, string> = {
   sortUpdated: "Recently updated",
   sortWords: "Word count",
   sortTitle: "Title",
+
+  modelLabel: "Model",
+  modelNotConfigured: "Set up model",
+  modelConfiguredStatus: "Configured for this session",
+  modelSettings: "Model settings",
+  openModelSettings: "Open model settings",
+  modelSetupTitle: "No model configured yet",
+  modelSetupBody:
+    "Connect a Chat Completions-compatible endpoint to send production prompts. Everything else still works locally.",
+  modelCurrent: "Current model",
+  modelEndpoint: "Endpoint",
+  modelIdentifier: "Model ID",
+
+  updates: "Updates",
+  updateTitle: "Application updates",
+  checkUpdates: "Check for updates",
+  checkingUpdates: "Checking…",
+  updateIdle:
+    "Checks GitHub Releases only when you ask. Nothing installs automatically.",
+  updateAvailable: "A newer stable release is available: {version}.",
+  updateCurrent: "You are running the latest stable release ({version}).",
+  updateNoRelease: "No stable release was found yet.",
+  updateUnavailable: "The update check did not complete.",
+  updateReasonTimeout: "The request timed out. Try again shortly.",
+  updateReasonNetwork: "Could not reach GitHub. Check your connection and retry.",
+  updateReasonHttp: "GitHub returned HTTP {status}.",
+  updateReasonVersion:
+    "The current version cannot be parsed, so versions cannot be compared.",
+  updateReasonDesktopOnly: "Update checks are available in the desktop app only.",
+  releaseNotes: "Release notes",
+  openReleases: "All releases",
+  downloadForPlatform: "Download for this platform",
+  downloadNotAvailable: "No published installer for this platform.",
+  recentReleases: "Recent stable releases",
+  updateTrustNote:
+    "Only GitHub release links are opened. IPloom never installs or runs downloaded files.",
+  checkedAt: "Checked {time}",
 };
 
 export const dictionaries: Record<UiLocale, Record<MessageKey, string>> = {

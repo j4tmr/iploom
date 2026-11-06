@@ -8,6 +8,7 @@ import {
   clipboard,
   dialog,
   ipcMain,
+  net,
   session,
   shell,
   type IpcMainInvokeEvent,
@@ -15,6 +16,13 @@ import {
   type WebContents,
 } from "electron";
 import { createDemoWorkspace } from "../src/core/factory.ts";
+import {
+  RELEASES_API_URL,
+  buildUpdateCheck,
+  parseGithubReleases,
+  unavailableUpdateCheck,
+  type UpdateCheckResult,
+} from "../src/core/updates.ts";
 import type {
   ArcReelBundle,
   StudioWorkspace,
@@ -37,6 +45,7 @@ const APP_ID = "com.j4tmr.iploom.studio";
 const RENDERER_FILE = join(__dirname, "..", "renderer", "index.html");
 const RENDERER_ROOT = dirname(RENDERER_FILE);
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+const UPDATE_CHECK_TIMEOUT_MS = 10_000;
 
 let mainWindow: BrowserWindow | null = null;
 let workspaceStore: WorkspaceStore | null = null;
@@ -119,6 +128,56 @@ async function openExternalSafely(value: string): Promise<void> {
   const url = safeExternalUrl(value);
   if (!url) throw new Error("Only credential-free HTTP(S) links can be opened");
   await shell.openExternal(url.toString());
+}
+
+let updateCheckInFlight: Promise<UpdateCheckResult> | null = null;
+
+async function checkForUpdates(): Promise<UpdateCheckResult> {
+  const currentVersion = app.getVersion();
+  const checkedAt = new Date().toISOString();
+  try {
+    const response = await net.fetch(RELEASES_API_URL, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": `IPloom-Studio/${currentVersion}`,
+      },
+      signal: AbortSignal.timeout(UPDATE_CHECK_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return unavailableUpdateCheck(
+        currentVersion,
+        checkedAt,
+        "http",
+        response.status,
+      );
+    }
+    const payload: unknown = await response.json().catch(() => null);
+    return buildUpdateCheck(
+      parseGithubReleases(payload),
+      currentVersion,
+      process.platform,
+      checkedAt,
+    );
+  } catch (error) {
+    const timedOut =
+      error instanceof Error &&
+      (error.name === "TimeoutError" || error.name === "AbortError");
+    return unavailableUpdateCheck(
+      currentVersion,
+      checkedAt,
+      timedOut ? "timeout" : "network",
+    );
+  }
+}
+
+function requestUpdateCheck(): Promise<UpdateCheckResult> {
+  if (!updateCheckInFlight) {
+    updateCheckInFlight = checkForUpdates().finally(() => {
+      updateCheckInFlight = null;
+    });
+  }
+  return updateCheckInFlight;
 }
 
 function assertTrustedSender(event: IpcMainInvokeEvent): void {
@@ -409,6 +468,11 @@ function registerIpcHandlers(): void {
       mcp: mcpClientConfig(),
       mcpBinary: resolveMcpBinary(),
     };
+  });
+
+  ipcMain.handle("iploom:check-update", async (event): Promise<UpdateCheckResult> => {
+    assertTrustedSender(event);
+    return requestUpdateCheck();
   });
 
   ipcMain.handle("iploom:copy-text", async (event, value: string) => {

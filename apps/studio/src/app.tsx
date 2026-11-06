@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { AiConfigInfo } from "./core/ai.ts";
 import { buildRelationshipGraph } from "./core/graph.ts";
 import { taskDescendantIds } from "./core/workflow.ts";
 import { removeSceneReferences } from "./core/timeline.ts";
@@ -113,6 +114,7 @@ export function App() {
   const [modal, setModal] = useState<ModalState | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [aiInfo, setAiInfo] = useState<AiConfigInfo | null>(null);
 
   const navigate = (next: StudioRoute) => {
     setHistory((current) => [...current, route].slice(-30));
@@ -143,6 +145,10 @@ export function App() {
     query.addEventListener("change", listener);
     return () => query.removeEventListener("change", listener);
   }, [theme]);
+
+  useEffect(() => {
+    void bridge.aiConfig().then(setAiInfo).catch(() => setAiInfo(null));
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -745,6 +751,7 @@ export function App() {
           theme={theme}
           t={t}
           saveState={state.saveState}
+          aiInfo={aiInfo}
           onSearch={() => setSearchOpen(true)}
           onSetLocale={(next) => updateSettings({ locale: next })}
           onToggleTheme={() => {
@@ -752,11 +759,14 @@ export function App() {
               theme === "dark" ? "light" : theme === "light" ? "dark" : "dark";
             updateSettings({ theme: next });
           }}
+          onModelSettings={() => navigate({ name: "settings" })}
           onMcp={() => setModal({ kind: "mcp" })}
         />
         <main className="studio-main">
           <ProductionPanel
-            workspace={workspace} locale={locale}
+            workspace={workspace} locale={locale} t={t}
+            aiInfo={aiInfo}
+            onOpenSettings={() => navigate({ name: "settings" })}
             context={{ universeId: defaultUniverseId ?? workspace.universes[0]?.id, workId: work?.id, characterId: modal?.kind === "character" ? modal.initial?.id : undefined }}
             onTasks={(tasks) => mutate((draft) => { for (const task of tasks) { const index = draft.workflowTasks.findIndex((item) => item.id === task.id); if (index < 0) draft.workflowTasks.push(task); else draft.workflowTasks[index] = task; } })}
             onStatus={changeWorkflowStatus} onResult={saveWorkflowResult}
@@ -958,6 +968,8 @@ export function App() {
               locale={locale}
               t={t}
               path={state.path}
+              aiInfo={aiInfo}
+              onAiConfigured={setAiInfo}
               onUpdateSettings={updateSettings}
               onResetDemo={resetDemo}
             />

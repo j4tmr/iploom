@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { bridge } from "../platform.ts";
+import type { AiConfigInfo } from "../core/ai.ts";
 import { createId, displayText } from "../core/factory.ts";
 import { buildProductionPrompt, createProductionTasks, productionTemplates, taskProductionPrompt, type ProductionScope, type ProductionTemplate } from "../core/production.ts";
 import type { StudioWorkspace, UiLocale, WorkflowTask } from "../core/types.ts";
+import type { Translate } from "../i18n.ts";
 import { Button, Field, Select, TextArea } from "./ui.tsx";
 
-export function ProductionPanel({ workspace, locale, context, onTasks, onStatus, onResult }: {
-  workspace: StudioWorkspace; locale: UiLocale; context: ProductionScope;
+export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, context, onTasks, onStatus, onResult }: {
+  workspace: StudioWorkspace; locale: UiLocale; t: Translate;
+  aiInfo: AiConfigInfo | null;
+  onOpenSettings: () => void;
+  context: ProductionScope;
   onTasks: (tasks: WorkflowTask[]) => void;
   onStatus: (task: WorkflowTask, status: WorkflowTask["status"]) => void;
   onResult: (task: WorkflowTask, text: string) => void;
@@ -34,7 +39,18 @@ export function ProductionPanel({ workspace, locale, context, onTasks, onStatus,
   const reset = () => { setPrompt(""); setMessage(""); };
   const compose = () => { setPrompt(task ? taskProductionPrompt(workspace, task, locale) : buildProductionPrompt(workspace, template, scope, locale)); setMessage(""); };
   return <details className="production-panel" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
-    <summary>{en ? "AI production desk · prompts, live output and review" : "AI 制作台 · 提示词、实时工作与结果审阅"}{busy ? ` · ${en ? "Working" : "正在工作"}` : ""}</summary>
+    <summary>{en ? "AI production desk · prompts, live output and review" : "AI 制作台 · 提示词、实时工作与结果审阅"}{busy ? ` · ${en ? "Working" : "正在工作"}` : ""}{aiInfo && !aiInfo.configured ? ` · ${t("modelSetupTitle")}` : ""}</summary>
+    {aiInfo && !aiInfo.configured ? <div className="production-model missing">
+      <div>
+        <strong>{t("modelSetupTitle")}</strong>
+        <span>{t("modelSetupBody")}</span>
+      </div>
+      <Button onClick={onOpenSettings}>{t("openModelSettings")}</Button>
+    </div> : aiInfo?.configured ? <div className="production-model">
+      <span className="model-status-dot" />
+      <span>{t("modelLabel")} <b>{aiInfo.model}</b></span>
+      <code>{aiInfo.endpoint}</code>
+    </div> : null}
     <p>{en ? "Select the production target, compose and edit its prompt, then explicitly send it to your configured model. Output is a draft specification, not rendered media." : "选择制作对象，生成并编辑对应提示词，再明确发送给已配置模型。产出为待审设计稿，不代表已生成图片或视频。"}</p>
     <fieldset disabled={busy} className="production-controls">
       <Field label={en ? "Existing workflow task" : "现有工作流任务"}><Select value={taskId} onChange={(e) => { setTaskId(e.target.value); reset(); }}><option value="">{en ? "New design" : "新建设计"}</option>{workspace.workflowTasks.map((item) => <option key={item.id} value={item.id}>{displayText(item.title, locale)} · {item.status}</option>)}</Select></Field>
