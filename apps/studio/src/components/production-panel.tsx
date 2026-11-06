@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { bridge } from "../platform.ts";
 import type { AiConfigInfo } from "../core/ai.ts";
 import { createId, displayText } from "../core/factory.ts";
+import { sha256Text } from "../core/hash.ts";
 import { buildProductionPrompt, createProductionTasks, productionTemplates, resolveProductionScope, taskProductionPrompt, type ProductionScope, type ProductionTemplate } from "../core/production.ts";
 import { standardRefsFor } from "../core/standards.ts";
 import { MAX_AI_PROMPT_LENGTH, MAX_WORKFLOW_RESULT_LENGTH } from "../core/types.ts";
-import type { StudioWorkspace, UiLocale, WorkflowTask } from "../core/types.ts";
+import type { StudioWorkspace, UiLocale, WorkflowTask, WorkflowTaskRunMeta } from "../core/types.ts";
+import { workflowResultReplaceConfirm } from "../core/workflow.ts";
 import { formatNumber, type Translate } from "../i18n.ts";
 import { Button, Field, Select, TextArea } from "./ui.tsx";
 
@@ -16,7 +18,7 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
   context: ProductionScope;
   onTasks: (tasks: WorkflowTask[]) => boolean;
   onStatus: (task: WorkflowTask, status: WorkflowTask["status"]) => void;
-  onResult: (task: WorkflowTask, text: string) => boolean;
+  onResult: (task: WorkflowTask, text: string, run?: WorkflowTaskRunMeta) => boolean;
 }) {
   const en = locale === "en";
   const [scope, setScope] = useState<ProductionScope>(context);
@@ -74,14 +76,17 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
         const info = await bridge.aiConfig().catch(() => null);
         if (!info?.configured) { setMessage(en ? "Configure a model in Settings first (desktop only)." : "请先在设置中配置模型（仅桌面版）。"); return; }
         if (!window.confirm(en ? `Send this prompt to ${info.endpoint} using ${info.model}? Provider charges may apply.` : `将此提示词发送至 ${info.endpoint}，使用 ${info.model}？服务商可能计费。`)) return;
+        if (task && workflowResultReplaceConfirm(task) && !window.confirm(en ? `Running again replaces the reviewed result on “${displayText(task.title, locale)}”. The previous result stays recoverable, and done tasks that depend on this output will be flagged for re-review. Continue?` : `再次运行将替换“${displayText(task.title, locale)}”已审阅的结果。旧结果仍可找回，依赖此产出的已完成任务会标记需复审。继续吗？`)) return;
+        const runMeta: WorkflowTaskRunMeta = { model: info.model, promptSha256: await sha256Text(prompt), sourceRevision: workspace.revision, at: new Date().toISOString() };
         const id = createId("ai"); activeId.current = id; setBusy(true); setOutput(""); setCompletedTask(null);
         const label = task ? displayText(task.title, locale) : productionTemplates[template][en ? 1 : 0];
         setMessage(`${en ? "Working on" : "正在执行"}：${label}`);
-        if (task && !onTasks([{ ...task, brief: en ? { ...task.brief, en: prompt } : { ...task.brief, zh: prompt }, deliverable: { ...task.deliverable, [en ? "en" : "zh"]: `Model: ${info.model}; source revision: ${workspace.revision}. ${en ? "Review the draft before completion." : "完成前请审阅设计稿。"}` }, status: "active" }])) {
+        if (task && !workspaceRef.current.workflowTasks.some((item) => item.id === task.id)) {
           activeId.current = ""; setBusy(false);
           setMessage(en ? "This task changed while the panel was open and could not be marked active. Reopen it and try again." : "任务已发生变化，无法标记为进行中；请重新打开后再试。");
           return;
         }
+        if (task) onStatus(task, "active");
         try {
           const text = await bridge.runAi({ id, prompt, label });
           setOutput(text);
@@ -94,9 +99,9 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
             throw new Error(en ? "The target was removed while running. Copy the result; it was not saved." : "执行期间目标已被删除，请复制结果保留，本次没有写入。");
           }
           if (text.length > MAX_WORKFLOW_RESULT_LENGTH) throw new Error(en ? "Output exceeds the saved-result limit; copy it before continuing." : "输出超过保存长度，请先复制保留。");
-          const resultTask = task ?? { id: createId("task"), title: { zh: productionTemplates[template][0], en: productionTemplates[template][1] }, brief: { zh: en ? "" : prompt, en: en ? prompt : "" }, deliverable: { zh: "设计稿与提示词", en: "Design and prompts" }, result: { zh: "", en: "" }, kind: "adaptation" as const, status: "review" as const, universeId: resolved.universeId, workId: resolved.workId, chapterId: resolved.chapterId, characterIds: resolved.characterIds ?? [], dependsOnIds: [], standardRefs: standardRefsFor(current, resolved.universeId), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+          const resultTask = task ?? { id: createId("task"), title: { zh: productionTemplates[template][0], en: productionTemplates[template][1] }, brief: { zh: productionTemplates[template][2], en: productionTemplates[template][2] }, deliverable: { zh: "设计稿与提示词", en: "Design and prompts" }, result: { zh: "", en: "" }, kind: "adaptation" as const, status: "review" as const, universeId: resolved.universeId, workId: resolved.workId, chapterId: resolved.chapterId, characterIds: resolved.characterIds ?? [], dependsOnIds: [], standardRefs: standardRefsFor(current, resolved.universeId), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
           if (!task && !onTasks([resultTask])) throw new Error(en ? "The result could not be saved to Workflow. Copy it before continuing." : "结果未能写入工作流，请先复制保留。");
-          if (!onResult(resultTask, text)) throw new Error(en ? "The result was not saved; copy it before continuing." : "结果未能保存，请先复制保留。");
+          if (!onResult(resultTask, text, runMeta)) throw new Error(en ? "The result was not saved; copy it before continuing." : "结果未能保存，请先复制保留。");
           onStatus(resultTask, "review"); setCompletedTask(resultTask);
           setMessage(en ? "Draft saved to Workflow for review. Source manuscript is unchanged." : "设计稿已保存到工作流，等待审阅；原稿未被覆盖。");
         } catch (error) { setMessage(String(error)); if (task) onStatus(task, task.status); }

@@ -4777,6 +4777,24 @@ select.input {
   white-space: pre-wrap;
 }
 
+.workflow-previous-result {
+  margin-top: 21px;
+}
+
+.workflow-previous-result summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.workflow-previous-result p {
+  margin: 8px 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
 .workflow-links {
   display: flex;
   flex-direction: column;

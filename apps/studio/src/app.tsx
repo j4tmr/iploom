@@ -38,6 +38,7 @@ import type {
   ThemeMode,
   UiLocale,
   WorkflowTask,
+  WorkflowTaskRunMeta,
   WorkflowTaskStatus,
   WorkspaceSettings,
   WorkspaceStandard,
@@ -470,11 +471,16 @@ export function App() {
       const target = draft.workflowTasks.find((item) => item.id === task.id);
       if (!target) return;
       target.status = status;
+      if (status === "done") delete target.resultSuperseded;
       target.updatedAt = new Date().toISOString();
     });
   };
 
-  const saveWorkflowResult = (task: WorkflowTask, result: string): boolean => {
+  const saveWorkflowResult = (
+    task: WorkflowTask,
+    result: string,
+    run?: WorkflowTaskRunMeta,
+  ): boolean => {
     if (result.length > MAX_WORKFLOW_RESULT_LENGTH) {
       notify(
         t("resultTooLong", {
@@ -485,7 +491,7 @@ export function App() {
     }
     let found = false;
     const applied = mutateChecked((draft) => {
-      found = setWorkflowTaskResult(draft, task.id, result, locale);
+      found = setWorkflowTaskResult(draft, task.id, result, locale, run);
     });
     const saved = applied && found;
     if (saved) notify(t("saved"));

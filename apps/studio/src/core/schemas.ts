@@ -366,6 +366,15 @@ export const standardSchema = z
       });
   });
 
+export const workflowTaskRunMetaSchema = z
+  .object({
+    model: z.string().trim().min(1).max(300),
+    promptSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    sourceRevision: nonNegativeInt,
+    at: isoDate,
+  })
+  .strict();
+
 export const workflowTaskSchema = z
   .object({
     id: identifier,
@@ -373,6 +382,11 @@ export const workflowTaskSchema = z
     brief: localizedSchema.extend({ zh: z.string().max(100_000).default(""), en: z.string().max(100_000).default("") }),
     deliverable: localizedSchema.extend({ zh: z.string().max(100_000).default(""), en: z.string().max(100_000).default("") }),
     result: localizedSchema.extend({ zh: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default(""), en: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default("") }),
+    previousResult: localizedSchema
+      .extend({ zh: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default(""), en: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default("") })
+      .optional(),
+    lastRun: workflowTaskRunMetaSchema.optional(),
+    resultSuperseded: z.boolean().optional(),
     kind: workflowTaskKindSchema,
     status: workflowTaskStatusSchema,
     universeId: identifier.optional(),

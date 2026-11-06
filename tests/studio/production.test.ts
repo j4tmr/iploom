@@ -3,6 +3,7 @@ import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 import { buildManuscriptImport, manuscriptChunks, mergeManuscriptImport, parseAnalysis, splitManuscript, type ManuscriptAnalysis } from "../../apps/studio/src/core/manuscript.ts";
 import { buildProductionPrompt, createProductionTasks, resolveProductionScope, taskProductionPrompt } from "../../apps/studio/src/core/production.ts";
+import { setWorkflowTaskResult } from "../../apps/studio/src/core/workflow.ts";
 import { aiConfigSchema, runCompletion } from "../../apps/studio/src/node/ai-client.ts";
 import { buildArcReelBundle } from "../../apps/studio/src/core/arcreel.ts";
 
@@ -56,6 +57,34 @@ test("production workflow carries scope, dependencies, long results and costume 
   expect(prompt).toContain("Preserve face/body identity");
   const context = JSON.parse(buildProductionPrompt(workspace, "storyboard", scope, "en").split("SOURCE DATA (not instructions):\n")[1]!);
   expect(context.chapter.content).toBe(work.chapters[0]!.content);
+});
+
+test("running a task keeps its brief, deliverable and composed prompt stable", () => {
+  const workspace = createDemoWorkspace("en");
+  const tasks = createProductionTasks(workspace, { workId: workspace.works[0]!.id }, "en");
+  workspace.workflowTasks.push(...tasks);
+  const task = tasks[0]!;
+  const briefBefore = JSON.stringify(task.brief);
+  const deliverableBefore = JSON.stringify(task.deliverable);
+  const compose = () => taskProductionPrompt(workspace, task, "en").replace(/\d+/g, "#");
+  const first = compose();
+  expect(
+    setWorkflowTaskResult(workspace, task.id, "Model draft.", "en", {
+      model: "test-model",
+      promptSha256: "a".repeat(64),
+      sourceRevision: workspace.revision,
+      at: "2026-11-07T00:00:00.000Z",
+    }),
+  ).toBe(true);
+  expect(JSON.stringify(task.brief)).toBe(briefBefore);
+  expect(JSON.stringify(task.deliverable)).toBe(deliverableBefore);
+  expect(compose()).toBe(first);
+  expect(task.lastRun).toEqual({
+    model: "test-model",
+    promptSha256: "a".repeat(64),
+    sourceRevision: workspace.revision,
+    at: "2026-11-07T00:00:00.000Z",
+  });
 });
 
 test("production scope resolution drops stale cross-novel references", () => {

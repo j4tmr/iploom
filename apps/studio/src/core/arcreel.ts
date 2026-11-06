@@ -1,5 +1,6 @@
 import { countWords, displayText } from "./factory.ts";
 import { buildRelationshipGraph } from "./graph.ts";
+import { sha256Text } from "./hash.ts";
 import { storyboardWriteSchema } from "./storyboard-contract.ts";
 import type {
   ArcReelBundle,
@@ -40,13 +41,7 @@ function slug(value: string): string {
   return normalized.slice(0, 48) || "untitled";
 }
 
-export async function sha256Text(value: string): Promise<string> {
-  const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
+export { sha256Text };
 
 function json(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;

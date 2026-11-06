@@ -276,6 +276,11 @@ export function WorkflowView({
                         <Badge tone={statusTone[task.status]}>
                           {statusText(t, task.status)}
                         </Badge>
+                        {task.resultSuperseded ? (
+                          <Badge tone="amber">
+                            {local(locale, "需复审", "Re-review")}
+                          </Badge>
+                        ) : null}
                       </span>
                       <small>
                         {taskWork
@@ -340,6 +345,17 @@ export function WorkflowView({
                   {t("workflowWaitingNote")}: {readiness.blockers
                     .map((task) => displayText(task.title, locale))
                     .join(" / ")}
+                </div>
+              ) : null}
+
+              {selected.resultSuperseded ? (
+                <div className="workflow-readiness waiting">
+                  <Icon name="link" size={16} />
+                  {local(
+                    locale,
+                    "上游任务的结果已更新，本任务通过审阅时的产出可能过期；重新审阅并保存后标记完成即可清除。",
+                    "An upstream result changed since this task was approved. Re-review it, save, then mark done to clear this flag.",
+                  )}
                 </div>
               ) : null}
 
@@ -446,6 +462,25 @@ export function WorkflowView({
                   </Button>
                 </div>
               </section>
+
+              {selected.previousResult &&
+              (selected.previousResult.zh.trim() ||
+                selected.previousResult.en.trim()) ? (
+                <details className="workflow-previous-result">
+                  <summary>
+                    {local(locale, "上次运行前的结果", "Result before the last run")}
+                  </summary>
+                  <p>{displayText(selected.previousResult, locale)}</p>
+                  <Button
+                    variant="ghost"
+                    onClick={() =>
+                      setResultText(displayText(selected.previousResult!, locale))
+                    }
+                  >
+                    {local(locale, "恢复此版本", "Restore this version")}
+                  </Button>
+                </details>
+              ) : null}
 
               <div className="workflow-actions">
                 <Button
