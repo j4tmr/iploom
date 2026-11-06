@@ -312,8 +312,29 @@ export function App() {
     });
   };
 
-  const deleteCharacter = (character: Character) => {
-    if (!window.confirm(t("confirmDelete"))) return;
+  const removeCharacterFromUniverse = (character: Character, universeId: string) => {
+    if (
+      !window.confirm(
+        t("confirmRemoveCharacterFromWorld"),
+      )
+    )
+      return;
+    if (
+      !mutateChecked((draft) =>
+        unlinkCharacterFromUniverse(draft, character.id, universeId),
+      )
+    )
+      return;
+    notify(t("saved"));
+  };
+
+  const deleteCharacter = (character: Character, universeId?: string) => {
+    if (character.universeIds.length > 1) {
+      const message = t("confirmDeleteCharacterEverywhere", {
+        worlds: character.universeIds.length,
+      });
+      if (!window.confirm(message)) return;
+    } else if (!window.confirm(t("confirmDelete"))) return;
     mutateChecked((draft) => deleteCharacterFromDraft(draft, character.id));
   };
 
@@ -804,7 +825,12 @@ export function App() {
               onNewNovel={() => setModal({ kind: "novel", universeId: universe.id })}
               onNewCharacter={() => setModal({ kind: "character", universeId: universe.id })}
               onEditCharacter={(character) => setModal({ kind: "character", initial: character, universeId: universe.id })}
-              onDeleteCharacter={deleteCharacter}
+              onDeleteCharacter={(character) =>
+                deleteCharacter(character, universe.id)
+              }
+              onRemoveCharacterFromWorld={(character) =>
+                removeCharacterFromUniverse(character, universe.id)
+              }
               onAddAtlas={(atlasKind) => setModal({ kind: "atlas", atlasKind, universeId: universe.id })}
               onEditAtlas={(atlasKind, initial) => setModal({ kind: "atlas", atlasKind, universeId: universe.id, initial })}
               onDeleteAtlas={deleteAtlas}

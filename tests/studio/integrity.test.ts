@@ -473,6 +473,169 @@ describe("workspace integrity", () => {
     expect(() => validateWorkspace(next)).not.toThrow();
   });
 
+  test("removing a shared character from one world keeps their data in every other world", () => {
+    const workspace = demo();
+    // char_echo belongs to both worlds. Give the ninth station its own
+    // relationship, timeline record and task cast for Echo so the assertion
+    // covers every reference kind unlink clears.
+    workspace.relationships.push({
+      id: "rel_echo_train",
+      universeId: "uni_ninth_station",
+      sourceId: "char_echo",
+      targetId: "char_lin",
+      type: "ally",
+      label: { zh: "列车上的同行者", en: "Fellow travellers" },
+      strength: 1,
+      status: "active",
+      mutual: true,
+      notes: "",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    workspace.timelineEvents.push({
+      id: "timeline_echo_platform",
+      universeId: "uni_ninth_station",
+      workId: "work_last_train",
+      chapterId: "chapter_train_001",
+      storyTime: "00:07",
+      order: 1,
+      subjectKind: "character",
+      subjectId: "char_echo",
+      eventKind: "state-change",
+      title: { zh: "回声登上末班车", en: "Echo boards the last train" },
+      stateBefore: "回声站在不存在的站台上。",
+      stateAfter: "回声走进车厢，手里是一封无法退回的信。",
+      canonStatus: "proposed",
+      relatedCharacterIds: ["char_echo"],
+      relatedLocationIds: ["loc_platform_seven"],
+      relatedObjectIds: [],
+      evidence: "",
+      productionPrompt: "",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    workspace.workflowTasks.push({
+      ...unscopedTask(),
+      id: "task_train_echo",
+      universeId: "uni_ninth_station",
+      workId: "work_last_train",
+      characterIds: ["char_echo"],
+    });
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+
+    const outcome = applyWorkspaceChange(workspace, (draft) => {
+      unlinkCharacterFromUniverse(draft, "char_echo", "uni_mist_harbor");
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    const next = outcome.workspace;
+
+    // The character survives with only the ninth-station membership.
+    expect(characterById(next, "char_echo").universeIds).toEqual([
+      "uni_ninth_station",
+    ]);
+    // Mist-harbor data is gone.
+    expect(
+      next.relationships.some(
+        (item) =>
+          item.universeId === "uni_mist_harbor" &&
+          (item.sourceId === "char_echo" || item.targetId === "char_echo"),
+      ),
+    ).toBe(false);
+    expect(
+      next.timelineEvents.some(
+        (event) =>
+          event.universeId === "uni_mist_harbor" &&
+          ((event.subjectKind === "character" && event.subjectId === "char_echo") ||
+            event.relatedCharacterIds.includes("char_echo")),
+      ),
+    ).toBe(false);
+    const tide = workById(next, "work_tide_clock");
+    expect(tide.chapters[0]?.characterIds).toEqual(["char_lin", "char_shen"]);
+    for (const chapter of tide.chapters) {
+      expect(chapter.characterIds).not.toContain("char_echo");
+      for (const scene of chapter.scenes)
+        expect(scene.characterIds).not.toContain("char_echo");
+    }
+    expect(taskById(next, "task_review_first").characterIds).toEqual([
+      "char_lin",
+      "char_shen",
+    ]);
+
+    // Ninth-station data is intact.
+    expect(next.relationships.some((item) => item.id === "rel_echo_train")).toBe(
+      true,
+    );
+    expect(eventById(next, "timeline_echo_platform").subjectId).toBe(
+      "char_echo",
+    );
+    expect(taskById(next, "task_train_echo").characterIds).toEqual([
+      "char_echo",
+    ]);
+    const train = workById(next, "work_last_train");
+    expect(train.chapters[0]?.characterIds).toEqual(["char_echo"]);
+    expect(() => validateWorkspace(next)).not.toThrow();
+  });
+
+  test("removing the last world membership deletes the character with all references", () => {
+    const workspace = demo();
+    // char_echo starts with both worlds; drop mist_harbor first so only the
+    // ninth-station membership remains, then remove that one.
+    workspace.characters = workspace.characters.map((character) =>
+      character.id === "char_echo"
+        ? { ...character, universeIds: ["uni_ninth_station"] }
+        : character,
+    );
+    workspace.timelineEvents.push({
+      id: "timeline_echo_platform",
+      universeId: "uni_ninth_station",
+      workId: "work_last_train",
+      chapterId: "chapter_train_001",
+      storyTime: "00:07",
+      order: 1,
+      subjectKind: "character",
+      subjectId: "char_echo",
+      eventKind: "state-change",
+      title: { zh: "回声登上末班车", en: "Echo boards the last train" },
+      stateBefore: "回声站在不存在的站台上。",
+      stateAfter: "回声走进车厢，手里是一封无法退回的信。",
+      canonStatus: "proposed",
+      relatedCharacterIds: ["char_echo"],
+      relatedLocationIds: ["loc_platform_seven"],
+      relatedObjectIds: [],
+      evidence: "",
+      productionPrompt: "",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+
+    const outcome = applyWorkspaceChange(workspace, (draft) => {
+      unlinkCharacterFromUniverse(draft, "char_echo", "uni_ninth_station");
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    const next = outcome.workspace;
+
+    expect(next.characters.some((item) => item.id === "char_echo")).toBe(false);
+    expect(
+      next.relationships.some(
+        (item) => item.sourceId === "char_echo" || item.targetId === "char_echo",
+      ),
+    ).toBe(false);
+    expect(
+      next.timelineEvents.some(
+        (event) =>
+          (event.subjectKind === "character" && event.subjectId === "char_echo") ||
+          event.relatedCharacterIds.includes("char_echo"),
+      ),
+    ).toBe(false);
+    expect(
+      workById(next, "work_last_train").chapters[0]?.characterIds,
+    ).toEqual([]);
+    expect(() => validateWorkspace(next)).not.toThrow();
+  });
+
   test("deleting a chapter keeps same-id chapters and events in other novels", () => {
     const workspace = demo();
     const tide = workById(workspace, "work_tide_clock");

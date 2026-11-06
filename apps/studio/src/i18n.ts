@@ -119,6 +119,12 @@ const zh = {
   close: "关闭",
   delete: "删除",
   confirmDelete: "确定删除吗？此操作会立即写入本地工作区。",
+  deleteEverywhere: "在所有世界删除",
+  removeFromThisWorld: "从此世界移除",
+  confirmDeleteCharacterEverywhere:
+    "该角色出现在 {worlds} 个世界，将删除其全部关系、章节出场与时间线记录，且不可撤销。确定在所有世界中删除吗？",
+  confirmRemoveCharacterFromWorld:
+    "将把角色从当前世界移除：该世界内的关系、章节出场与时间线记录会被清除，其他世界不受影响。确定继续吗？",
   all: "全部",
   back: "返回",
   more: "更多",
@@ -559,6 +565,12 @@ const en: Record<MessageKey, string> = {
   close: "Close",
   delete: "Delete",
   confirmDelete: "Delete this item? The change will be written to your local workspace.",
+  deleteEverywhere: "Delete in all worlds",
+  removeFromThisWorld: "Remove from this world",
+  confirmDeleteCharacterEverywhere:
+    "This character appears in {worlds} worlds. Deleting it removes every relationship, chapter appearance and timeline record, and cannot be undone. Delete it in all worlds?",
+  confirmRemoveCharacterFromWorld:
+    "The character will be removed from the current world: relationships, chapter appearances and timeline records inside this world are cleared. Other worlds keep their own data. Continue?",
   all: "All",
   back: "Back",
   more: "More",
