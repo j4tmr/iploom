@@ -38,7 +38,7 @@ export function StoryObjectModal({
   workspace: StudioWorkspace;
   initial?: StoryObject;
   defaultUniverseId?: string;
-  onSave: (value: StoryObject) => void;
+  onSave: (value: StoryObject) => boolean;
 }) {
   const en = locale === "en";
   const [universeId, setUniverseId] = useState(
@@ -74,7 +74,7 @@ export function StoryObjectModal({
             disabled={!canSave}
             onClick={() => {
               const now = new Date().toISOString();
-              onSave({
+              const saved = onSave({
                 id: initial?.id ?? createId("object"),
                 universeId,
                 name: { zh: nameZh.trim(), en: nameEn.trim() },
@@ -85,7 +85,7 @@ export function StoryObjectModal({
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
-              onClose();
+              if (saved) onClose();
             }}
           >
             {en ? "Save prop" : "保存物件"}
@@ -158,7 +158,7 @@ export function TimelineEventModal({
   defaultUniverseId?: string;
   defaultWorkId?: string;
   defaultChapterId?: string;
-  onSave: (value: TimelineEvent) => void;
+  onSave: (value: TimelineEvent) => boolean;
 }) {
   const en = locale === "en";
   const initialWork = workspace.works.find((item) => item.id === (initial?.workId ?? defaultWorkId));
@@ -262,7 +262,7 @@ export function TimelineEventModal({
             disabled={!canSave}
             onClick={() => {
               const now = new Date().toISOString();
-              onSave({
+              const saved = onSave({
                 id: initial?.id ?? createId("timeline"),
                 universeId,
                 workId,
@@ -285,7 +285,7 @@ export function TimelineEventModal({
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
-              onClose();
+              if (saved) onClose();
             }}
           >
             {en ? "Save event" : "保存事件"}

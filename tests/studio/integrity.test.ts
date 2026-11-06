@@ -11,7 +11,10 @@ import {
   saveWorkFromEditor,
   unlinkCharacterFromUniverse,
 } from "../../apps/studio/src/core/integrity.ts";
-import { MAX_WORKFLOW_RESULT_LENGTH } from "../../apps/studio/src/core/types.ts";
+import {
+  CHAPTER_LIMITS,
+  MAX_WORKFLOW_RESULT_LENGTH,
+} from "../../apps/studio/src/core/types.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 import type {
   Character,
@@ -637,5 +640,65 @@ describe("workspace integrity", () => {
       if (task) task.result.en = "x".repeat(MAX_WORKFLOW_RESULT_LENGTH);
     });
     expect(accepted.ok).toBe(true);
+  });
+
+  test("a rejected change reports structured details and never bumps the revision", () => {
+    const before = demo();
+    const revision = before.revision;
+    const workIndex = before.works.findIndex(
+      (item) => item.id === "work_tide_clock",
+    );
+    const chapterTitle = before.works[workIndex]?.chapters[0]?.title;
+
+    const emptyTitle = applyWorkspaceChange(before, (draft) => {
+      const chapter = draft.works[workIndex]?.chapters[0];
+      if (chapter) chapter.title = "   ";
+    });
+    expect(emptyTitle.ok).toBe(false);
+    if (emptyTitle.ok) return;
+    const path = `works.${workIndex}.chapters.0.title`;
+    expect(
+      emptyTitle.details.some(
+        (item) => item.path === path && item.code === "too_small",
+      ),
+    ).toBe(true);
+    expect(emptyTitle.issues.join(" ")).toContain(path);
+    expect(before.revision).toBe(revision);
+    expect(before.works[workIndex]?.chapters[0]?.title).toBe(chapterTitle);
+
+    const accepted = applyWorkspaceChange(before, (draft) => {
+      const chapter = draft.works[workIndex]?.chapters[0];
+      if (chapter) chapter.title = "第 1 章（修订）";
+    });
+    expect(accepted.ok).toBe(true);
+    if (!accepted.ok) return;
+    expect(accepted.workspace.revision).toBe(revision + 1);
+    expect(accepted.workspace.works[workIndex]?.chapters[0]?.title).toBe(
+      "第 1 章（修订）",
+    );
+  });
+
+  test("chapter titles stop at the shared length cap", () => {
+    const before = demo();
+    const workIndex = before.works.findIndex(
+      (item) => item.id === "work_tide_clock",
+    );
+    const path = `works.${workIndex}.chapters.0.title`;
+
+    const atCap = applyWorkspaceChange(before, (draft) => {
+      const chapter = draft.works[workIndex]?.chapters[0];
+      if (chapter) chapter.title = "字".repeat(CHAPTER_LIMITS.title);
+    });
+    expect(atCap.ok).toBe(true);
+
+    const overCap = applyWorkspaceChange(before, (draft) => {
+      const chapter = draft.works[workIndex]?.chapters[0];
+      if (chapter) chapter.title = "字".repeat(CHAPTER_LIMITS.title + 1);
+    });
+    expect(overCap.ok).toBe(false);
+    if (overCap.ok) return;
+    const issue = overCap.details.find((item) => item.path === path);
+    expect(issue?.code).toBe("too_big");
+    expect(issue?.maximum).toBe(CHAPTER_LIMITS.title);
   });
 });

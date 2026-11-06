@@ -505,6 +505,62 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     expect(customData.chapters).toHaveLength(1);
     expect(customData.chapters[0]?.chapterId).toBe("chapter_tide_001");
     expect(readFileSync(workspacePath, "utf8")).toBe(afterWrites);
+
+    const keepScope = await call(client, "update_standard", {
+      standard_id: "std_baseline_language",
+      status: "draft",
+    });
+    expect(keepScope.isError).toBe(false);
+    expect(keepScope.body.revision).toBe(12);
+    expect(keepScope.body.version_bumped).toBe(false);
+    expect(
+      (keepScope.body.standard as { universe_id: string | null }).universe_id,
+    ).toBe("uni_mist_harbor");
+
+    const cleared = await call(client, "update_standard", {
+      standard_id: "std_baseline_language",
+      universe_id: null,
+    });
+    expect(cleared.isError).toBe(false);
+    expect(cleared.body.revision).toBe(13);
+    expect(cleared.body.version_bumped).toBe(true);
+    const clearedStandard = cleared.body.standard as {
+      universe_id: string | null;
+      version: number;
+    };
+    expect(clearedStandard.universe_id).toBeNull();
+    expect(clearedStandard.version).toBe(3);
+
+    const keptCleared = await call(client, "update_standard", {
+      standard_id: "std_baseline_language",
+      status: "active",
+    });
+    expect(keptCleared.isError).toBe(false);
+    expect(
+      (keptCleared.body.standard as { universe_id: string | null }).universe_id,
+    ).toBeNull();
+
+    const emptyScope = await call(client, "create_standard", {
+      kind: "style",
+      title: { zh: "空范围规则", en: "Empty scope standard" },
+      body: { zh: "正文", en: "Body" },
+      universe_id: "",
+    });
+    expect(emptyScope.isError).toBe(false);
+    expect(
+      (emptyScope.body.standard as { universe_id: string | null }).universe_id,
+    ).toBeNull();
+
+    const finalWrite = JSON.parse(readFileSync(workspacePath, "utf8")) as {
+      revision: number;
+      standards: Array<{ id: string; universe_id?: string; version: number }>;
+    };
+    expect(finalWrite.revision).toBe(15);
+    const baseline = finalWrite.standards.find(
+      (item) => item.id === "std_baseline_language",
+    );
+    expect(baseline?.universe_id).toBeUndefined();
+    expect(baseline?.version).toBe(3);
   } finally {
     await client.close().catch(() => undefined);
     rmSync(root, { recursive: true, force: true });

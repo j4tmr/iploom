@@ -66,6 +66,12 @@ const worldIdSchema = z
   .trim()
   .min(1)
   .describe("故事世界 ID（universe ID）/ Story-world ID.");
+const standardScopeSchema = z
+  .union([worldIdSchema, z.literal(""), z.null()])
+  .optional()
+  .describe(
+    "限定到某个故事世界；传 null 或空字符串可清除范围、改为全项目；省略时新建默认全项目、更新保持原范围 / Story-world scope; pass null or an empty string to clear it to project-wide; omit to create project-wide or keep the current scope on update.",
+  );
 const novelIdSchema = z
   .string()
   .trim()
@@ -966,22 +972,19 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
         status: standardWriteStatusSchema
           .optional()
           .describe("省略时保存为草稿 / Defaults to draft."),
-        universe_id: worldIdSchema
-          .optional()
-          .describe(
-            "限定到某个故事世界；省略表示全项目 / Optional story-world scope; omit for project-wide.",
-          ),
+        universe_id: standardScopeSchema,
       }),
       annotations: STANDARD_WRITE_ANNOTATIONS,
     },
     (args) =>
       run(async () => {
         const now = new Date().toISOString();
+        const universeId = args.universe_id || undefined;
         const standard = parseStandard({
           id: createId("std"),
           title: args.title,
           kind: args.kind,
-          ...(args.universe_id ? { universeId: args.universe_id } : {}),
+          ...(universeId ? { universeId } : {}),
           body: args.body,
           status: args.status ?? "draft",
           version: 1,
@@ -1019,11 +1022,7 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
         body: standardBodySchema.optional(),
         kind: standardWriteKindSchema.optional(),
         status: standardWriteStatusSchema.optional(),
-        universe_id: worldIdSchema
-          .optional()
-          .describe(
-            "改为限定到该故事世界；省略则保持原范围 / Change the story-world scope; omit to keep the current scope.",
-          ),
+        universe_id: standardScopeSchema,
       }),
       annotations: STANDARD_WRITE_ANNOTATIONS,
     },
@@ -1042,11 +1041,14 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
               `Foundation standard not found: ${args.standard_id}`,
             );
           const existing = current.standards[index] as WorkspaceStandard;
-          if (args.universe_id) ensureUniverse(current, args.universe_id);
+          const scopeProvided = args.universe_id !== undefined;
+          const universeId = scopeProvided
+            ? args.universe_id || undefined
+            : existing.universeId;
+          if (universeId) ensureUniverse(current, universeId);
           const title = args.title ?? existing.title;
           const body = args.body ?? existing.body;
           const kind = args.kind ?? existing.kind;
-          const universeId = args.universe_id ?? existing.universeId;
           const contentChanged =
             title.zh !== existing.title.zh ||
             title.en !== existing.title.en ||
@@ -1054,18 +1056,20 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
             body.en !== existing.body.en ||
             kind !== existing.kind ||
             universeId !== existing.universeId;
-          const next = parseStandard({
+          const nextInput = {
             ...existing,
             title,
             body,
             kind,
-            ...(args.universe_id !== undefined
-              ? { universeId: args.universe_id }
-              : {}),
             status: args.status ?? existing.status,
             version: existing.version + (contentChanged ? 1 : 0),
             updatedAt: now,
-          });
+          };
+          if (scopeProvided) {
+            if (universeId) nextInput.universeId = universeId;
+            else delete nextInput.universeId;
+          }
+          const next = parseStandard(nextInput);
           current.standards[index] = next;
           if (universeId !== existing.universeId)
             reassignStandardUniverse(current, args.standard_id, universeId);

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  CHAPTER_LIMITS,
   MAX_LOCALIZED_LENGTH,
   MAX_WORKFLOW_RESULT_LENGTH,
   WORKSPACE_SCHEMA_VERSION,
@@ -117,17 +118,20 @@ export const chapterSchema = z
   .object({
     id: identifier,
     number: positiveInt,
-    title: z.string().trim().min(1).max(300),
-    titleEn: z.string().max(300).default(""),
+    title: z.string().trim().min(1).max(CHAPTER_LIMITS.title),
+    titleEn: z.string().max(CHAPTER_LIMITS.title).default(""),
     status: chapterStatusSchema,
-    pov: z.string().max(300).default(""),
-    summary: z.string().max(20_000).default(""),
-    outline: z.string().max(200_000).default(""),
-    content: z.string().max(2_000_000).default(""),
-    beats: z.array(z.string().max(5_000)).max(100).default([]),
+    pov: z.string().max(CHAPTER_LIMITS.pov).default(""),
+    summary: z.string().max(CHAPTER_LIMITS.summary).default(""),
+    outline: z.string().max(CHAPTER_LIMITS.outline).default(""),
+    content: z.string().max(CHAPTER_LIMITS.content).default(""),
+    beats: z
+      .array(z.string().max(CHAPTER_LIMITS.beatLength))
+      .max(CHAPTER_LIMITS.beats)
+      .default([]),
     characterIds: z.array(identifier).max(100).default([]),
     locationId: identifier.optional(),
-    adaptationNotes: z.string().max(50_000).default(""),
+    adaptationNotes: z.string().max(CHAPTER_LIMITS.adaptationNotes).default(""),
     scenes: z.array(storySceneSchema).max(100).default([]),
     revision: nonNegativeInt,
     createdAt: isoDate,

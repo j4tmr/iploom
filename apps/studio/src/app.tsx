@@ -55,6 +55,7 @@ import {
   useStudioWorkspace,
 } from "./use-studio-workspace.ts";
 import type { StudioRoute } from "./routes.ts";
+import { describeWorkspaceProblem } from "./validation-message.ts";
 import { Sidebar, Topbar } from "./components/app-shell.tsx";
 import {
   AtlasModal,
@@ -246,30 +247,38 @@ export function App() {
    * changes keep the previous state intact and tell the user what blocked them.
    */
   const mutateChecked = (change: (draft: StudioWorkspace) => void): boolean => {
-    const problem = state.applyChange(change);
-    if (!problem) return true;
-    notify(`${t("changeRejected")} ${problem}`);
+    const outcome = state.applyChange(change);
+    if (outcome.ok) return true;
+    const problem = describeWorkspaceProblem(
+      outcome.details,
+      workspace,
+      locale,
+      t,
+    );
+    notify(`${t("changeRejected")} ${problem || outcome.error}`);
     return false;
   };
 
-  const saveUniverse = (next: StoryUniverse) => {
+  const saveUniverse = (next: StoryUniverse): boolean => {
     const exists = workspace.universes.some((item) => item.id === next.id);
     const applied = mutateChecked((draft) => {
       const index = draft.universes.findIndex((item) => item.id === next.id);
       if (index >= 0) draft.universes[index] = next;
       else draft.universes.push(next);
     });
-    if (!applied) return;
+    if (!applied) return false;
     if (!exists) navigate({ name: "universe", id: next.id });
     notify(t("saved"));
+    return true;
   };
 
-  const saveNovel = (next: StoryWork) => {
+  const saveNovel = (next: StoryWork): boolean => {
     const exists = workspace.works.some((item) => item.id === next.id);
     const applied = mutateChecked((draft) => saveWorkFromEditor(draft, next));
-    if (!applied) return;
+    if (!applied) return false;
     if (!exists) navigate({ name: "work", workId: next.id });
     notify(t("saved"));
+    return true;
   };
 
   const deleteUniverse = (target: StoryUniverse) => {
@@ -289,8 +298,8 @@ export function App() {
     notify(t("saved"));
   };
 
-  const saveCharacter = (next: Character) => {
-    mutateChecked((draft) => {
+  const saveCharacter = (next: Character): boolean => {
+    return mutateChecked((draft) => {
       const index = draft.characters.findIndex((item) => item.id === next.id);
       const previous = index >= 0 ? draft.characters[index] : undefined;
       const removedUniverses = previous
@@ -308,21 +317,22 @@ export function App() {
     mutateChecked((draft) => deleteCharacterFromDraft(draft, character.id));
   };
 
-  const saveRelationship = (relationship: Relationship) => {
-    mutateChecked((draft) => {
+  const saveRelationship = (relationship: Relationship): boolean => {
+    return mutateChecked((draft) => {
       const index = draft.relationships.findIndex((item) => item.id === relationship.id);
       if (index < 0) draft.relationships.push(relationship);
       else draft.relationships[index] = relationship;
     });
   };
 
-  const saveTimelineEvent = (event: TimelineEvent) => {
+  const saveTimelineEvent = (event: TimelineEvent): boolean => {
     const applied = mutateChecked((draft) => {
       const index = draft.timelineEvents.findIndex((item) => item.id === event.id);
       if (index >= 0) draft.timelineEvents[index] = event;
       else draft.timelineEvents.push(event);
     });
     if (applied) notify(t("saved"));
+    return applied;
   };
 
   const deleteTimelineEvent = (event: TimelineEvent) => {
@@ -334,13 +344,14 @@ export function App() {
     });
   };
 
-  const saveObject = (object: StoryObject) => {
+  const saveObject = (object: StoryObject): boolean => {
     const applied = mutateChecked((draft) => {
       const index = draft.storyObjects.findIndex((item) => item.id === object.id);
       if (index >= 0) draft.storyObjects[index] = object;
       else draft.storyObjects.push(object);
     });
     if (applied) notify(t("saved"));
+    return applied;
   };
 
   const deleteObject = (object: StoryObject) => {
@@ -377,7 +388,7 @@ export function App() {
           updatedAt: string;
         },
   ) => {
-    mutateChecked((draft) => {
+    return mutateChecked((draft) => {
       if ("body" in value) {
         const index = draft.lore.findIndex((item) => item.id === value.id);
         if (index >= 0) draft.lore[index] = value as LoreEntry;
@@ -394,13 +405,14 @@ export function App() {
     });
   };
 
-  const saveWorkflowTask = (next: WorkflowTask) => {
+  const saveWorkflowTask = (next: WorkflowTask): boolean => {
     const applied = mutateChecked((draft) => {
       const index = draft.workflowTasks.findIndex((item) => item.id === next.id);
       if (index >= 0) draft.workflowTasks[index] = next;
       else draft.workflowTasks.push(next);
     });
     if (applied) notify(t("saved"));
+    return applied;
   };
 
   const deleteWorkflowTask = (task: WorkflowTask) => {
@@ -459,7 +471,7 @@ export function App() {
     return saved;
   };
 
-  const saveStandard = (next: WorkspaceStandard) => {
+  const saveStandard = (next: WorkspaceStandard): boolean => {
     const applied = mutateChecked((draft) => {
       const index = draft.standards.findIndex((item) => item.id === next.id);
       if (index >= 0) draft.standards[index] = next;
@@ -467,6 +479,7 @@ export function App() {
       reassignStandardUniverse(draft, next.id, next.universeId);
     });
     if (applied) notify(t("saved"));
+    return applied;
   };
 
   const changeStandardStatus = (
@@ -545,8 +558,8 @@ export function App() {
     });
   };
 
-  const addChapter = (workId: string, chapter: Chapter) => {
-    mutateChecked((draft) => {
+  const addChapter = (workId: string, chapter: Chapter): boolean => {
+    return mutateChecked((draft) => {
       const target = draft.works.find((item) => item.id === workId);
       if (!target) return;
       target.chapters.push(chapter);

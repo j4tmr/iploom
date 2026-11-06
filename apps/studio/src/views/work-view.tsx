@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildArcReelBundle } from "../core/arcreel.ts";
 import { countWords, displayText, workWords } from "../core/factory.ts";
+import { CHAPTER_LIMITS } from "../core/types.ts";
 import type {
   ArcReelBundle,
   Chapter,
@@ -76,6 +77,9 @@ export function WorkView({
   const [selectedId, setSelectedId] = useState(
     work.chapters[0]?.id ?? "",
   );
+  const [titleDraft, setTitleDraft] = useState(
+    work.chapters[0]?.title ?? "",
+  );
   const universe = workspace.universes.find((item) => item.id === work.universeId);
   const characters = workspace.characters.filter((character) =>
     character.universeIds.includes(work.universeId),
@@ -91,6 +95,25 @@ export function WorkView({
     if (!work.chapters.some((chapter) => chapter.id === selectedId))
       setSelectedId(work.chapters[0]?.id ?? "");
   }, [selectedId, work.chapters]);
+
+  useEffect(() => {
+    setTitleDraft(selected?.title ?? "");
+  }, [selected?.id, selected?.title]);
+
+  const commitTitle = () => {
+    if (!selected) return;
+    const trimmed = titleDraft.trim();
+    if (!trimmed) {
+      setTitleDraft(selected.title);
+      return;
+    }
+    setTitleDraft(trimmed);
+    if (trimmed !== selected.title) {
+      onChangeChapter(selected.id, (chapter) => {
+        chapter.title = trimmed;
+      });
+    }
+  };
 
   const chapterCast = useMemo(
     () =>
@@ -193,17 +216,16 @@ export function WorkView({
                   </span>
                   <input
                     className="chapter-title-input"
-                    value={selected.title}
+                    value={titleDraft}
+                    maxLength={CHAPTER_LIMITS.title}
                     aria-label={t("chapterTitle")}
-                    onChange={(event) =>
-                      onChangeChapter(selected.id, (chapter) => {
-                        chapter.title = event.target.value;
-                      })
-                    }
+                    onChange={(event) => setTitleDraft(event.target.value)}
+                    onBlur={commitTitle}
                   />
                   <input
                     className="chapter-subtitle-input"
                     value={selected.titleEn}
+                    maxLength={CHAPTER_LIMITS.title}
                     placeholder={t("titleEn")}
                     aria-label={t("titleEn")}
                     onChange={(event) =>
@@ -247,6 +269,7 @@ export function WorkView({
                   <textarea
                     className="prose-editor"
                     value={selected.content}
+                    maxLength={CHAPTER_LIMITS.content}
                     placeholder={t("chapterBody")}
                     onChange={(event) =>
                       onChangeChapter(selected.id, (chapter) => {
@@ -259,6 +282,7 @@ export function WorkView({
                   <Field label={t("chapterSummary")}>
                     <TextArea
                       rows={5}
+                      maxLength={CHAPTER_LIMITS.summary}
                       value={selected.summary}
                       onChange={(event) =>
                         onChangeChapter(selected.id, (chapter) => {
@@ -270,6 +294,7 @@ export function WorkView({
                   <Field label={t("chapterOutline")}>
                     <TextArea
                       rows={7}
+                      maxLength={CHAPTER_LIMITS.outline}
                       value={selected.outline}
                       onChange={(event) =>
                         onChangeChapter(selected.id, (chapter) => {
@@ -286,8 +311,9 @@ export function WorkView({
                         onChangeChapter(selected.id, (chapter) => {
                           chapter.beats = event.target.value
                             .split("\n")
-                            .map((item) => item.trim())
-                            .filter(Boolean);
+                            .map((item) => item.trim().slice(0, CHAPTER_LIMITS.beatLength))
+                            .filter(Boolean)
+                            .slice(0, CHAPTER_LIMITS.beats);
                         })
                       }
                     />
@@ -295,6 +321,7 @@ export function WorkView({
                   <Field label={t("chapterPov")}>
                     <TextInput
                       value={selected.pov}
+                      maxLength={CHAPTER_LIMITS.pov}
                       onChange={(event) =>
                         onChangeChapter(selected.id, (chapter) => {
                           chapter.pov = event.target.value;
@@ -345,6 +372,7 @@ export function WorkView({
                   <Field label={t("adaptationNotes")}>
                     <TextArea
                       rows={5}
+                      maxLength={CHAPTER_LIMITS.adaptationNotes}
                       value={selected.adaptationNotes}
                       onChange={(event) =>
                         onChangeChapter(selected.id, (chapter) => {

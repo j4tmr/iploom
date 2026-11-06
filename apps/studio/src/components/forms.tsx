@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createId, displayText } from "../core/factory.ts";
 import { STANDARD_KINDS, standardKindLabel, standardRefsFor } from "../core/standards.ts";
-import { MAX_LOCALIZED_LENGTH } from "../core/types.ts";
+import { CHAPTER_LIMITS, MAX_LOCALIZED_LENGTH } from "../core/types.ts";
 import type {
   Chapter,
   Character,
@@ -52,7 +52,7 @@ export function CharacterModal({
   workspace: StudioWorkspace;
   initial?: Character;
   defaultUniverseId?: string;
-  onSave: (character: Character) => void;
+  onSave: (character: Character) => boolean;
 }) {
   const [nameZh, setNameZh] = useState(initial?.name.zh ?? "");
   const [nameEn, setNameEn] = useState(initial?.name.en ?? "");
@@ -92,7 +92,7 @@ export function CharacterModal({
             disabled={!canSave}
             onClick={() => {
               const now = new Date().toISOString();
-              onSave({
+              const saved = onSave({
                 id: initial?.id ?? createId("char"),
                 universeIds,
                 name: { zh: nameZh.trim(), en: nameEn.trim() },
@@ -111,7 +111,7 @@ export function CharacterModal({
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
-              onClose();
+              if (saved) onClose();
             }}
           >
             {t("save")}
@@ -206,7 +206,7 @@ export function UniverseModal({
   onSave,
 }: ModalBase & {
   initial?: StoryUniverse;
-  onSave: (universe: StoryUniverse) => void;
+  onSave: (universe: StoryUniverse) => boolean;
 }) {
   const [nameZh, setNameZh] = useState(initial?.name.zh ?? "");
   const [nameEn, setNameEn] = useState(initial?.name.en ?? "");
@@ -233,7 +233,7 @@ export function UniverseModal({
             disabled={!nameZh.trim() && !nameEn.trim()}
             onClick={() => {
               const now = new Date().toISOString();
-              onSave({
+              const saved = onSave({
                 id: initial?.id ?? createId("uni"),
                 name: { zh: nameZh.trim(), en: nameEn.trim() },
                 tagline: { zh: taglineZh.trim(), en: taglineEn.trim() },
@@ -244,7 +244,7 @@ export function UniverseModal({
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
-              onClose();
+              if (saved) onClose();
             }}
           >
             {t("save")}
@@ -298,7 +298,7 @@ export function NovelModal({
   workspace: StudioWorkspace;
   defaultUniverseId?: string;
   initial?: StoryWork;
-  onSave: (work: StoryWork) => void;
+  onSave: (work: StoryWork) => boolean;
 }) {
   const [universeId, setUniverseId] = useState(
     initial?.universeId ?? defaultUniverseId ?? workspace.universes[0]?.id ?? "",
@@ -334,7 +334,7 @@ export function NovelModal({
             disabled={!universeId || (!titleZh.trim() && !titleEn.trim())}
             onClick={() => {
               const now = new Date().toISOString();
-              onSave({
+              const saved = onSave({
                 id: initial?.id ?? createId("work"),
                 universeId,
                 title: { zh: titleZh.trim(), en: titleEn.trim() },
@@ -350,7 +350,7 @@ export function NovelModal({
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
-              onClose();
+              if (saved) onClose();
             }}
           >
             {t("save")}
@@ -423,7 +423,7 @@ export function ChapterModal({
 }: ModalBase & {
   initialNumber: number;
   existingNumbers: number[];
-  onSave: (chapter: Chapter) => void;
+  onSave: (chapter: Chapter) => boolean;
 }) {
   const [number, setNumber] = useState(String(initialNumber));
   const [title, setTitle] = useState("");
@@ -447,7 +447,7 @@ export function ChapterModal({
             disabled={!canSave}
             onClick={() => {
               const now = new Date().toISOString();
-              onSave({
+              const saved = onSave({
                 id: createId("chapter"),
                 number: parsedNumber,
                 title: title.trim(),
@@ -465,7 +465,7 @@ export function ChapterModal({
                 createdAt: now,
                 updatedAt: now,
               });
-              onClose();
+              if (saved) onClose();
             }}
           >
             {t("add")}
@@ -480,13 +480,27 @@ export function ChapterModal({
         {duplicateNumber ? <p className="form-error">{t("duplicateChapterNumber")}</p> : null}
         <div />
         <Field label={t("chapterTitle")}>
-          <TextInput autoFocus value={title} onChange={(event) => setTitle(event.target.value)} />
+          <TextInput
+            autoFocus
+            maxLength={CHAPTER_LIMITS.title}
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
         </Field>
         <Field label={t("titleEn")}>
-          <TextInput value={titleEn} onChange={(event) => setTitleEn(event.target.value)} />
+          <TextInput
+            maxLength={CHAPTER_LIMITS.title}
+            value={titleEn}
+            onChange={(event) => setTitleEn(event.target.value)}
+          />
         </Field>
         <Field label={t("chapterSummary")} wide>
-          <TextArea rows={4} value={summary} onChange={(event) => setSummary(event.target.value)} />
+          <TextArea
+            rows={4}
+            maxLength={CHAPTER_LIMITS.summary}
+            value={summary}
+            onChange={(event) => setSummary(event.target.value)}
+          />
         </Field>
       </FieldGrid>
     </Modal>
@@ -510,7 +524,7 @@ export function WorkflowTaskModal({
   defaultParentId?: string;
   defaultUniverseId?: string;
   defaultWorkId?: string;
-  onSave: (task: WorkflowTask) => void;
+  onSave: (task: WorkflowTask) => boolean;
 }) {
   const [titleZh, setTitleZh] = useState(initial?.title.zh ?? "");
   const [titleEn, setTitleEn] = useState(initial?.title.en ?? "");
@@ -582,7 +596,7 @@ export function WorkflowTaskModal({
             disabled={!canSave}
             onClick={() => {
               const now = new Date().toISOString();
-              onSave({
+              const saved = onSave({
                 id: initial?.id ?? createId("task"),
                 title: { zh: titleZh.trim(), en: titleEn.trim() },
                 brief: { zh: briefZh.trim(), en: briefEn.trim() },
@@ -607,7 +621,7 @@ export function WorkflowTaskModal({
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
-              onClose();
+              if (saved) onClose();
             }}
           >
             {t("save")}
@@ -815,7 +829,7 @@ export function RelationshipModal({
   workspace: StudioWorkspace;
   universeId: string;
   initial?: Relationship;
-  onSave: (relationship: Relationship) => void;
+  onSave: (relationship: Relationship) => boolean;
 }) {
   const characters = workspace.characters.filter((character) =>
     character.universeIds.includes(universeId),
@@ -844,7 +858,7 @@ export function RelationshipModal({
             disabled={!sourceId || !targetId || sourceId === targetId}
             onClick={() => {
               const now = new Date().toISOString();
-              onSave({
+              const saved = onSave({
                 id: initial?.id ?? createId("rel"),
                 universeId,
                 sourceId,
@@ -858,7 +872,7 @@ export function RelationshipModal({
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
-              onClose();
+              if (saved) onClose();
             }}
           >
             {initial ? t("save") : t("add")}
@@ -937,7 +951,7 @@ export function AtlasModal({
     body: string;
     createdAt: string;
     updatedAt: string;
-  }) => void;
+  }) => boolean;
 }) {
   const isLore = kind === "lore";
   const existingName = initial
@@ -979,8 +993,9 @@ export function AtlasModal({
             onClick={() => {
               const now = new Date().toISOString();
               const createdAt = initial?.createdAt ?? now;
+              let saved = false;
               if (isLore) {
-                onSave({
+                saved = onSave({
                   id: initial?.id ?? createId("lore"),
                   universeId,
                   category,
@@ -990,7 +1005,7 @@ export function AtlasModal({
                   updatedAt: now,
                 });
               } else if (kind === "location") {
-                onSave({
+                saved = onSave({
                   id: initial?.id ?? createId("loc"),
                   universeId,
                   name: { zh: nameZh.trim(), en: nameEn.trim() },
@@ -1001,7 +1016,7 @@ export function AtlasModal({
                   updatedAt: now,
                 });
               } else {
-                onSave({
+                saved = onSave({
                   id: initial?.id ?? createId("fac"),
                   universeId,
                   name: { zh: nameZh.trim(), en: nameEn.trim() },
@@ -1012,7 +1027,7 @@ export function AtlasModal({
                   updatedAt: now,
                 });
               }
-              onClose();
+              if (saved) onClose();
             }}
           >
             {t("save")}
@@ -1088,7 +1103,7 @@ export function StandardModal({
   workspace: StudioWorkspace;
   initial?: WorkspaceStandard;
   defaultKind?: StandardKind;
-  onSave: (standard: WorkspaceStandard) => void;
+  onSave: (standard: WorkspaceStandard) => boolean;
 }) {
   const [kind, setKind] = useState<StandardKind>(initial?.kind ?? defaultKind ?? "style");
   const [titleZh, setTitleZh] = useState(initial?.title.zh ?? "");
@@ -1119,7 +1134,7 @@ export function StandardModal({
             disabled={(!titleZh.trim() && !titleEn.trim()) || (!bodyZh.trim() && !bodyEn.trim())}
             onClick={() => {
               const now = new Date().toISOString();
-              onSave({
+              const saved = onSave({
                 id: initial?.id ?? createId("std"),
                 kind,
                 universeId: universeId || undefined,
@@ -1130,7 +1145,7 @@ export function StandardModal({
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
-              onClose();
+              if (saved) onClose();
             }}
           >
             {t("save")}
