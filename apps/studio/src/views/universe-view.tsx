@@ -47,6 +47,7 @@ export function UniverseView({
   onNewCharacter,
   onEditCharacter,
   onDeleteCharacter,
+  onRemoveCharacterFromWorld,
   onAddAtlas,
   onEditAtlas,
   onDeleteAtlas,
@@ -66,6 +67,7 @@ export function UniverseView({
   onNewCharacter: () => void;
   onEditCharacter: (character: Character) => void;
   onDeleteCharacter: (character: Character) => void;
+  onRemoveCharacterFromWorld: (character: Character) => void;
   onAddAtlas: (kind: "location" | "faction" | "lore") => void;
   onEditAtlas: (kind: "location" | "faction" | "lore", value: StoryLocation | StoryFaction | LoreEntry) => void;
   onDeleteAtlas: (kind: "location" | "faction" | "lore", id: string) => void;
@@ -253,7 +255,20 @@ export function UniverseView({
                   </div>
                   <div className="card-actions">
                     <Button variant="ghost" icon="edit" onClick={() => onEditCharacter(character)}>{t("edit")}</Button>
-                    <IconButton label={t("delete")} icon="trash" onClick={() => onDeleteCharacter(character)} />
+                    {character.universeIds.length > 1 ? (
+                      <>
+                        <Button variant="ghost" onClick={() => onRemoveCharacterFromWorld(character)}>
+                          {t("removeFromThisWorld")}
+                        </Button>
+                        <IconButton
+                          label={t("deleteEverywhere")}
+                          icon="trash"
+                          onClick={() => onDeleteCharacter(character)}
+                        />
+                      </>
+                    ) : (
+                      <IconButton label={t("delete")} icon="trash" onClick={() => onDeleteCharacter(character)} />
+                    )}
                   </div>
                 </article>
               ))}
