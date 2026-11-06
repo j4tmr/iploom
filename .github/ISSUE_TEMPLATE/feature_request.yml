@@ -1,0 +1,46 @@
+name: Feature request
+description: Propose a focused improvement to the IP authoring or handoff workflow
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What authoring or production problem is not handled today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: Data and compatibility impact
+      description: Describe schema, import/export, MCP or migration implications.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - World bible
+        - Cast and relationships
+        - Manuscript
+        - Library and search
+        - ArcReel handoff
+        - MCP
+        - Desktop shell
+        - Documentation
+        - CI and release
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmation
+      options:
+        - label: I did not include private or unlicensed material.
+          required: true

@@ -1,0 +1,8 @@
+node_modules/
+dist-studio/
+release/
+.studio/
+.DS_Store
+*.log
+*.tmp
+coverage/
