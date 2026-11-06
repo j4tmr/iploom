@@ -319,6 +319,19 @@ describe("workspace store", () => {
       expect(recovered.recoveredFromBackup).toBe(true);
       expect(recovered.workspace.name).toBe("Previous");
       expect(recovered.workspace.revision).toBe(40);
+
+      recovered.workspace.name = "Repaired";
+      recovered.workspace.revision = 42;
+      await store.save(recovered.workspace);
+      expect((await store.load()).workspace.name).toBe("Repaired");
+      // Recovery followed by another failure must still have a validated backup.
+      await Bun.write(file, "{broken again");
+      expect((await store.load()).workspace.name).toBe("Previous");
+      rmSync(file);
+      const afterMissingPrimary = await store.ensure();
+      expect(afterMissingPrimary.recoveredFromBackup).toBe(true);
+      expect(afterMissingPrimary.workspace.name).toBe("Previous");
+      expect(readdirSync(root).some((name) => name.includes(".tmp-"))).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

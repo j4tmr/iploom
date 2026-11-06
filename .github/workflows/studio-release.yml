@@ -89,7 +89,7 @@ jobs:
           test -s "$zip"
           hdiutil verify "$dmg"
           unzip -t "$zip" >/dev/null
-          app="$(find release -path '*.app/Contents/MacOS/IPloom Studio' -type f -print -quit)"
+          app="release/mac-universal/IPloom Studio.app/Contents/MacOS/IPloom Studio"
           test -n "$app"
           lipo -archs "$app" | grep -q arm64
           lipo -archs "$app" | grep -q x86_64
@@ -108,6 +108,7 @@ jobs:
           if (-not $app) { throw 'Packaged Windows executable not found' }
           Write-Host "Installer: $($installer.FullName)"
       - run: bun run studio:smoke:package
+      - run: bun run studio:verify-mcp --packaged
       - name: Upload macOS packages
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
@@ -156,9 +157,13 @@ jobs:
           test -n "$(find release-artifacts -maxdepth 1 -name '*.dmg' -print -quit)"
           test -n "$(find release-artifacts -maxdepth 1 -name '*-darwin-universal.zip' -print -quit)"
           test -n "$(find release-artifacts -maxdepth 1 -name '*.exe' -print -quit)"
-          find release-artifacts -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -print0 |
-            sort -z |
-            xargs -0 sha256sum > release-artifacts/SHA256SUMS.txt
+          (
+            cd release-artifacts
+            find . -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -printf '%f\0' |
+              sort -z |
+              xargs -0 sha256sum > SHA256SUMS.txt
+            sha256sum --check SHA256SUMS.txt
+          )
           cat release-artifacts/SHA256SUMS.txt
       - name: Create or update Release
         env:

@@ -6,9 +6,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import { WorkspaceStore } from "../../apps/studio/src/node/workspace-store.ts";
+import { packagedPaths } from "./packaged-paths.ts";
 
 const binaryIndex = process.argv.indexOf("--binary");
-const binary = resolve(
+const packaged = process.argv.includes("--packaged") ? packagedPaths() : null;
+const binary = packaged?.mcpScript ?? resolve(
   binaryIndex >= 0
     ? (process.argv[binaryIndex + 1] ?? "")
     : "dist-studio/bin/iploom-mcp",
@@ -22,7 +24,7 @@ try {
     createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"),
   );
   const require = createRequire(import.meta.url);
-  const electron = require("electron") as string;
+  const electron = packaged?.executable ?? require("electron") as string;
   const transport = new StdioClientTransport({
     command: electron,
     args: [binary, "--workspace", workspacePath],

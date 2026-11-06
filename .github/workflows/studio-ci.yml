@@ -103,7 +103,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           set -euo pipefail
-          app="$(find release -path '*.app/Contents/MacOS/IPloom Studio' -type f -print -quit)"
+          app="release/mac-universal/IPloom Studio.app/Contents/MacOS/IPloom Studio"
           test -n "$app"
           lipo -archs "$app" | grep -q arm64
           lipo -archs "$app" | grep -q x86_64
@@ -120,6 +120,7 @@ jobs:
             throw 'Windows icon is missing or empty'
           }
       - run: bun run studio:smoke:package
+      - run: bun run studio:verify-mcp --packaged
       - name: Upload package-smoke bundles
         uses: actions/upload-artifact@v4
         with:

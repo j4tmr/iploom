@@ -1,14 +1,12 @@
 import { spawn } from "node:child_process";
 import {
-  existsSync,
   mkdtempSync,
-  readdirSync,
   rmSync,
-  statSync,
 } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { packagedPaths } from "./packaged-paths.ts";
 
 interface SmokeOptions {
   packaged: boolean;
@@ -33,36 +31,6 @@ function parseOptions(args: string[]): SmokeOptions {
   return { packaged, appPath: resolve(appPath) };
 }
 
-function findExecutable(root: string): string | null {
-  if (!existsSync(root)) return null;
-  const expected =
-    process.platform === "win32"
-      ? "IPloom Studio.exe"
-      : process.platform === "darwin"
-        ? "IPloom Studio"
-        : "iploom-studio";
-  const stack = [root];
-  const candidates: string[] = [];
-  while (stack.length) {
-    const current = stack.pop()!;
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const path = join(current, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name !== "node_modules") stack.push(path);
-        continue;
-      }
-      if (entry.name !== expected || statSync(path).size === 0) continue;
-      if (
-        process.platform === "darwin" &&
-        !path.includes(".app/Contents/MacOS/")
-      )
-        continue;
-      candidates.push(path);
-    }
-  }
-  return candidates.sort((left, right) => left.length - right.length)[0] ?? null;
-}
-
 async function main(): Promise<void> {
   const options = parseOptions(process.argv.slice(2));
   const temporary = mkdtempSync(join(tmpdir(), "iploom-studio-smoke-"));
@@ -80,9 +48,7 @@ async function main(): Promise<void> {
   let command: string;
   let args: string[];
   if (options.packaged) {
-    const executable = findExecutable(resolve("release"));
-    if (!executable)
-      throw new Error("Packaged desktop executable was not found under release/");
+    const { executable } = packagedPaths();
     command = executable;
     args = process.platform === "linux" ? ["--no-sandbox"] : [];
     console.log(`[smoke] launching packaged ${executable}`);

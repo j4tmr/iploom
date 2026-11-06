@@ -1,6 +1,5 @@
 import {
   access,
-  copyFile,
   mkdir,
   readFile,
   rename,
@@ -71,7 +70,8 @@ export class WorkspaceStore {
   }
 
   async ensure(): Promise<LoadedWorkspace> {
-    if (await exists(this.filePath)) return this.load();
+    if (await exists(this.filePath) || await exists(backupPath(this.filePath)))
+      return this.load();
     const workspace = createEmptyWorkspace("My Story Multiverse");
     await this.save(workspace);
     return {
@@ -122,12 +122,28 @@ export class WorkspaceStore {
   private async writeWorkspace(workspace: StudioWorkspace): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
     const temp = `${this.filePath}.tmp-${process.pid}-${Date.now()}`;
+    const backupTemp = `${temp}.bak`;
     const content = `${JSON.stringify(workspace, null, 2)}\n`;
-    await writeFile(temp, content, { encoding: "utf8", mode: 0o600 });
-    if (await exists(this.filePath)) {
-      await copyFile(this.filePath, backupPath(this.filePath));
+    try {
+      await writeFile(temp, content, { encoding: "utf8", mode: 0o600 });
+      if (await exists(this.filePath)) {
+        const previous = await readFile(this.filePath, "utf8");
+        let healthy = false;
+        try {
+          validateWorkspace(JSON.parse(previous));
+          healthy = true;
+        } catch {
+          // A recovered workspace must not replace its good backup with corruption.
+        }
+        if (healthy) {
+          await writeFile(backupTemp, previous, { encoding: "utf8", mode: 0o600 });
+          await rename(backupTemp, backupPath(this.filePath));
+        }
+      }
+      await rename(temp, this.filePath);
+    } finally {
+      await Promise.all([temp, backupTemp].map((path) => rm(path, { force: true })));
     }
-    await rename(temp, this.filePath);
   }
 
   async exportArcReel(
