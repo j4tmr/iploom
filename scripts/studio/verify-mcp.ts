@@ -37,8 +37,8 @@ try {
   });
   await client.connect(transport);
   const tools = await client.listTools();
-  if (tools.tools.length !== 10)
-    throw new Error(`Expected 10 MCP tools, received ${tools.tools.length}`);
+  if (tools.tools.length !== 14)
+    throw new Error(`Expected 14 MCP tools, received ${tools.tools.length}`);
   const listed = await client.callTool({
     name: "list_novels",
     arguments: {},

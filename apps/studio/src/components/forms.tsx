@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createId, displayText } from "../core/factory.ts";
+import { STANDARD_KINDS, standardKindLabel, standardRefsFor } from "../core/standards.ts";
 import type {
   Chapter,
   Character,
@@ -7,6 +8,7 @@ import type {
   Relationship,
   RelationshipStatus,
   RelationshipType,
+  StandardKind,
   StoryFaction,
   StoryLocation,
   StoryUniverse,
@@ -16,6 +18,7 @@ import type {
   WorkflowTask,
   WorkflowTaskKind,
   WorkflowTaskStatus,
+  WorkspaceStandard,
   WorkStatus,
 } from "../core/types.ts";
 import { taskCycleRiskIds } from "../core/workflow.ts";
@@ -595,6 +598,11 @@ export function WorkflowTaskModal({
                 parentId: parentId || undefined,
                 characterIds,
                 dependsOnIds,
+                standardRefs:
+                  initial &&
+                  initial.universeId === (universeId || undefined)
+                    ? initial.standardRefs
+                    : standardRefsFor(workspace, universeId || undefined),
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
@@ -1061,6 +1069,102 @@ export function AtlasModal({
             )}
           </>
         )}
+      </FieldGrid>
+    </Modal>
+  );
+}
+
+export function StandardModal({
+  open,
+  onClose,
+  t,
+  locale,
+  workspace,
+  initial,
+  defaultKind,
+  onSave,
+}: ModalBase & {
+  workspace: StudioWorkspace;
+  initial?: WorkspaceStandard;
+  defaultKind?: StandardKind;
+  onSave: (standard: WorkspaceStandard) => void;
+}) {
+  const [kind, setKind] = useState<StandardKind>(initial?.kind ?? defaultKind ?? "style");
+  const [titleZh, setTitleZh] = useState(initial?.title.zh ?? "");
+  const [titleEn, setTitleEn] = useState(initial?.title.en ?? "");
+  const [bodyZh, setBodyZh] = useState(initial?.body.zh ?? "");
+  const [bodyEn, setBodyEn] = useState(initial?.body.en ?? "");
+  const [universeId, setUniverseId] = useState(initial?.universeId ?? "");
+  const changed = initial
+    ? kind !== initial.kind ||
+      titleZh.trim() !== initial.title.zh.trim() ||
+      titleEn.trim() !== initial.title.en.trim() ||
+      bodyZh.trim() !== initial.body.zh.trim() ||
+      bodyEn.trim() !== initial.body.en.trim() ||
+      (universeId || undefined) !== initial.universeId
+    : true;
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={initial ? t("foundationEditStandard") : t("foundationNewStandard")}
+      description={t("foundationDraftNote")}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>{t("cancel")}</Button>
+          <Button
+            variant="primary"
+            icon="check"
+            disabled={(!titleZh.trim() && !titleEn.trim()) || (!bodyZh.trim() && !bodyEn.trim())}
+            onClick={() => {
+              const now = new Date().toISOString();
+              onSave({
+                id: initial?.id ?? createId("std"),
+                kind,
+                universeId: universeId || undefined,
+                title: { zh: titleZh.trim(), en: titleEn.trim() },
+                body: { zh: bodyZh.trim(), en: bodyEn.trim() },
+                status: initial?.status ?? "draft",
+                version: initial ? (changed ? initial.version + 1 : initial.version) : 1,
+                createdAt: initial?.createdAt ?? now,
+                updatedAt: now,
+              });
+              onClose();
+            }}
+          >
+            {t("save")}
+          </Button>
+        </>
+      }
+    >
+      <FieldGrid>
+        <Field label={t("foundationKind")}>
+          <Select value={kind} onChange={(event) => setKind(event.target.value as StandardKind)}>
+            {STANDARD_KINDS.map((value) => (
+              <option key={value} value={value}>{standardKindLabel(value, locale)}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t("foundationScope")}>
+          <Select value={universeId} onChange={(event) => setUniverseId(event.target.value)}>
+            <option value="">{t("foundationProjectWide")}</option>
+            {workspace.universes.map((universe) => (
+              <option key={universe.id} value={universe.id}>{displayText(universe.name, locale)}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t("titleZh")}>
+          <TextInput value={titleZh} onChange={(event) => setTitleZh(event.target.value)} />
+        </Field>
+        <Field label={t("titleEn")}>
+          <TextInput value={titleEn} onChange={(event) => setTitleEn(event.target.value)} />
+        </Field>
+        <Field label={t("foundationBodyZh")} wide>
+          <TextArea rows={7} value={bodyZh} onChange={(event) => setBodyZh(event.target.value)} />
+        </Field>
+        <Field label={t("foundationBodyEn")} wide>
+          <TextArea rows={7} value={bodyEn} onChange={(event) => setBodyEn(event.target.value)} />
+        </Field>
       </FieldGrid>
     </Modal>
   );

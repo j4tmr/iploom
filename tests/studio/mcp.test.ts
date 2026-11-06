@@ -17,6 +17,10 @@ const TOOL_NAMES = [
   "get_relationship_graph",
   "list_workflow_tasks",
   "get_workflow_brief",
+  "list_standards",
+  "get_standard",
+  "create_standard",
+  "update_standard",
   "export_arcreel_bundle",
 ] as const;
 
@@ -82,7 +86,7 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
       .map((tool) => tool.name)
       .sort();
     expect(readOnlyNames).toEqual(
-      TOOL_NAMES.slice(0, 9)
+      TOOL_NAMES.slice(0, 11)
         .map((name) => name)
         .sort(),
     );
@@ -211,7 +215,192 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     expect(missing.text).not.toContain("stack");
     expect(missing.text).not.toContain("\n    at ");
 
+    const standards = await call(client, "list_standards");
+    expect(standards.isError).toBe(false);
+    expect(standards.text).not.toContain("\n");
+    expect(standards.body.count).toBe(6);
+    expect(standards.body.active_applied).toBe(6);
+    const standardItems = standards.body.standards as Array<{
+      id: string;
+      kind: string;
+      status: string;
+      version: number;
+      universe_id: string | null;
+    }>;
+    expect(standardItems.map((standard) => standard.id)).toEqual([
+      "std_baseline_language",
+      "std_baseline_format",
+      "std_baseline_numeric",
+      "std_baseline_entity_prompt",
+      "std_baseline_canon",
+      "std_baseline_text_source",
+    ]);
+    expect(
+      standardItems.every(
+        (standard) =>
+          standard.status === "active" &&
+          standard.version === 1 &&
+          standard.universe_id === null,
+      ),
+    ).toBe(true);
+
+    const continuity = await call(client, "list_standards", {
+      kind: "continuity",
+    });
+    expect(continuity.isError).toBe(false);
+    expect(continuity.body.count).toBe(2);
+
+    const draftStandards = await call(client, "list_standards", {
+      status: "draft",
+    });
+    expect(draftStandards.isError).toBe(false);
+    expect(draftStandards.body.count).toBe(0);
+
+    const standard = await call(client, "get_standard", {
+      standard_id: "std_baseline_language",
+    });
+    expect(standard.isError).toBe(false);
+    expect(standard.body.applies_to).toBe("project");
+    const pinnedBy = standard.body.pinned_by_task_ids as string[];
+    expect(pinnedBy).toHaveLength(4);
+    expect(pinnedBy).toContain("task_world_rules");
+    const standardData = standard.body.standard as {
+      id: string;
+      kind: string;
+      universe_id: string | null;
+      title: { zh: string; en: string };
+    };
+    expect(standardData.id).toBe("std_baseline_language");
+    expect(standardData.kind).toBe("style");
+    expect(standardData.universe_id).toBeNull();
+    expect(standardData.title.zh.length).toBeGreaterThan(0);
+
+    const missingStandard = await call(client, "get_standard", {
+      standard_id: "std_missing",
+    });
+    expect(missingStandard.isError).toBe(true);
+    expect(
+      (missingStandard.body.error as { code: string; message: string }).code,
+    ).toBe("not_found");
+    expect(missingStandard.text).not.toContain("\n    at ");
+
     expect(readFileSync(workspacePath, "utf8")).toBe(before);
+
+    const created = await call(client, "create_standard", {
+      kind: "naming",
+      title: {
+        zh: "地名命名规范",
+        en: "Place naming convention",
+      },
+      body: {
+        zh: "所有地名先登记后使用，正文沿用登记写法。",
+        en: "Register every place name before use and reuse the registered spelling.",
+      },
+    });
+    expect(created.isError).toBe(false);
+    expect(created.body.revision).toBe(8);
+    const createdStandard = created.body.standard as {
+      id: string;
+      kind: string;
+      status: string;
+      version: number;
+      universe_id: string | null;
+      title: { zh: string; en: string };
+    };
+    expect(createdStandard.id.startsWith("std_")).toBe(true);
+    expect(createdStandard.kind).toBe("naming");
+    expect(createdStandard.status).toBe("draft");
+    expect(createdStandard.version).toBe(1);
+    expect(createdStandard.universe_id).toBeNull();
+    const afterCreate = readFileSync(workspacePath, "utf8");
+    expect(afterCreate).not.toBe(before);
+    const writtenAfterCreate = JSON.parse(afterCreate) as {
+      revision: number;
+      standards: Array<{ id: string }>;
+    };
+    expect(writtenAfterCreate.revision).toBe(8);
+    expect(writtenAfterCreate.standards).toHaveLength(7);
+    expect(
+      writtenAfterCreate.standards.some(
+        (item) => item.id === createdStandard.id,
+      ),
+    ).toBe(true);
+
+    const contentEdit = await call(client, "update_standard", {
+      standard_id: createdStandard.id,
+      title: {
+        zh: "地名命名规范（修订）",
+        en: "Place naming convention",
+      },
+    });
+    expect(contentEdit.isError).toBe(false);
+    expect(contentEdit.body.revision).toBe(9);
+    expect(contentEdit.body.version_bumped).toBe(true);
+    const contentEdited = contentEdit.body.standard as {
+      version: number;
+      status: string;
+      title: { zh: string; en: string };
+    };
+    expect(contentEdited.version).toBe(2);
+    expect(contentEdited.title.zh).toContain("修订");
+
+    const statusEdit = await call(client, "update_standard", {
+      standard_id: createdStandard.id,
+      status: "active",
+    });
+    expect(statusEdit.isError).toBe(false);
+    expect(statusEdit.body.revision).toBe(10);
+    expect(statusEdit.body.version_bumped).toBe(false);
+    const statusEdited = statusEdit.body.standard as {
+      version: number;
+      status: string;
+    };
+    expect(statusEdited.version).toBe(2);
+    expect(statusEdited.status).toBe("active");
+
+    const invalidKind = await call(client, "create_standard", {
+      kind: "bogus",
+      title: { zh: "无效类型", en: "Invalid kind" },
+      body: { zh: "正文", en: "Body" },
+    });
+    expect(invalidKind.isError).toBe(true);
+    expect(
+      (invalidKind.body.error as { code: string; message: string }).code,
+    ).toBe("invalid_argument");
+    expect(invalidKind.text).not.toContain("\n    at ");
+
+    const emptyTitle = await call(client, "create_standard", {
+      kind: "style",
+      title: { zh: "", en: "" },
+      body: { zh: "正文", en: "Body" },
+    });
+    expect(emptyTitle.isError).toBe(true);
+    expect(
+      (emptyTitle.body.error as { code: string; message: string }).code,
+    ).toBe("invalid_argument");
+    expect(emptyTitle.text).not.toContain("\n    at ");
+
+    const unknownUpdate = await call(client, "update_standard", {
+      standard_id: "std_missing",
+      status: "active",
+    });
+    expect(unknownUpdate.isError).toBe(true);
+    expect(
+      (unknownUpdate.body.error as { code: string; message: string }).code,
+    ).toBe("not_found");
+
+    const afterWrites = readFileSync(workspacePath, "utf8");
+    const writtenAfterWrites = JSON.parse(afterWrites) as {
+      revision: number;
+      standards: Array<{ id: string; version: number; status: string }>;
+    };
+    expect(writtenAfterWrites.revision).toBe(10);
+    expect(writtenAfterWrites.standards).toHaveLength(7);
+    const persisted = writtenAfterWrites.standards.find(
+      (item) => item.id === createdStandard.id,
+    );
+    expect(persisted?.version).toBe(2);
+    expect(persisted?.status).toBe("active");
 
     const exported = await call(client, "export_arcreel_bundle", {
       novel_id: "work_tide_clock",
@@ -271,9 +460,59 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     expect(dirname(customData.directory)).toBe(join(root, "custom-exports"));
     expect(customData.chapters).toHaveLength(1);
     expect(customData.chapters[0]?.chapterId).toBe("chapter_tide_001");
-    expect(readFileSync(workspacePath, "utf8")).toBe(before);
+    expect(readFileSync(workspacePath, "utf8")).toBe(afterWrites);
   } finally {
     await client.close().catch(() => undefined);
     rmSync(root, { recursive: true, force: true });
   }
 }, 20_000);
+
+test("WorkspaceStore.update serializes concurrent mutations and recovers from failures", async () => {
+  const root = mkdtempSync(join(tmpdir(), "iploom-studio-store-"));
+  const workspacePath = join(root, "workspace.json");
+  const store = new WorkspaceStore(workspacePath);
+  try {
+    await store.save(
+      createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"),
+    );
+    const now = "2026-11-06T00:00:01.000Z";
+    const results = await Promise.all(
+      Array.from({ length: 5 }, (_, index) =>
+        store.update((workspace) => {
+          workspace.standards.push({
+            id: `std_concurrent_${index}`,
+            title: { zh: `并发规则 ${index}`, en: `Concurrent ${index}` },
+            kind: "naming",
+            body: { zh: "正文", en: "Body" },
+            status: "draft",
+            version: 1,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }),
+      ),
+    );
+    expect(results.map((result) => result.revision).sort((a, b) => a - b)).toEqual(
+      [8, 9, 10, 11, 12],
+    );
+    let current = (await store.load()).workspace;
+    expect(current.standards).toHaveLength(11);
+    expect(current.revision).toBe(12);
+
+    await expect(
+      store.update(() => {
+        throw new Error("mutator failed");
+      }),
+    ).rejects.toThrow("mutator failed");
+    current = (await store.load()).workspace;
+    expect(current.revision).toBe(12);
+
+    const recovered = await store.update((workspace) => {
+      workspace.name = "Recovered";
+    });
+    expect(recovered.revision).toBe(13);
+    expect(recovered.name).toBe("Recovered");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

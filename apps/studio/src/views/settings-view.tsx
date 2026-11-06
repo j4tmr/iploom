@@ -29,6 +29,12 @@ const mcpTools = [
   "get_chapter",
   "search_ip",
   "get_relationship_graph",
+  "list_workflow_tasks",
+  "get_workflow_brief",
+  "list_standards",
+  "get_standard",
+  "create_standard",
+  "update_standard",
   "export_arcreel_bundle",
 ];
 
@@ -184,7 +190,11 @@ export function SettingsView({
             </div>
             <pre>{config}</pre>
           </div>
-          <p className="muted small">{t("mcpToolsNote")}</p>
+          <p className="muted small">
+            {locale === "en"
+              ? "11 read-only query tools + 2 standards writers + 1 local export tool."
+              : "11 个只读查询工具 + 2 个基础规则写入工具 + 1 个本地导出工具。"}
+          </p>
         </section>
 
         <section className="settings-panel">

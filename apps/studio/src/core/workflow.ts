@@ -1,4 +1,5 @@
 import { displayText } from "./factory.ts";
+import { standardsPromptSection } from "./standards.ts";
 import { relevantTimelineEvents, timelineAnchorLabel, timelineSubjectLabel } from "./timeline.ts";
 import type {
   StudioWorkspace,
@@ -225,6 +226,7 @@ export function buildWorkflowBrief(
         zh ? "一份可直接进入下一道审校的成果。" : "A result ready for the next review step.",
       ),
     ]),
+    ...standardsPromptSection(workspace, task.universeId, locale),
   );
 
   if (world) {

@@ -8,9 +8,11 @@ import {
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
 import { buildArcReelBundle } from "../src/core/arcreel.ts";
-import { countWords } from "../src/core/factory.ts";
+import { countWords, createId } from "../src/core/factory.ts";
 import { buildRelationshipGraph } from "../src/core/graph.ts";
+import { standardSchema } from "../src/core/schemas.ts";
 import { searchWorkspace } from "../src/core/search.ts";
+import { applicableStandards, STANDARD_KINDS } from "../src/core/standards.ts";
 import {
   buildWorkflowBrief,
   workflowSummary,
@@ -28,6 +30,7 @@ import type {
   StoryWork,
   StudioWorkspace,
   UiLocale,
+  WorkspaceStandard,
   WorkflowTask,
 } from "../src/core/types.ts";
 import { APP_VERSION } from "../src/core/version.ts";
@@ -41,6 +44,12 @@ const READ_ONLY_ANNOTATIONS: ToolAnnotations = {
   openWorldHint: false,
 };
 const EXPORT_ANNOTATIONS: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+};
+const STANDARD_WRITE_ANNOTATIONS: ToolAnnotations = {
   readOnlyHint: false,
   destructiveHint: false,
   idempotentHint: false,
@@ -71,6 +80,52 @@ const workflowTaskIdSchema = z
   .trim()
   .min(1)
   .describe("AI 任务 ID / Workflow task ID.");
+const standardIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .describe("基础规则 ID / Foundation standard ID.");
+const standardKindSchema = z
+  .enum([
+    "style",
+    "format",
+    "naming",
+    "numeric",
+    "entity-prompt",
+    "continuity",
+  ])
+  .describe("规则类型 / Foundation standard kind.");
+const standardStatusSchema = z
+  .enum(["draft", "active", "disabled"])
+  .describe("规则状态 / Foundation standard status.");
+const standardWriteKindSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .describe(
+    "规则类型，取值 style、format、naming、numeric、entity-prompt 或 continuity / Foundation standard kind; one of style, format, naming, numeric, entity-prompt, continuity.",
+  );
+const standardWriteStatusSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .describe(
+    "规则状态，取值 draft、active 或 disabled / Foundation standard status; one of draft, active, disabled.",
+  );
+const standardTitleSchema = z
+  .object({
+    zh: z.string().max(500).default("").describe("中文标题 / Chinese title."),
+    en: z.string().max(500).default("").describe("英文标题 / English title."),
+  })
+  .strict()
+  .describe("双语标题 / Localized standard title.");
+const standardBodySchema = z
+  .object({
+    zh: z.string().max(20_000).default("").describe("中文规则正文 / Chinese body."),
+    en: z.string().max(20_000).default("").describe("英文规则正文 / English body."),
+  })
+  .strict()
+  .describe("双语规则正文 / Localized standard body.");
 
 function workspaceMeta(workspace: StudioWorkspace) {
   return {
@@ -328,6 +383,88 @@ function relationshipView(relationship: Relationship) {
   };
 }
 
+const STANDARD_KIND_RANK = new Map(
+  STANDARD_KINDS.map((kind, index) => [kind, index] as const),
+);
+
+function compareStandards(
+  left: WorkspaceStandard,
+  right: WorkspaceStandard,
+): number {
+  const rank =
+    (STANDARD_KIND_RANK.get(left.kind) ?? 99) -
+    (STANDARD_KIND_RANK.get(right.kind) ?? 99);
+  if (rank !== 0) return rank;
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
+function standardView(standard: WorkspaceStandard) {
+  return {
+    id: standard.id,
+    title: standard.title,
+    kind: standard.kind,
+    status: standard.status,
+    version: standard.version,
+    universe_id: standard.universeId ?? null,
+    body: standard.body,
+    createdAt: standard.createdAt,
+    updatedAt: standard.updatedAt,
+  };
+}
+
+class ToolError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "ToolError";
+    this.code = code;
+  }
+}
+
+function invalidStandard(error: unknown): ToolError {
+  if (error instanceof z.ZodError) {
+    const issues = error.issues
+      .slice(0, 5)
+      .map((issue) => `${issue.path.join(".") || "standard"}: ${issue.message}`)
+      .join("; ");
+    return new ToolError(
+      "invalid_argument",
+      `Invalid foundation standard: ${issues || "validation failed"}`,
+    );
+  }
+  return new ToolError("invalid_argument", errorMessage(error));
+}
+
+function parseStandard(value: unknown): WorkspaceStandard {
+  try {
+    return standardSchema.parse(value) as WorkspaceStandard;
+  } catch (error) {
+    throw invalidStandard(error);
+  }
+}
+
+function findStandard(
+  workspace: StudioWorkspace,
+  standardId: string,
+): WorkspaceStandard {
+  const standard = workspace.standards.find((item) => item.id === standardId);
+  if (!standard)
+    throw new ToolError(
+      "not_found",
+      `Foundation standard not found: ${standardId}`,
+    );
+  return standard;
+}
+
+function ensureUniverse(workspace: StudioWorkspace, universeId: string): void {
+  if (!workspace.universes.some((universe) => universe.id === universeId))
+    throw new ToolError(
+      "invalid_argument",
+      `Unknown story world: ${universeId}`,
+    );
+}
+
 function errorMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);
   const message = raw
@@ -355,13 +492,14 @@ function ok(value: unknown): CallToolResult {
 
 function fail(error: unknown): CallToolResult {
   const message = errorMessage(error);
+  const code = error instanceof ToolError ? error.code : errorCode(message);
   return {
     isError: true,
     content: [
       {
         type: "text",
         text: JSON.stringify({
-          error: { code: errorCode(message), message },
+          error: { code, message },
         }),
       },
     ],
@@ -383,8 +521,8 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     { name: "IPloom Studio", version: APP_VERSION },
     {
       instructions:
-        "IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节、关系与 AI 工作流；search_ip 支持中英双语子串检索。前九个工具只读。export_arcreel_bundle 是唯一会写盘的本地导出工具，默认写入工作区同目录的 exports。\n" +
-        "IPloom Studio local IP memory: list story worlds before reading novels, chapters, relationships and AI workflow. The first nine tools are read-only. export_arcreel_bundle is the only tool that writes files and defaults to an exports directory beside the workspace file.",
+        "IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节、关系、AI 工作流与项目基础规则；search_ip 支持中英双语子串检索。前 11 个工具只读；create_standard 与 update_standard 只修改工作区内的基础规则；export_arcreel_bundle 是唯一写盘导出工具，默认写入工作区同目录的 exports。\n" +
+        "IPloom Studio local IP memory: list story worlds before reading novels, chapters, relationships, AI workflow and foundation standards. The first 11 tools are read-only; create_standard and update_standard only change foundation standards inside the workspace; export_arcreel_bundle is the only tool that writes files and defaults to an exports directory beside the workspace file.",
     },
   );
 
@@ -740,6 +878,208 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
           task: workflowTaskView(workspace, task),
           ready: readiness.ready,
           markdown: buildWorkflowBrief(workspace, task.id, locale),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "list_standards",
+    {
+      title: "基础规则列表 / Foundation standards",
+      description:
+        "列出项目基础规则，可按状态、类型和故事世界过滤；active_applied 是当前范围内实际生效的规则数。List project foundation standards, optionally filtered by status, kind and story world; active_applied reports how many active standards apply to that scope.",
+      inputSchema: z.object({
+        status: standardStatusSchema
+          .optional()
+          .describe("只看指定状态 / Only this status."),
+        kind: standardKindSchema
+          .optional()
+          .describe("只看指定类型 / Only this kind."),
+        universe_id: worldIdSchema
+          .optional()
+          .describe(
+            "只看属于该故事世界的规则 / Only standards scoped to this story world.",
+          ),
+      }),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    (args) =>
+      run(async () => {
+        const { workspace } = await store.load();
+        const standards = workspace.standards
+          .filter(
+            (standard) =>
+              (!args.status || standard.status === args.status) &&
+              (!args.kind || standard.kind === args.kind) &&
+              (!args.universe_id || standard.universeId === args.universe_id),
+          )
+          .slice()
+          .sort(compareStandards);
+        return {
+          schema: MCP_SCHEMA,
+          count: standards.length,
+          active_applied: applicableStandards(workspace, args.universe_id)
+            .length,
+          standards: standards.map((standard) => standardView(standard)),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "get_standard",
+    {
+      title: "读取基础规则 / Read foundation standard",
+      description:
+        "读取一条基础规则，并返回其适用范围与引用它的 AI 工作流任务。Read one foundation standard with its scope and the workflow tasks that pin it by id.",
+      inputSchema: z.object({ standard_id: standardIdSchema }),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    (args) =>
+      run(async () => {
+        const { workspace } = await store.load();
+        const standard = findStandard(workspace, args.standard_id);
+        return {
+          schema: MCP_SCHEMA,
+          workspace: workspaceMeta(workspace),
+          standard: standardView(standard),
+          applies_to: standard.universeId ?? "project",
+          pinned_by_task_ids: workspace.workflowTasks
+            .filter((task) =>
+              task.standardRefs.some((ref) => ref.id === standard.id),
+            )
+            .map((task) => task.id),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "create_standard",
+    {
+      title: "新建基础规则 / Create foundation standard",
+      description:
+        "登记一条项目基础规则，默认保存为草稿；标题和正文至少一种语言必须非空，且故事世界必须已存在。Register a project foundation standard, saved as a draft by default; title and body need at least one non-empty language and any story world must already exist.",
+      inputSchema: z.object({
+        kind: standardWriteKindSchema,
+        title: standardTitleSchema,
+        body: standardBodySchema,
+        status: standardWriteStatusSchema
+          .optional()
+          .describe("省略时保存为草稿 / Defaults to draft."),
+        universe_id: worldIdSchema
+          .optional()
+          .describe(
+            "限定到某个故事世界；省略表示全项目 / Optional story-world scope; omit for project-wide.",
+          ),
+      }),
+      annotations: STANDARD_WRITE_ANNOTATIONS,
+    },
+    (args) =>
+      run(async () => {
+        const now = new Date().toISOString();
+        const standard = parseStandard({
+          id: createId("std"),
+          title: args.title,
+          kind: args.kind,
+          ...(args.universe_id ? { universeId: args.universe_id } : {}),
+          body: args.body,
+          status: args.status ?? "draft",
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        });
+        const workspace = await store.update((current) => {
+          if (current.standards.length >= 1_000)
+            throw new ToolError(
+              "invalid_argument",
+              "The workspace already contains the maximum of 1000 foundation standards.",
+            );
+          if (standard.universeId)
+            ensureUniverse(current, standard.universeId);
+          current.standards.push(standard);
+          current.updatedAt = now;
+        });
+        return {
+          schema: MCP_SCHEMA,
+          revision: workspace.revision,
+          standard: standardView(standard),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "update_standard",
+    {
+      title: "更新基础规则 / Update foundation standard",
+      description:
+        "更新一条基础规则；标题、正文、类型或适用范围变化时版本号加一，仅修改状态不改版本。Update a foundation standard; title, body, kind or scope changes bump the version, while a status-only change does not.",
+      inputSchema: z.object({
+        standard_id: standardIdSchema,
+        title: standardTitleSchema.optional(),
+        body: standardBodySchema.optional(),
+        kind: standardWriteKindSchema.optional(),
+        status: standardWriteStatusSchema.optional(),
+        universe_id: worldIdSchema
+          .optional()
+          .describe(
+            "改为限定到该故事世界；省略则保持原范围 / Change the story-world scope; omit to keep the current scope.",
+          ),
+      }),
+      annotations: STANDARD_WRITE_ANNOTATIONS,
+    },
+    (args) =>
+      run(async () => {
+        const now = new Date().toISOString();
+        let updated: WorkspaceStandard | undefined;
+        let versionBumped = false;
+        const workspace = await store.update((current) => {
+          const index = current.standards.findIndex(
+            (item) => item.id === args.standard_id,
+          );
+          if (index < 0)
+            throw new ToolError(
+              "not_found",
+              `Foundation standard not found: ${args.standard_id}`,
+            );
+          const existing = current.standards[index] as WorkspaceStandard;
+          if (args.universe_id) ensureUniverse(current, args.universe_id);
+          const title = args.title ?? existing.title;
+          const body = args.body ?? existing.body;
+          const kind = args.kind ?? existing.kind;
+          const universeId = args.universe_id ?? existing.universeId;
+          const contentChanged =
+            title.zh !== existing.title.zh ||
+            title.en !== existing.title.en ||
+            body.zh !== existing.body.zh ||
+            body.en !== existing.body.en ||
+            kind !== existing.kind ||
+            universeId !== existing.universeId;
+          const next = parseStandard({
+            ...existing,
+            title,
+            body,
+            kind,
+            ...(args.universe_id !== undefined
+              ? { universeId: args.universe_id }
+              : {}),
+            status: args.status ?? existing.status,
+            version: existing.version + (contentChanged ? 1 : 0),
+            updatedAt: now,
+          });
+          current.standards[index] = next;
+          current.updatedAt = now;
+          updated = next;
+          versionBumped = contentChanged;
+        });
+        if (!updated)
+          throw new ToolError(
+            "tool_error",
+            "Foundation standard update did not run.",
+          );
+        return {
+          schema: MCP_SCHEMA,
+          revision: workspace.revision,
+          standard: standardView(updated),
+          version_bumped: versionBumped,
         };
       }),
   );

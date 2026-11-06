@@ -3,6 +3,7 @@ import { bridge } from "../platform.ts";
 import type { AiConfigInfo } from "../core/ai.ts";
 import { createId, displayText } from "../core/factory.ts";
 import { buildProductionPrompt, createProductionTasks, productionTemplates, taskProductionPrompt, type ProductionScope, type ProductionTemplate } from "../core/production.ts";
+import { standardRefsFor } from "../core/standards.ts";
 import type { StudioWorkspace, UiLocale, WorkflowTask } from "../core/types.ts";
 import type { Translate } from "../i18n.ts";
 import { Button, Field, Select, TextArea } from "./ui.tsx";
@@ -89,7 +90,7 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
             throw new Error(en ? "The target was removed while running. Copy the result; it was not saved." : "执行期间目标已被删除，请复制结果保留，本次没有写入。");
           }
           if (text.length > 200_000) throw new Error(en ? "Output exceeds the saved-result limit; copy it before continuing." : "输出超过保存长度，请先复制保留。");
-          const resultTask = task ?? { id: createId("task"), title: { zh: productionTemplates[template][0], en: productionTemplates[template][1] }, brief: { zh: en ? "" : prompt, en: en ? prompt : "" }, deliverable: { zh: "设计稿与提示词", en: "Design and prompts" }, result: { zh: "", en: "" }, kind: "adaptation" as const, status: "review" as const, universeId, workId: work?.id, chapterId: scope.chapterId || undefined, characterIds: scope.characterId ? [scope.characterId] : [], dependsOnIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+          const resultTask = task ?? { id: createId("task"), title: { zh: productionTemplates[template][0], en: productionTemplates[template][1] }, brief: { zh: en ? "" : prompt, en: en ? prompt : "" }, deliverable: { zh: "设计稿与提示词", en: "Design and prompts" }, result: { zh: "", en: "" }, kind: "adaptation" as const, status: "review" as const, universeId, workId: work?.id, chapterId: scope.chapterId || undefined, characterIds: scope.characterId ? [scope.characterId] : [], dependsOnIds: [], standardRefs: standardRefsFor(workspaceRef.current, universeId), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
           if (!task) onTasks([resultTask]);
           onResult(resultTask, text); onStatus(resultTask, "review"); setCompletedTask(resultTask);
           setMessage(en ? "Draft saved to Workflow for review. Source manuscript is unchanged." : "设计稿已保存到工作流，等待审阅；原稿未被覆盖。");

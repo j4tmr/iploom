@@ -65,6 +65,7 @@ function slug(value: string): string {
 export class WorkspaceStore {
   readonly filePath: string;
   private saveQueue: Promise<void> = Promise.resolve();
+  private updateQueue: Promise<void> = Promise.resolve();
 
   constructor(filePath: string) {
     this.filePath = resolve(filePath);
@@ -117,6 +118,29 @@ export class WorkspaceStore {
     const valid = validateWorkspace(workspace);
     const pending = this.saveQueue.then(() => this.writeWorkspace(valid));
     this.saveQueue = pending.catch(() => undefined);
+    return pending;
+  }
+
+  /**
+   * Serialize a read-modify-write cycle so concurrent MCP calls cannot lose
+   * each other's changes. The workspace is reloaded inside the queue, the
+   * mutator runs once, then the revision is bumped and the workspace saved.
+   * A failed cycle must not poison the queue for later calls.
+   */
+  async update(
+    mutator: (workspace: StudioWorkspace) => void,
+  ): Promise<StudioWorkspace> {
+    const pending = this.updateQueue.then(async () => {
+      const { workspace } = await this.load();
+      mutator(workspace);
+      workspace.revision += 1;
+      await this.save(workspace);
+      return workspace;
+    });
+    this.updateQueue = pending.then(
+      () => undefined,
+      () => undefined,
+    );
     return pending;
   }
 

@@ -1,5 +1,6 @@
 import { validateWorkspace } from "./validate.ts";
 import { wordCount } from "./word-count.ts";
+import { createBaselineStandards } from "./standards.ts";
 import type {
   Chapter,
   LocalizedText,
@@ -40,6 +41,10 @@ export function workWords(work: StoryWork): number {
 export function workspaceStats(workspace: StudioWorkspace): WorkspaceStats {
   const chapters = workspace.works.flatMap((work) => work.chapters);
   return {
+    standards: workspace.standards.length,
+    activeStandards: workspace.standards.filter(
+      (standard) => standard.status === "active",
+    ).length,
     universes: workspace.universes.length,
     works: workspace.works.length,
     chapters: chapters.length,
@@ -121,6 +126,7 @@ export function createEmptyWorkspace(
       defaultAspectRatio: "9:16",
       exportApprovedOnly: false,
     },
+    standards: createBaselineStandards(now),
     universes: [],
     characters: [],
     locations: [],
@@ -140,6 +146,11 @@ export function createDemoWorkspace(
   now = new Date().toISOString(),
 ): StudioWorkspace {
   const createdAt = now;
+  const baselineStandards = createBaselineStandards(createdAt);
+  const baselineRefs = baselineStandards.map((standard) => ({
+    id: standard.id,
+    version: standard.version,
+  }));
   const demo: StudioWorkspace = {
     schema_version: WORKSPACE_SCHEMA_VERSION,
     id: "workspace_demo",
@@ -154,6 +165,7 @@ export function createDemoWorkspace(
       defaultAspectRatio: "9:16",
       exportApprovedOnly: false,
     },
+    standards: baselineStandards,
     universes: [
       {
         id: "uni_mist_harbor",
@@ -744,6 +756,7 @@ export function createDemoWorkspace(
         universeId: "uni_mist_harbor",
         characterIds: ["char_lin", "char_shen"],
         dependsOnIds: [],
+        standardRefs: baselineRefs,
         createdAt,
         updatedAt: createdAt,
       },
@@ -767,6 +780,7 @@ export function createDemoWorkspace(
         parentId: "task_world_rules",
         characterIds: ["char_lin", "char_shen", "char_gu"],
         dependsOnIds: ["task_world_rules"],
+        standardRefs: baselineRefs,
         createdAt,
         updatedAt: createdAt,
       },
@@ -787,6 +801,7 @@ export function createDemoWorkspace(
         parentId: "task_world_rules",
         characterIds: ["char_lin", "char_shen"],
         dependsOnIds: [],
+        standardRefs: baselineRefs,
         createdAt,
         updatedAt: createdAt,
       },
@@ -808,6 +823,7 @@ export function createDemoWorkspace(
         workId: "work_tide_clock",
         characterIds: ["char_lin", "char_shen"],
         dependsOnIds: ["task_review_first"],
+        standardRefs: baselineRefs,
         createdAt,
         updatedAt: createdAt,
       },

@@ -17,13 +17,22 @@ export function migrateWorkspace(value: unknown): unknown {
     });
   }
   if (value.schema_version === 2) {
-    return {
+    return migrateWorkspace({
       ...value,
-      schema_version: WORKSPACE_SCHEMA_VERSION,
+      schema_version: 3,
       storyObjects: Array.isArray(value.storyObjects) ? value.storyObjects : [],
       timelineEvents: Array.isArray(value.timelineEvents)
         ? value.timelineEvents
         : [],
+      revision:
+        typeof value.revision === "number" ? value.revision + 1 : value.revision,
+    });
+  }
+  if (value.schema_version === 3) {
+    return {
+      ...value,
+      schema_version: WORKSPACE_SCHEMA_VERSION,
+      standards: Array.isArray(value.standards) ? value.standards : [],
       revision:
         typeof value.revision === "number" ? value.revision + 1 : value.revision,
     };

@@ -1,4 +1,4 @@
-export const WORKSPACE_SCHEMA_VERSION = 3 as const;
+export const WORKSPACE_SCHEMA_VERSION = 4 as const;
 export const ARC_REEL_SCHEMA = "iploom.arcreel/v1" as const;
 
 export type UiLocale = "zh-CN" | "en";
@@ -45,6 +45,18 @@ export type WorkflowTaskStatus =
   | "active"
   | "review"
   | "done";
+/**
+ * Foundational standards keep AI output coherent across every project type.
+ * They are registered on the workspace, not derived from a particular genre.
+ */
+export type StandardKind =
+  | "style"
+  | "format"
+  | "naming"
+  | "numeric"
+  | "entity-prompt"
+  | "continuity";
+export type StandardStatus = "draft" | "active" | "disabled";
 export type TimelineSubjectKind =
   | "character"
   | "scene"
@@ -236,6 +248,24 @@ export interface TimelineEvent {
   updatedAt: string;
 }
 
+export interface WorkspaceStandard {
+  id: string;
+  title: LocalizedText;
+  kind: StandardKind;
+  universeId?: string;
+  body: LocalizedText;
+  status: StandardStatus;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The standard identity a task was composed against, pinned to its version. */
+export interface StandardRef {
+  id: string;
+  version: number;
+}
+
 export interface WorkflowTask {
   id: string;
   title: LocalizedText;
@@ -250,6 +280,7 @@ export interface WorkflowTask {
   parentId?: string;
   characterIds: string[];
   dependsOnIds: string[];
+  standardRefs: StandardRef[];
   createdAt: string;
   updatedAt: string;
 }
@@ -282,6 +313,7 @@ export interface StudioWorkspace {
   updatedAt: string;
   lastOpenedWorkId?: string;
   settings: WorkspaceSettings;
+  standards: WorkspaceStandard[];
   universes: StoryUniverse[];
   characters: Character[];
   locations: StoryLocation[];
@@ -324,6 +356,8 @@ export interface RelationshipGraph {
 }
 
 export interface WorkspaceStats {
+  standards: number;
+  activeStandards: number;
   universes: number;
   works: number;
   chapters: number;

@@ -22,7 +22,8 @@ Electron main process
         │
         ▼ stdio
 Bundled MCP server
-  ├─ nine read-only tools
+  ├─ eleven read-only tools
+  ├─ create_standard / update_standard
   └─ export_arcreel_bundle
 ```
 
@@ -38,6 +39,7 @@ No renderer code receives Node.js primitives. IPC handlers validate their sender
 - `works`: novels. A work references exactly one universe.
 - `chapters`: ordered content inside a work, with planning notes, prose, cast, location and optional scenes.
 - `workflowTasks`: hierarchical AI-authoring work items with explicit dependencies, readiness, scope references and reviewable results.
+- `standards`: project foundation rules (language, format, naming, numeric, entity-prompt and continuity). Active rules are injected into production prompts and workflow briefs; each task pins the id and version it started from.
 - `exports`: local history of generated handoff packages.
 
 The schema is validated at both UI and storage boundaries. Duplicate IDs, duplicate chapter numbers, dangling universe/character/location references, task cycles and invalid task scope are rejected before data is written. Schema v1 workspaces are upgraded to v2 on load by adding an empty workflow collection and bumping the revision.
@@ -90,7 +92,7 @@ The MCP server is bundled by esbuild and run through the Electron executable wit
 - Windows can spawn the `.exe` directly rather than failing on a `.cmd` shim;
 - the server is bundled with its JavaScript dependencies.
 
-The nine query tools, including workflow listing and brief generation, never write. `export_arcreel_bundle` is the only tool that creates files and defaults to an `exports` directory beside the workspace.
+The eleven query tools, including workflow listing, brief generation and foundation-standard reads, never write. `create_standard` and `update_standard` only change foundation standards inside the workspace; `export_arcreel_bundle` is the only tool that creates files and defaults to an `exports` directory beside the workspace.
 
 ## Security boundary
 
