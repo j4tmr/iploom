@@ -5,7 +5,7 @@
 [![Studio CI](https://github.com/j4tmr/iploom/actions/workflows/studio-ci.yml/badge.svg)](https://github.com/j4tmr/iploom/actions/workflows/studio-ci.yml)
 [![最新发行版](https://img.shields.io/github/v/release/j4tmr/iploom?display_name=tag&sort=semver)](https://github.com/j4tmr/iploom/releases)
 
-[English](README.md) · [下载发行版](https://github.com/j4tmr/iploom/releases) · [架构](docs/architecture.md) · [MCP 接入](docs/mcp.md) · [ArcReel 交接](docs/arcreel-handoff.md)
+[English](README.md) · [功能说明站](https://j4tmr.github.io/iploom/) · [下载发行版](https://github.com/j4tmr/iploom/releases) · [架构](docs/architecture.md) · [MCP 接入](docs/mcp.md) · [ArcReel 交接](docs/arcreel-handoff.md)
 
 IPloom Studio 是一个本地优先的桌面创作工作区。它把故事世界、可复用人物、关系图谱、小说、章节和漫剧改编资料放在同一套可追溯结构里。支持 macOS 与 Windows；内容保存在本机；本地 MCP 客户端可以读取同一份事实来源。
 
@@ -45,9 +45,20 @@ IP 宇宙
 - **桌面安全基线**：上下文隔离、沙箱渲染器、严格 CSP、IPC 校验与显式导出边界。
 - **无账号、无遥测**：不依赖云端服务。
 
+## 新版 AI 制作台
+
+已有小说可导入并通过可配置模型 API 提取世界、人物、关系与场景。制作台提供九类可编辑提示词、任务依赖、实时产出与作者审阅，面向后续漫剧制作。见 [AI 制作指南](docs/ai-production.md)。这些能力属于新版源码，尚未包含在下方 0.3.0 安装包中。
+
 ## 下载
 
-前往 [Releases](https://github.com/j4tmr/iploom/releases)：
+当前发行版 **0.3.0**，直接下载：
+
+| macOS (Apple silicon + Intel) | Windows x64 |
+| --- | --- |
+| [DMG](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-darwin-universal.dmg) · [ZIP](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-darwin-universal.zip) | [EXE](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-win32-x64.exe) |
+
+[Releases](https://github.com/j4tmr/iploom/releases) · [SHA256SUMS.txt](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/SHA256SUMS.txt)
+
 
 - macOS：同时支持 Apple silicon 与 Intel 的 universal DMG / ZIP。
 - Windows：x64 NSIS 安装包。

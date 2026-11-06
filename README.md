@@ -5,7 +5,7 @@
 [![Studio CI](https://github.com/j4tmr/iploom/actions/workflows/studio-ci.yml/badge.svg)](https://github.com/j4tmr/iploom/actions/workflows/studio-ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/j4tmr/iploom?display_name=tag&sort=semver)](https://github.com/j4tmr/iploom/releases)
 
-[中文说明](README.zh-CN.md) · [Releases](https://github.com/j4tmr/iploom/releases) · [Architecture](docs/architecture.md) · [MCP](docs/mcp.md) · [ArcReel handoff](docs/arcreel-handoff.md)
+[中文说明](README.zh-CN.md) · [Product guide](https://j4tmr.github.io/iploom/) · [Releases](https://github.com/j4tmr/iploom/releases) · [Architecture](docs/architecture.md) · [MCP](docs/mcp.md) · [ArcReel handoff](docs/arcreel-handoff.md)
 
 IPloom Studio is a local-first desktop workspace for keeping a story world, its reusable cast, relationship graph, novels, chapters and screen-adaptation material in one coherent system. It runs on macOS and Windows, stores content on your machine, and exposes the same source of truth to local MCP clients.
 
@@ -45,9 +45,20 @@ The result is a small, inspectable IP graph instead of a folder of files whose r
 - **Desktop security baseline** — context isolation, sandboxed renderer, strict CSP, validated IPC and an explicit export boundary.
 - **No account and no telemetry** — the app does not require a cloud service.
 
+## New AI production desk
+
+Import existing manuscripts, analyze world/cast/relationships/scenes through a configurable model API, and use nine editable prompt templates with dependent tasks, streamed output and author review. See the [AI production guide](docs/ai-production.md). These source features are not included in the 0.3.0 installers below.
+
 ## Download
 
-Open [Releases](https://github.com/j4tmr/iploom/releases):
+Current release **0.3.0** — direct downloads:
+
+| macOS (Apple silicon + Intel) | Windows x64 |
+| --- | --- |
+| [DMG](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-darwin-universal.dmg) · [ZIP](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-darwin-universal.zip) | [EXE](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-win32-x64.exe) |
+
+[Releases](https://github.com/j4tmr/iploom/releases) · [SHA256SUMS.txt](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/SHA256SUMS.txt)
+
 
 - macOS: universal DMG and ZIP for Apple silicon and Intel.
 - Windows: x64 NSIS installer.
