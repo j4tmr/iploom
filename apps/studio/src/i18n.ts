@@ -40,7 +40,7 @@ const zh = {
   foundationDraftNote:
     "规则会写入项目工作区；草稿与停用规则不会注入 AI 提示词，启用后才参与工作。",
   foundationRegistered: "已登记为草稿，启用后才会影响 AI 产出。",
-  foundationNoCandidates: "没有可登记的候选规则。",
+  foundationLimitReached: "规则已达 1000 条上限，超出的候选未登记。",
   newTask: "新建任务",
   workflowNewTask: "新建 AI 任务",
   workflowEditTask: "编辑 AI 任务",
@@ -430,7 +430,8 @@ const en: Record<MessageKey, string> = {
     "Standards are saved to the project workspace. Draft and disabled standards are not injected into AI prompts; only active ones participate.",
   foundationRegistered:
     "Registered as drafts. They affect AI output once activated.",
-  foundationNoCandidates: "No registrable candidates.",
+  foundationLimitReached:
+    "The project reached its 1,000-standard limit; extra candidates were not registered.",
   newTask: "New task",
   workflowNewTask: "New AI task",
   workflowEditTask: "Edit AI task",

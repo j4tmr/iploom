@@ -42,7 +42,7 @@ No renderer code receives Node.js primitives. IPC handlers validate their sender
 - `standards`: project foundation rules (language, format, naming, numeric, entity-prompt and continuity). Active rules are injected into production prompts and workflow briefs; each task pins the id and version it started from.
 - `exports`: local history of generated handoff packages.
 
-The schema is validated at both UI and storage boundaries. Duplicate IDs, duplicate chapter numbers, dangling universe/character/location references, task cycles and invalid task scope are rejected before data is written. Schema v1 workspaces are upgraded to v2 on load by adding an empty workflow collection and bumping the revision.
+The schema is validated at both UI and storage boundaries. Duplicate IDs, duplicate chapter numbers, dangling universe/character/location references, task cycles and invalid task scope are rejected before data is written. Migration runs on load as a chain: v1 adds the workflow collection (v2), v2 adds story objects and timeline events (v3), and v3 adds foundation standards with empty task pins (v4). Every step bumps the revision.
 
 ## Persistence
 

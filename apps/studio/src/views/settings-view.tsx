@@ -190,11 +190,7 @@ export function SettingsView({
             </div>
             <pre>{config}</pre>
           </div>
-          <p className="muted small">
-            {locale === "en"
-              ? "11 read-only query tools + 2 standards writers + 1 local export tool."
-              : "11 个只读查询工具 + 2 个基础规则写入工具 + 1 个本地导出工具。"}
-          </p>
+          <p className="muted small">{t("mcpToolsNote")}</p>
         </section>
 
         <section className="settings-panel">

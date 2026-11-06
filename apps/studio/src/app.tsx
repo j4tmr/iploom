@@ -297,6 +297,14 @@ export function App() {
           )
           .map((task) => task.id),
       );
+      const removedStandards = new Set(
+        draft.standards
+          .filter((item) => item.universeId === target.id)
+          .map((item) => item.id),
+      );
+      draft.standards = draft.standards.filter(
+        (item) => !removedStandards.has(item.id),
+      );
       draft.workflowTasks = draft.workflowTasks
         .filter((task) => !removedTasks.has(task.id))
         .map((task) => ({
@@ -307,6 +315,9 @@ export function App() {
               : task.parentId,
           dependsOnIds: task.dependsOnIds.filter(
             (id) => !removedTasks.has(id),
+          ),
+          standardRefs: task.standardRefs.filter(
+            (ref) => !removedStandards.has(ref.id),
           ),
         }));
       if (draft.lastOpenedWorkId && deletedWorks.has(draft.lastOpenedWorkId))
@@ -566,10 +577,18 @@ export function App() {
 
   const registerStandardCandidates = (candidates: StandardCandidate[]) => {
     if (candidates.length === 0) return;
+    const room = Math.max(0, 1_000 - workspace.standards.length);
+    const accepted = candidates.slice(0, room);
+    if (accepted.length === 0) {
+      notify(t("foundationLimitReached"));
+      return;
+    }
     const now = new Date().toISOString();
     mutate((draft) => {
-      const room = Math.max(0, 1_000 - draft.standards.length);
-      for (const candidate of candidates.slice(0, room)) {
+      for (const candidate of accepted.slice(
+        0,
+        Math.max(0, 1_000 - draft.standards.length),
+      )) {
         draft.standards.push({
           id: createId("std"),
           kind: candidate.kind,
@@ -582,7 +601,11 @@ export function App() {
         });
       }
     });
-    notify(t("foundationRegistered"));
+    notify(
+      accepted.length < candidates.length
+        ? t("foundationLimitReached")
+        : t("foundationRegistered"),
+    );
   };
 
   const deleteAtlas = (kind: "location" | "faction" | "lore", id: string) => {
