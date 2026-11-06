@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AiConfig, AiRequest } from "../core/ai.ts";
+import { MAX_AI_PROMPT_LENGTH } from "../core/types.ts";
 
 export const aiConfigSchema = z.object({
   endpoint: z.string().trim().url().max(2048),
@@ -15,7 +16,7 @@ export const aiConfigSchema = z.object({
 export const aiRequestSchema = z.object({
   id: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
   label: z.string().min(1).max(300),
-  prompt: z.string().trim().min(1).max(100_000),
+  prompt: z.string().trim().min(1).max(MAX_AI_PROMPT_LENGTH),
 }).strict();
 
 /** Sends only the explicitly reviewed prompt; credentials never enter workspace data. */

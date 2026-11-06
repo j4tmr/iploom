@@ -96,7 +96,7 @@ const zh = {
   saving: "保存中…",
   saved: "已保存",
   changeRejected: "更改未应用：",
-  resultTooLong: "结果超过 20 万字符的保存上限，请先复制并精简后再保存。",
+  resultTooLong: "结果超过 {limit} 字符的保存上限，请先复制并精简后再保存。",
   exportWorkMissing: "导出已完成，但小说已被删除，本次导出未记入历史。",
   local: "本地优先",
   desktop: "桌面端",
@@ -494,7 +494,7 @@ const en: Record<MessageKey, string> = {
   saved: "Saved",
   changeRejected: "Change not applied:",
   resultTooLong:
-    "The result exceeds the 200,000-character save limit. Copy and shorten it before saving.",
+    "The result exceeds the {limit}-character save limit. Copy and shorten it before saving.",
   exportWorkMissing:
     "The export finished, but its novel was deleted; the export was not recorded.",
   local: "Local-first",

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  MAX_LOCALIZED_LENGTH,
   MAX_WORKFLOW_RESULT_LENGTH,
   WORKSPACE_SCHEMA_VERSION,
 } from "./types.ts";
@@ -15,8 +16,8 @@ const positiveInt = z.number().int().positive();
 
 export const localizedSchema = z
   .object({
-    zh: z.string().max(500).default(""),
-    en: z.string().max(500).default(""),
+    zh: z.string().max(MAX_LOCALIZED_LENGTH).default(""),
+    en: z.string().max(MAX_LOCALIZED_LENGTH).default(""),
   })
   .strict();
 

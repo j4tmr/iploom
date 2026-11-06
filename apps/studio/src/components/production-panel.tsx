@@ -4,9 +4,9 @@ import type { AiConfigInfo } from "../core/ai.ts";
 import { createId, displayText } from "../core/factory.ts";
 import { buildProductionPrompt, createProductionTasks, productionTemplates, resolveProductionScope, taskProductionPrompt, type ProductionScope, type ProductionTemplate } from "../core/production.ts";
 import { standardRefsFor } from "../core/standards.ts";
-import { MAX_WORKFLOW_RESULT_LENGTH } from "../core/types.ts";
+import { MAX_AI_PROMPT_LENGTH, MAX_WORKFLOW_RESULT_LENGTH } from "../core/types.ts";
 import type { StudioWorkspace, UiLocale, WorkflowTask } from "../core/types.ts";
-import type { Translate } from "../i18n.ts";
+import { formatNumber, type Translate } from "../i18n.ts";
 import { Button, Field, Select, TextArea } from "./ui.tsx";
 
 export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, context, onTasks, onStatus, onResult }: {
@@ -70,7 +70,7 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
     {blocked ? <p role="status">{en ? "Approve dependency results before running this task." : "请先审阅并完成前置任务，再执行此任务。"}</p> : null}
     <div className="production-actions">
       <Button disabled={!prompt || busy} onClick={() => void bridge.copyText(prompt).catch((e) => setMessage(String(e)))}>{en ? "Copy prompt" : "复制提示词"}</Button>
-      <Button data-testid="production-run" variant="primary" disabled={!prompt.trim() || prompt.length > 100_000 || busy || blocked} onClick={async () => {
+      <Button data-testid="production-run" variant="primary" disabled={!prompt.trim() || prompt.length > MAX_AI_PROMPT_LENGTH || busy || blocked} onClick={async () => {
         const info = await bridge.aiConfig().catch(() => null);
         if (!info?.configured) { setMessage(en ? "Configure a model in Settings first (desktop only)." : "请先在设置中配置模型（仅桌面版）。"); return; }
         if (!window.confirm(en ? `Send this prompt to ${info.endpoint} using ${info.model}? Provider charges may apply.` : `将此提示词发送至 ${info.endpoint}，使用 ${info.model}？服务商可能计费。`)) return;
@@ -105,7 +105,7 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
       {busy ? <Button onClick={() => void bridge.cancelAi(activeId.current)}>{en ? "Cancel" : "取消"}</Button> : null}
     </div>
     <p role="status" aria-live="polite">{message}</p>
-    {prompt.length > 100_000 ? <p role="alert">{en ? "Prompt exceeds 100,000 characters. Narrow its scope or edit it before sending." : "提示词超过 10 万字符，请缩小范围或编辑后发送。"}</p> : null}
+    {prompt.length > MAX_AI_PROMPT_LENGTH ? <p role="alert">{en ? `Prompt exceeds ${formatNumber(MAX_AI_PROMPT_LENGTH, locale)} characters. Narrow its scope or edit it before sending.` : `提示词超过 ${formatNumber(MAX_AI_PROMPT_LENGTH, locale)} 字符，请缩小范围或编辑后发送。`}</p> : null}
     {output ? <><Field label={en ? "Live draft / reviewed result" : "实时产出 / 待审结果"}><TextArea data-testid="production-output" rows={10} value={output} readOnly={busy} onChange={(e) => setOutput(e.target.value)} /></Field><Button onClick={() => void bridge.copyText(output)}>{en ? "Copy result" : "复制结果"}</Button>{completedTask && !busy ? <Button disabled={output.length > MAX_WORKFLOW_RESULT_LENGTH} onClick={() => { setMessage(onResult(completedTask, output) ? (en ? "Reviewed edits saved. Mark the task done in Workflow when ready." : "审阅修改已保存，确认后可在工作流标记完成。") : (en ? "The reviewed edits were not saved." : "审阅修改未能保存。")); }}>{en ? "Save reviewed edits" : "保存审阅修改"}</Button> : null}</> : null}
   </details>;
 }

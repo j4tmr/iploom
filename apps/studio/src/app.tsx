@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AiConfigInfo } from "./core/ai.ts";
 import { buildRelationshipGraph } from "./core/graph.ts";
-import { taskDescendantIds } from "./core/workflow.ts";
+import { setWorkflowTaskResult, taskDescendantIds } from "./core/workflow.ts";
 import { removeSceneReferences } from "./core/timeline.ts";
 import {
   deleteChapterFromDraft,
@@ -254,11 +254,12 @@ export function App() {
 
   const saveUniverse = (next: StoryUniverse) => {
     const exists = workspace.universes.some((item) => item.id === next.id);
-    mutate((draft) => {
+    const applied = mutateChecked((draft) => {
       const index = draft.universes.findIndex((item) => item.id === next.id);
       if (index >= 0) draft.universes[index] = next;
       else draft.universes.push(next);
     });
+    if (!applied) return;
     if (!exists) navigate({ name: "universe", id: next.id });
     notify(t("saved"));
   };
@@ -442,20 +443,20 @@ export function App() {
 
   const saveWorkflowResult = (task: WorkflowTask, result: string): boolean => {
     if (result.length > MAX_WORKFLOW_RESULT_LENGTH) {
-      notify(t("resultTooLong"));
+      notify(
+        t("resultTooLong", {
+          limit: formatNumber(MAX_WORKFLOW_RESULT_LENGTH, locale),
+        }),
+      );
       return false;
     }
+    let found = false;
     const applied = mutateChecked((draft) => {
-      const target = draft.workflowTasks.find((item) => item.id === task.id);
-      if (!target) return;
-      target.result =
-        locale === "zh-CN"
-          ? { ...target.result, zh: result }
-          : { ...target.result, en: result };
-      target.updatedAt = new Date().toISOString();
+      found = setWorkflowTaskResult(draft, task.id, result, locale);
     });
-    if (applied) notify(t("saved"));
-    return applied;
+    const saved = applied && found;
+    if (saved) notify(t("saved"));
+    return saved;
   };
 
   const saveStandard = (next: WorkspaceStandard) => {
