@@ -119,8 +119,8 @@ describe("studio domain", () => {
     delete legacy.storyObjects;
     delete legacy.timelineEvents;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(4);
-    expect(migrated.revision).toBe(43);
+    expect(migrated.schema_version).toBe(5);
+    expect(migrated.revision).toBe(44);
     expect(migrated.workflowTasks).toEqual([]);
     expect(migrated.storyObjects).toEqual([]);
     expect(migrated.timelineEvents).toEqual([]);
@@ -136,10 +136,107 @@ describe("studio domain", () => {
     delete legacy.storyObjects;
     delete legacy.timelineEvents;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(4);
-    expect(migrated.revision).toBe(12);
+    expect(migrated.schema_version).toBe(5);
+    expect(migrated.revision).toBe(13);
     expect(migrated.storyObjects).toEqual([]);
     expect(migrated.timelineEvents).toEqual([]);
+  });
+
+  test("migrates schema v4 export history before strict validation", () => {
+    const legacy = structuredClone(
+      createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"),
+    ) as unknown as Record<string, unknown>;
+    legacy.schema_version = 4;
+    legacy.revision = 7;
+    legacy.lastOpenedWorkId = "work_deleted";
+    legacy.exports = [
+      {
+        id: "export_orphan",
+        workId: "work_deleted",
+        workTitle: "Deleted",
+        createdAt: "2026-11-06T00:00:00.000Z",
+        chapterIds: ["chapter_tide_001"],
+        fileCount: 1,
+        bytes: 10,
+        manifestSha256: "a".repeat(64),
+      },
+      {
+        id: "export_same",
+        workId: "work_tide_clock",
+        workTitle: "The Tide Clock",
+        createdAt: "2026-11-06T00:00:00.000Z",
+        chapterIds: ["chapter_tide_001", "chapter_tide_001", "chapter_missing"],
+        fileCount: 2,
+        bytes: 20,
+        manifestSha256: "b".repeat(64),
+      },
+      {
+        id: "export_same",
+        workId: "work_tide_clock",
+        workTitle: "The Tide Clock",
+        createdAt: "2026-11-06T00:00:00.000Z",
+        chapterIds: [],
+        fileCount: 0,
+        bytes: 0,
+        manifestSha256: "c".repeat(64),
+      },
+      { id: "export_broken", workId: 4 },
+    ];
+    const migrated = validateWorkspace(legacy);
+    expect(migrated.schema_version).toBe(5);
+    expect(migrated.revision).toBe(8);
+    expect(migrated.lastOpenedWorkId).toBeUndefined();
+    expect(migrated.exports.map((record) => record.id)).toEqual([
+      "export_same",
+      "export_same-2",
+    ]);
+    expect(migrated.exports[0]?.chapterIds).toEqual(["chapter_tide_001"]);
+  });
+
+  test("rejects dangling exports and a missing last-opened novel", () => {
+    const base = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
+    const record = {
+      id: "export_tide",
+      workId: "work_tide_clock",
+      workTitle: "The Tide Clock",
+      createdAt: "2026-11-06T00:00:00.000Z",
+      chapterIds: ["chapter_tide_001"],
+      fileCount: 1,
+      bytes: 10,
+      manifestSha256: "a".repeat(64),
+    };
+
+    const duplicate = structuredClone(base);
+    duplicate.exports.push(record, { ...record });
+    expect(() => validateWorkspace(duplicate)).toThrow(
+      /duplicate id: export_tide/,
+    );
+
+    const foreignChapter = structuredClone(base);
+    foreignChapter.exports.push({
+      ...record,
+      chapterIds: ["chapter_train_001"],
+    });
+    expect(() => validateWorkspace(foreignChapter)).toThrow(
+      /unknown chapter: chapter_train_001/,
+    );
+
+    const repeatedChapter = structuredClone(base);
+    repeatedChapter.exports.push({
+      ...record,
+      chapterIds: ["chapter_tide_001", "chapter_tide_001"],
+    });
+    expect(() => validateWorkspace(repeatedChapter)).toThrow(
+      /duplicate chapter: chapter_tide_001/,
+    );
+
+    const unknownWork = structuredClone(base);
+    unknownWork.exports.push({ ...record, workId: "work_missing" });
+    expect(() => validateWorkspace(unknownWork)).toThrow(/unknown work/);
+
+    const missingNovel = structuredClone(base);
+    missingNovel.lastOpenedWorkId = "work_missing";
+    expect(() => validateWorkspace(missingNovel)).toThrow(/lastOpenedWorkId/);
   });
 
   test("keeps package, UI and generated manifests on one version", async () => {
@@ -471,15 +568,15 @@ describe("workspace store", () => {
       await Bun.write(file, JSON.stringify(legacy));
       const store = new WorkspaceStore(file);
       const loaded = await store.load();
-      expect(loaded.workspace.schema_version).toBe(4);
+      expect(loaded.workspace.schema_version).toBe(5);
       expect(loaded.workspace.workflowTasks).toEqual([]);
-      expect(loaded.workspace.revision).toBe(6);
+      expect(loaded.workspace.revision).toBe(7);
       await store.save(loaded.workspace);
       const persisted = JSON.parse(readFileSync(file, "utf8")) as {
         schema_version: number;
         workflowTasks: unknown[];
       };
-      expect(persisted.schema_version).toBe(4);
+      expect(persisted.schema_version).toBe(5);
       expect(persisted.workflowTasks).toEqual([]);
     } finally {
       rmSync(root, { recursive: true, force: true });

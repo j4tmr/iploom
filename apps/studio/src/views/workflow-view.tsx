@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { displayText } from "../core/factory.ts";
+import { MAX_WORKFLOW_RESULT_LENGTH } from "../core/types.ts";
 import type {
   StudioWorkspace,
   UiLocale,
@@ -406,6 +407,7 @@ export function WorkflowView({
                   <TextArea
                     data-testid="workflow-result"
                     rows={4}
+                    maxLength={MAX_WORKFLOW_RESULT_LENGTH}
                     value={resultText}
                     onChange={(event) => setResultText(event.target.value)}
                     placeholder={t("workflowResultPlaceholder")}
@@ -434,7 +436,10 @@ export function WorkflowView({
                   <Button
                     data-testid="workflow-save-result"
                     icon="check"
-                    disabled={resultText === displayText(selected.result, locale)}
+                    disabled={
+                      resultText === displayText(selected.result, locale) ||
+                      resultText.length > MAX_WORKFLOW_RESULT_LENGTH
+                    }
                     onClick={() => onSaveResult(selected, resultText)}
                   >
                     {t("save")}

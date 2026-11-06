@@ -2,11 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import {
   applyWorkspaceChange,
+  deleteChapterFromDraft,
+  deleteCharacterFromDraft,
   deleteUniverseFromDraft,
+  deleteWorkFromDraft,
+  reassignStandardUniverse,
   reassignWorkUniverse,
   saveWorkFromEditor,
   unlinkCharacterFromUniverse,
 } from "../../apps/studio/src/core/integrity.ts";
+import { MAX_WORKFLOW_RESULT_LENGTH } from "../../apps/studio/src/core/types.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 import type {
   Character,
@@ -374,5 +379,263 @@ describe("workspace integrity", () => {
     ]);
     expect(untouched.chapters[0]?.locationId).toBe("loc_old_tower");
     expect(before).toEqual(snapshot);
+  });
+
+  test("deleting a novel removes its events, tasks and exports", () => {
+    const workspace = demo();
+    workspace.lastOpenedWorkId = "work_tide_clock";
+    workspace.exports.push({
+      id: "export_tide",
+      workId: "work_tide_clock",
+      workTitle: "The Tide Clock",
+      createdAt: NOW,
+      chapterIds: ["chapter_tide_001"],
+      fileCount: 2,
+      bytes: 100,
+      manifestSha256: "a".repeat(64),
+    });
+    workspace.workflowTasks.push({
+      ...unscopedTask(),
+      id: "task_train_after_tide",
+      universeId: "uni_ninth_station",
+      workId: "work_last_train",
+      chapterId: "chapter_train_001",
+      parentId: "task_chapter_three",
+      dependsOnIds: ["task_review_first"],
+      characterIds: ["char_echo"],
+    });
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+
+    const outcome = applyWorkspaceChange(workspace, (draft) => {
+      deleteWorkFromDraft(draft, "work_tide_clock");
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    const next = outcome.workspace;
+
+    expect(next.works.map((item) => item.id)).toEqual(["work_last_train"]);
+    expect(next.timelineEvents.some((event) => event.workId === "work_tide_clock")).toBe(false);
+    expect(next.workflowTasks.some((task) => task.workId === "work_tide_clock")).toBe(false);
+    const dependent = taskById(next, "task_train_after_tide");
+    expect(dependent.parentId).toBeUndefined();
+    expect(dependent.dependsOnIds).toEqual([]);
+    expect(dependent.characterIds).toEqual(["char_echo"]);
+    expect(next.exports).toEqual([]);
+    expect(next.lastOpenedWorkId).toBeUndefined();
+    expect(workspace.works).toHaveLength(2);
+    expect(() => validateWorkspace(next)).not.toThrow();
+  });
+
+  test("deleting a character clears relationships, cast, events and tasks", () => {
+    const workspace = demo();
+    workById(workspace, "work_tide_clock").chapters[2]?.scenes.push({
+      id: "scene_tide_pendulums",
+      title: "十三钟摆",
+      summary: "",
+      characterIds: ["char_gu", "char_lin"],
+      shots: [],
+    });
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+
+    const outcome = applyWorkspaceChange(workspace, (draft) => {
+      deleteCharacterFromDraft(draft, "char_gu");
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    const next = outcome.workspace;
+
+    expect(next.characters.some((item) => item.id === "char_gu")).toBe(false);
+    expect(
+      next.relationships.some(
+        (item) => item.sourceId === "char_gu" || item.targetId === "char_gu",
+      ),
+    ).toBe(false);
+    expect(
+      next.timelineEvents.some(
+        (event) =>
+          (event.subjectKind === "character" && event.subjectId === "char_gu") ||
+          event.relatedCharacterIds.includes("char_gu"),
+      ),
+    ).toBe(false);
+    for (const work of next.works) {
+      for (const chapter of work.chapters) {
+        expect(chapter.characterIds).not.toContain("char_gu");
+        for (const scene of chapter.scenes)
+          expect(scene.characterIds).not.toContain("char_gu");
+      }
+    }
+    expect(
+      next.workflowTasks.every((task) => !task.characterIds.includes("char_gu")),
+    ).toBe(true);
+    expect(() => validateWorkspace(next)).not.toThrow();
+  });
+
+  test("deleting a chapter keeps same-id chapters and events in other novels", () => {
+    const workspace = demo();
+    const tide = workById(workspace, "work_tide_clock");
+    const train = workById(workspace, "work_last_train");
+    const sharedChapterId = tide.chapters[0]!.id;
+    tide.chapters[0]!.scenes.push({
+      id: "scene_rain",
+      title: "Rain",
+      summary: "",
+      characterIds: [],
+      shots: [],
+    });
+    train.chapters.push({
+      ...structuredClone(train.chapters[0]!),
+      id: sharedChapterId,
+      number: 2,
+      title: "Collision",
+      scenes: [
+        {
+          id: "scene_rain",
+          title: "Rain",
+          summary: "",
+          characterIds: [],
+          shots: [],
+        },
+      ],
+    });
+    workspace.timelineEvents.push({
+      ...structuredClone(workspace.timelineEvents[0]!),
+      id: "timeline_train_collision",
+      universeId: "uni_ninth_station",
+      workId: "work_last_train",
+      chapterId: sharedChapterId,
+      sceneId: "scene_rain",
+      subjectKind: "location",
+      subjectId: "loc_platform_seven",
+      relatedCharacterIds: ["char_echo"],
+      relatedLocationIds: [],
+      relatedObjectIds: [],
+    });
+    workspace.exports.push(
+      {
+        id: "export_tide",
+        workId: "work_tide_clock",
+        workTitle: "The Tide Clock",
+        createdAt: NOW,
+        chapterIds: ["chapter_tide_001", "chapter_tide_002"],
+        fileCount: 2,
+        bytes: 100,
+        manifestSha256: "a".repeat(64),
+      },
+      {
+        id: "export_train",
+        workId: "work_last_train",
+        workTitle: "The Last Train",
+        createdAt: NOW,
+        chapterIds: ["chapter_train_001"],
+        fileCount: 1,
+        bytes: 10,
+        manifestSha256: "b".repeat(64),
+      },
+    );
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+
+    const outcome = applyWorkspaceChange(workspace, (draft) => {
+      deleteChapterFromDraft(draft, "work_tide_clock", sharedChapterId);
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    const next = outcome.workspace;
+
+    expect(workById(next, "work_tide_clock").chapters.map((item) => item.id)).toEqual([
+      "chapter_tide_002",
+      "chapter_tide_003",
+    ]);
+    const keptTrainChapter = workById(next, "work_last_train").chapters.find(
+      (item) => item.id === sharedChapterId,
+    );
+    expect(keptTrainChapter?.scenes[0]?.id).toBe("scene_rain");
+    expect(
+      next.timelineEvents.some(
+        (event) =>
+          event.workId === "work_tide_clock" && event.chapterId === sharedChapterId,
+      ),
+    ).toBe(false);
+    const keptEvent = next.timelineEvents.find(
+      (event) => event.id === "timeline_train_collision",
+    );
+    expect(keptEvent?.sceneId).toBe("scene_rain");
+    expect(next.workflowTasks.some((task) => task.id === "task_review_first")).toBe(false);
+    expect(taskById(next, "task_adaptation_pass").dependsOnIds).toEqual([]);
+    expect(taskById(next, "task_chapter_three").parentId).toBe("task_world_rules");
+    expect(
+      next.exports.find((record) => record.id === "export_tide")?.chapterIds,
+    ).toEqual(["chapter_tide_002"]);
+    expect(
+      next.exports.find((record) => record.id === "export_train")?.chapterIds,
+    ).toEqual(["chapter_train_001"]);
+    expect(() => validateWorkspace(next)).not.toThrow();
+  });
+
+  test("retargeting a standard drops references that no longer match its world", () => {
+    const workspace = demo();
+    const standard: WorkspaceStandard = {
+      ...scopedStandard("std_shared", "uni_mist_harbor"),
+      universeId: undefined,
+    };
+    workspace.standards.push(standard);
+    taskById(workspace, "task_chapter_three").standardRefs.push({
+      id: standard.id,
+      version: standard.version,
+    });
+    workspace.workflowTasks.push({
+      ...unscopedTask(),
+      id: "task_train_rules",
+      universeId: "uni_ninth_station",
+      workId: "work_last_train",
+      chapterId: "chapter_train_001",
+      characterIds: ["char_echo"],
+      standardRefs: [{ id: standard.id, version: standard.version }],
+    });
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+
+    const outcome = applyWorkspaceChange(workspace, (draft) => {
+      reassignStandardUniverse(draft, standard.id, "uni_ninth_station");
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    const next = outcome.workspace;
+
+    expect(
+      next.standards.find((item) => item.id === standard.id)?.universeId,
+    ).toBe("uni_ninth_station");
+    expect(
+      taskById(next, "task_chapter_three").standardRefs.some(
+        (ref) => ref.id === standard.id,
+      ),
+    ).toBe(false);
+    expect(
+      taskById(next, "task_train_rules").standardRefs.some(
+        (ref) => ref.id === standard.id,
+      ),
+    ).toBe(true);
+    expect(() => validateWorkspace(next)).not.toThrow();
+  });
+
+  test("an oversized workflow result is rejected without changing the live workspace", () => {
+    const before = demo();
+    const snapshot = structuredClone(before);
+    const rejected = applyWorkspaceChange(before, (draft) => {
+      const task = draft.workflowTasks.find(
+        (item) => item.id === "task_world_rules",
+      );
+      if (task) task.result.en = "x".repeat(MAX_WORKFLOW_RESULT_LENGTH + 1);
+    });
+    expect(rejected.ok).toBe(false);
+    if (rejected.ok) return;
+    expect(rejected.issues.join(" ")).toContain("result");
+    expect(before).toEqual(snapshot);
+
+    const accepted = applyWorkspaceChange(before, (draft) => {
+      const task = draft.workflowTasks.find(
+        (item) => item.id === "task_world_rules",
+      );
+      if (task) task.result.en = "x".repeat(MAX_WORKFLOW_RESULT_LENGTH);
+    });
+    expect(accepted.ok).toBe(true);
   });
 });

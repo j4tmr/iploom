@@ -155,13 +155,14 @@ export function relevantTimelineEvents(
 
 export function removeSceneReferences(
   events: TimelineEvent[],
+  workId: string,
   chapterId: string,
   removedSceneIds: ReadonlySet<string>,
 ): TimelineEvent[] {
   if (removedSceneIds.size === 0) return events;
   const next: TimelineEvent[] = [];
   for (const event of events) {
-    if (event.chapterId !== chapterId) {
+    if (event.workId !== workId || event.chapterId !== chapterId) {
       next.push(event);
       continue;
     }

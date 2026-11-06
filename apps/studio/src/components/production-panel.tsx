@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { bridge } from "../platform.ts";
 import type { AiConfigInfo } from "../core/ai.ts";
 import { createId, displayText } from "../core/factory.ts";
-import { buildProductionPrompt, createProductionTasks, productionTemplates, taskProductionPrompt, type ProductionScope, type ProductionTemplate } from "../core/production.ts";
+import { buildProductionPrompt, createProductionTasks, productionTemplates, resolveProductionScope, taskProductionPrompt, type ProductionScope, type ProductionTemplate } from "../core/production.ts";
 import { standardRefsFor } from "../core/standards.ts";
+import { MAX_WORKFLOW_RESULT_LENGTH } from "../core/types.ts";
 import type { StudioWorkspace, UiLocale, WorkflowTask } from "../core/types.ts";
 import type { Translate } from "../i18n.ts";
 import { Button, Field, Select, TextArea } from "./ui.tsx";
@@ -13,9 +14,9 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
   aiInfo: AiConfigInfo | null;
   onOpenSettings: () => void;
   context: ProductionScope;
-  onTasks: (tasks: WorkflowTask[]) => void;
+  onTasks: (tasks: WorkflowTask[]) => boolean;
   onStatus: (task: WorkflowTask, status: WorkflowTask["status"]) => void;
-  onResult: (task: WorkflowTask, text: string) => void;
+  onResult: (task: WorkflowTask, text: string) => boolean;
 }) {
   const en = locale === "en";
   const [scope, setScope] = useState<ProductionScope>(context);
@@ -63,7 +64,7 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
         <Field label={en ? "Character" : "人物"}><Select value={scope.characterId ?? ""} onChange={(e) => { setScope({ ...scope, characterId: e.target.value }); reset(); }}><option value="">{en ? "Relevant cast" : "相关人物"}</option>{workspace.characters.filter((item) => item.universeIds.includes(universeId ?? "")).map((item) => <option key={item.id} value={item.id}>{displayText(item.name, locale)}</option>)}</Select></Field>
       </> : null}
       <Button data-testid="production-compose" onClick={compose}>{en ? "Compose prompt" : "生成对应提示词"}</Button>
-      {!task ? <Button disabled={!universeId} onClick={() => { try { onTasks(createProductionTasks(workspace, scope, locale)); setMessage(en ? "Six dependent production tasks added to Workflow." : "已在工作流中建立六个有依赖关系的制作任务。"); } catch (error) { setMessage(String(error)); } }}>{en ? "Create production workflow" : "建立制作工作流"}</Button> : null}
+      {!task ? <Button disabled={!universeId} onClick={() => { try { const created = createProductionTasks(workspace, scope, locale); setMessage(onTasks(created) ? (en ? "Six dependent production tasks added to Workflow." : "已在工作流中建立六个有依赖关系的制作任务。") : (en ? "The production tasks were not saved." : "制作任务未能保存。")); } catch (error) { setMessage(String(error)); } }}>{en ? "Create production workflow" : "建立制作工作流"}</Button> : null}
     </fieldset>
     {prompt ? <Field label={en ? "Prompt sent to model (editable)" : "将发送给模型的提示词（可编辑）"}><TextArea rows={8} value={prompt} disabled={busy} onChange={(e) => setPrompt(e.target.value)} /></Field> : null}
     {blocked ? <p role="status">{en ? "Approve dependency results before running this task." : "请先审阅并完成前置任务，再执行此任务。"}</p> : null}
@@ -76,23 +77,27 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
         const id = createId("ai"); activeId.current = id; setBusy(true); setOutput(""); setCompletedTask(null);
         const label = task ? displayText(task.title, locale) : productionTemplates[template][en ? 1 : 0];
         setMessage(`${en ? "Working on" : "正在执行"}：${label}`);
-        if (task) {
-          onTasks([{ ...task, brief: en ? { ...task.brief, en: prompt } : { ...task.brief, zh: prompt }, deliverable: { ...task.deliverable, [en ? "en" : "zh"]: `Model: ${info.model}; source revision: ${workspace.revision}. ${en ? "Review the draft before completion." : "完成前请审阅设计稿。"}` }, status: "active" }]);
+        if (task && !onTasks([{ ...task, brief: en ? { ...task.brief, en: prompt } : { ...task.brief, zh: prompt }, deliverable: { ...task.deliverable, [en ? "en" : "zh"]: `Model: ${info.model}; source revision: ${workspace.revision}. ${en ? "Review the draft before completion." : "完成前请审阅设计稿。"}` }, status: "active" }])) {
+          activeId.current = ""; setBusy(false);
+          setMessage(en ? "This task changed while the panel was open and could not be marked active. Reopen it and try again." : "任务已发生变化，无法标记为进行中；请重新打开后再试。");
+          return;
         }
         try {
           const text = await bridge.runAi({ id, prompt, label });
           setOutput(text);
           const current = workspaceRef.current;
+          const resolved = resolveProductionScope(current, scope);
           if ((task && !current.workflowTasks.some((item) => item.id === task.id)) ||
-              (universeId && !current.universes.some((item) => item.id === universeId)) ||
-              (work && !current.works.some((item) => item.id === work.id)) ||
-              (scope.chapterId && !current.works.find((item) => item.id === work?.id)?.chapters.some((item) => item.id === scope.chapterId))) {
+              (scope.workId && !resolved.workId) ||
+              (scope.chapterId && !resolved.chapterId) ||
+              (scope.universeId && !resolved.universeId)) {
             throw new Error(en ? "The target was removed while running. Copy the result; it was not saved." : "执行期间目标已被删除，请复制结果保留，本次没有写入。");
           }
-          if (text.length > 200_000) throw new Error(en ? "Output exceeds the saved-result limit; copy it before continuing." : "输出超过保存长度，请先复制保留。");
-          const resultTask = task ?? { id: createId("task"), title: { zh: productionTemplates[template][0], en: productionTemplates[template][1] }, brief: { zh: en ? "" : prompt, en: en ? prompt : "" }, deliverable: { zh: "设计稿与提示词", en: "Design and prompts" }, result: { zh: "", en: "" }, kind: "adaptation" as const, status: "review" as const, universeId, workId: work?.id, chapterId: scope.chapterId || undefined, characterIds: scope.characterId ? [scope.characterId] : [], dependsOnIds: [], standardRefs: standardRefsFor(workspaceRef.current, universeId), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-          if (!task) onTasks([resultTask]);
-          onResult(resultTask, text); onStatus(resultTask, "review"); setCompletedTask(resultTask);
+          if (text.length > MAX_WORKFLOW_RESULT_LENGTH) throw new Error(en ? "Output exceeds the saved-result limit; copy it before continuing." : "输出超过保存长度，请先复制保留。");
+          const resultTask = task ?? { id: createId("task"), title: { zh: productionTemplates[template][0], en: productionTemplates[template][1] }, brief: { zh: en ? "" : prompt, en: en ? prompt : "" }, deliverable: { zh: "设计稿与提示词", en: "Design and prompts" }, result: { zh: "", en: "" }, kind: "adaptation" as const, status: "review" as const, universeId: resolved.universeId, workId: resolved.workId, chapterId: resolved.chapterId, characterIds: resolved.characterIds ?? [], dependsOnIds: [], standardRefs: standardRefsFor(current, resolved.universeId), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+          if (!task && !onTasks([resultTask])) throw new Error(en ? "The result could not be saved to Workflow. Copy it before continuing." : "结果未能写入工作流，请先复制保留。");
+          if (!onResult(resultTask, text)) throw new Error(en ? "The result was not saved; copy it before continuing." : "结果未能保存，请先复制保留。");
+          onStatus(resultTask, "review"); setCompletedTask(resultTask);
           setMessage(en ? "Draft saved to Workflow for review. Source manuscript is unchanged." : "设计稿已保存到工作流，等待审阅；原稿未被覆盖。");
         } catch (error) { setMessage(String(error)); if (task) onStatus(task, task.status); }
         finally { activeId.current = ""; setBusy(false); }
@@ -101,6 +106,6 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
     </div>
     <p role="status" aria-live="polite">{message}</p>
     {prompt.length > 100_000 ? <p role="alert">{en ? "Prompt exceeds 100,000 characters. Narrow its scope or edit it before sending." : "提示词超过 10 万字符，请缩小范围或编辑后发送。"}</p> : null}
-    {output ? <><Field label={en ? "Live draft / reviewed result" : "实时产出 / 待审结果"}><TextArea data-testid="production-output" rows={10} value={output} readOnly={busy} onChange={(e) => setOutput(e.target.value)} /></Field><Button onClick={() => void bridge.copyText(output)}>{en ? "Copy result" : "复制结果"}</Button>{completedTask && !busy ? <Button disabled={output.length > 200_000} onClick={() => { onResult(completedTask, output); setMessage(en ? "Reviewed edits saved. Mark the task done in Workflow when ready." : "审阅修改已保存，确认后可在工作流标记完成。"); }}>{en ? "Save reviewed edits" : "保存审阅修改"}</Button> : null}</> : null}
+    {output ? <><Field label={en ? "Live draft / reviewed result" : "实时产出 / 待审结果"}><TextArea data-testid="production-output" rows={10} value={output} readOnly={busy} onChange={(e) => setOutput(e.target.value)} /></Field><Button onClick={() => void bridge.copyText(output)}>{en ? "Copy result" : "复制结果"}</Button>{completedTask && !busy ? <Button disabled={output.length > MAX_WORKFLOW_RESULT_LENGTH} onClick={() => { setMessage(onResult(completedTask, output) ? (en ? "Reviewed edits saved. Mark the task done in Workflow when ready." : "审阅修改已保存，确认后可在工作流标记完成。") : (en ? "The reviewed edits were not saved." : "审阅修改未能保存。")); }}>{en ? "Save reviewed edits" : "保存审阅修改"}</Button> : null}</> : null}
   </details>;
 }

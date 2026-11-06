@@ -1,5 +1,7 @@
-export const WORKSPACE_SCHEMA_VERSION = 4 as const;
+export const WORKSPACE_SCHEMA_VERSION = 5 as const;
 export const ARC_REEL_SCHEMA = "iploom.arcreel/v1" as const;
+/** Longest result text the workspace stores per language. */
+export const MAX_WORKFLOW_RESULT_LENGTH = 200_000 as const;
 
 export type UiLocale = "zh-CN" | "en";
 export type ThemeMode = "system" | "light" | "dark";

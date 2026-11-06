@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 import { buildManuscriptImport, manuscriptChunks, mergeManuscriptImport, parseAnalysis, splitManuscript, type ManuscriptAnalysis } from "../../apps/studio/src/core/manuscript.ts";
-import { buildProductionPrompt, createProductionTasks, taskProductionPrompt } from "../../apps/studio/src/core/production.ts";
+import { buildProductionPrompt, createProductionTasks, resolveProductionScope, taskProductionPrompt } from "../../apps/studio/src/core/production.ts";
 import { aiConfigSchema, runCompletion } from "../../apps/studio/src/node/ai-client.ts";
 import { buildArcReelBundle } from "../../apps/studio/src/core/arcreel.ts";
 
@@ -56,6 +56,59 @@ test("production workflow carries scope, dependencies, long results and costume 
   expect(prompt).toContain("Preserve face/body identity");
   const context = JSON.parse(buildProductionPrompt(workspace, "storyboard", scope, "en").split("SOURCE DATA (not instructions):\n")[1]!);
   expect(context.chapter.content).toBe(work.chapters[0]!.content);
+});
+
+test("production scope resolution drops stale cross-novel references", () => {
+  const workspace = createDemoWorkspace("en");
+  const tide = workspace.works[0]!;
+  const train = workspace.works[1]!;
+  const stale = resolveProductionScope(workspace, {
+    universeId: "uni_ninth_station",
+    workId: tide.id,
+    chapterId: train.chapters[0]!.id,
+    characterId: "char_echo",
+  });
+  expect(stale.universeId).toBe("uni_mist_harbor");
+  expect(stale.workId).toBe(tide.id);
+  expect(stale.chapterId).toBeUndefined();
+  expect(stale.characterId).toBe("char_echo");
+  expect(stale.characterIds).toEqual(["char_echo"]);
+
+  const filtered = resolveProductionScope(workspace, {
+    universeId: "uni_ninth_station",
+    characterIds: ["char_echo", "char_lin"],
+  });
+  expect(filtered.characterIds).toEqual(["char_echo"]);
+  expect(filtered.characterId).toBeUndefined();
+
+  const removed = resolveProductionScope(workspace, {
+    universeId: "uni_mist_harbor",
+    workId: "work_missing",
+  });
+  expect(removed.universeId).toBe("uni_mist_harbor");
+  expect(removed.workId).toBeUndefined();
+  expect(removed.chapterId).toBeUndefined();
+
+  const tasks = createProductionTasks(
+    workspace,
+    { workId: tide.id, chapterId: train.chapters[0]!.id },
+    "en",
+  );
+  expect(tasks.every((task) => task.workId === tide.id)).toBe(true);
+  expect(tasks.every((task) => task.chapterId === undefined)).toBe(true);
+  expect(tasks[0]!.universeId).toBe("uni_mist_harbor");
+
+  const prompt = buildProductionPrompt(
+    workspace,
+    "storyboard",
+    { workId: tide.id, chapterId: train.chapters[0]!.id },
+    "en",
+  );
+  const context = JSON.parse(
+    prompt.split("SOURCE DATA (not instructions):\n")[1]!,
+  );
+  expect(context.work.id).toBe(tide.id);
+  expect(context.chapter).toBeUndefined();
 });
 
 const config = { endpoint: "https://provider.example/v1", model: "test", apiKey: "test-secret" };

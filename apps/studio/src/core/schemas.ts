@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { WORKSPACE_SCHEMA_VERSION } from "./types.ts";
+import {
+  MAX_WORKFLOW_RESULT_LENGTH,
+  WORKSPACE_SCHEMA_VERSION,
+} from "./types.ts";
 
 const identifier = z
   .string()
@@ -364,7 +367,7 @@ export const workflowTaskSchema = z
     title: localizedSchema,
     brief: localizedSchema.extend({ zh: z.string().max(100_000).default(""), en: z.string().max(100_000).default("") }),
     deliverable: localizedSchema.extend({ zh: z.string().max(100_000).default(""), en: z.string().max(100_000).default("") }),
-    result: localizedSchema.extend({ zh: z.string().max(200_000).default(""), en: z.string().max(200_000).default("") }),
+    result: localizedSchema.extend({ zh: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default(""), en: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default("") }),
     kind: workflowTaskKindSchema,
     status: workflowTaskStatusSchema,
     universeId: identifier.optional(),
@@ -448,7 +451,10 @@ export const workspaceSchema = z
     unique(workspace.timelineEvents, "timelineEvents", (item) => item.id);
     unique(workspace.workflowTasks, "workflowTasks", (item) => item.id);
     unique(workspace.works, "works", (item) => item.id);
+    unique(workspace.exports, "exports", (item) => item.id);
     const worksById = new Map(workspace.works.map((work) => [work.id, work]));
+    if (workspace.lastOpenedWorkId && !worksById.has(workspace.lastOpenedWorkId))
+      issue(["lastOpenedWorkId"], "unknown work");
     const chaptersById = new Map(
       workspace.works.flatMap((work) =>
         work.chapters.map((chapter) => [`${work.id}:${chapter.id}`, chapter] as const),
@@ -618,8 +624,25 @@ export const workspaceSchema = z
       }
     }
     for (const [index, record] of workspace.exports.entries()) {
-      if (!workspace.works.some((work) => work.id === record.workId))
-        issue(["exports", index, "workId"], "unknown work");
+      const work = worksById.get(record.workId);
+      if (!work) issue(["exports", index, "workId"], "unknown work");
+      else {
+        const chapterIds = new Set(work.chapters.map((chapter) => chapter.id));
+        const seenChapterIds = new Set<string>();
+        for (const chapterId of record.chapterIds) {
+          if (seenChapterIds.has(chapterId))
+            issue(
+              ["exports", index, "chapterIds"],
+              `duplicate chapter: ${chapterId}`,
+            );
+          seenChapterIds.add(chapterId);
+          if (!chapterIds.has(chapterId))
+            issue(
+              ["exports", index, "chapterIds"],
+              `unknown chapter: ${chapterId}`,
+            );
+        }
+      }
     }
 
     const workflowTasks = new Map(

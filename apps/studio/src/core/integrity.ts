@@ -212,6 +212,13 @@ export function unlinkCharacterFromUniverse(
   character.universeIds = character.universeIds.filter(
     (id) => id !== universeId,
   );
+  // A character must belong to at least one universe. Removing the last
+  // membership (possible through MCP or an import) deletes the character and
+  // all of its references instead of leaving a workspace the schema rejects.
+  if (character.universeIds.length === 0) {
+    deleteCharacterFromDraft(draft, characterId);
+    return;
+  }
 
   draft.relationships = draft.relationships.filter(
     (relationship) =>
@@ -420,4 +427,153 @@ export function deleteUniverseFromDraft(
 
   if (draft.lastOpenedWorkId && deletedWorks.has(draft.lastOpenedWorkId))
     draft.lastOpenedWorkId = undefined;
+}
+
+/**
+ * Delete a work and everything that only existed for it: its timeline events,
+ * its workflow tasks (repairing parent and dependency links of survivors) and
+ * its export history. World-scoped tasks without a work survive.
+ */
+export function deleteWorkFromDraft(
+  draft: StudioWorkspace,
+  workId: string,
+): void {
+  const removedTasks = new Set(
+    draft.workflowTasks
+      .filter((task) => task.workId === workId)
+      .map((task) => task.id),
+  );
+  draft.works = draft.works.filter((item) => item.id !== workId);
+  draft.timelineEvents = draft.timelineEvents.filter(
+    (event) => event.workId !== workId,
+  );
+  draft.workflowTasks = draft.workflowTasks
+    .filter((task) => !removedTasks.has(task.id))
+    .map((task) => ({
+      ...task,
+      parentId:
+        task.parentId && removedTasks.has(task.parentId)
+          ? undefined
+          : task.parentId,
+      dependsOnIds: task.dependsOnIds.filter((id) => !removedTasks.has(id)),
+    }));
+  draft.exports = draft.exports.filter((record) => record.workId !== workId);
+  if (draft.lastOpenedWorkId === workId) draft.lastOpenedWorkId = undefined;
+}
+
+/**
+ * Delete a character together with every reference to it: relationships,
+ * timeline subjects and related entries, work casts and workflow tasks.
+ */
+export function deleteCharacterFromDraft(
+  draft: StudioWorkspace,
+  characterId: string,
+): void {
+  draft.characters = draft.characters.filter(
+    (character) => character.id !== characterId,
+  );
+  draft.relationships = draft.relationships.filter(
+    (relationship) =>
+      relationship.sourceId !== characterId &&
+      relationship.targetId !== characterId,
+  );
+  draft.timelineEvents = draft.timelineEvents
+    .filter(
+      (event) =>
+        event.subjectKind !== "character" || event.subjectId !== characterId,
+    )
+    .map((event) => ({
+      ...event,
+      relatedCharacterIds: event.relatedCharacterIds.filter(
+        (id) => id !== characterId,
+      ),
+    }));
+  for (const work of draft.works) {
+    for (const chapter of work.chapters) {
+      chapter.characterIds = chapter.characterIds.filter(
+        (id) => id !== characterId,
+      );
+      for (const scene of chapter.scenes)
+        scene.characterIds = scene.characterIds.filter(
+          (id) => id !== characterId,
+        );
+    }
+  }
+  draft.workflowTasks = draft.workflowTasks.map((task) => ({
+    ...task,
+    characterIds: task.characterIds.filter((id) => id !== characterId),
+  }));
+}
+
+/**
+ * Delete a chapter and the events and tasks pinned to it.
+ *
+ * Chapter ids are only unique inside their work, so every cascade matches on
+ * `workId` as well: a chapter that happens to share the id in another work
+ * keeps its events and tasks. Export history for the work drops the removed
+ * chapter from its chapter list.
+ */
+export function deleteChapterFromDraft(
+  draft: StudioWorkspace,
+  workId: string,
+  chapterId: string,
+): void {
+  const work = draft.works.find((item) => item.id === workId);
+  if (!work) return;
+  work.chapters = work.chapters.filter((item) => item.id !== chapterId);
+  draft.timelineEvents = draft.timelineEvents.filter(
+    (event) =>
+      !(event.workId === workId && event.chapterId === chapterId),
+  );
+  const removedTasks = new Set(
+    draft.workflowTasks
+      .filter(
+        (task) => task.workId === workId && task.chapterId === chapterId,
+      )
+      .map((task) => task.id),
+  );
+  draft.workflowTasks = draft.workflowTasks
+    .filter((task) => !removedTasks.has(task.id))
+    .map((task) => ({
+      ...task,
+      parentId:
+        task.parentId && removedTasks.has(task.parentId)
+          ? undefined
+          : task.parentId,
+      dependsOnIds: task.dependsOnIds.filter((id) => !removedTasks.has(id)),
+    }));
+  draft.exports = draft.exports.map((record) =>
+    record.workId === workId
+      ? {
+          ...record,
+          chapterIds: record.chapterIds.filter((id) => id !== chapterId),
+        }
+      : record,
+  );
+}
+
+/**
+ * Move a standard to a new scope (or make it project-wide with `undefined`)
+ * and drop it from tasks whose universe the new scope excludes. Without this
+ * repair the schema rejects the move whenever a task pinned the standard in
+ * the old universe.
+ */
+export function reassignStandardUniverse(
+  draft: StudioWorkspace,
+  standardId: string,
+  universeId: string | undefined,
+): void {
+  const standard = draft.standards.find((item) => item.id === standardId);
+  if (!standard) return;
+  standard.universeId = universeId;
+  if (!universeId) return;
+  draft.workflowTasks = draft.workflowTasks.map((task) => {
+    if (task.universeId === undefined || task.universeId === universeId)
+      return task;
+    if (!task.standardRefs.some((ref) => ref.id === standardId)) return task;
+    return {
+      ...task,
+      standardRefs: task.standardRefs.filter((ref) => ref.id !== standardId),
+    };
+  });
 }
