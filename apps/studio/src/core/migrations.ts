@@ -8,10 +8,22 @@ function record(value: unknown): value is Record<string, unknown> {
 export function migrateWorkspace(value: unknown): unknown {
   if (!record(value)) return value;
   if (value.schema_version === 1) {
+    return migrateWorkspace({
+      ...value,
+      schema_version: 2,
+      workflowTasks: [],
+      revision:
+        typeof value.revision === "number" ? value.revision + 1 : value.revision,
+    });
+  }
+  if (value.schema_version === 2) {
     return {
       ...value,
       schema_version: WORKSPACE_SCHEMA_VERSION,
-      workflowTasks: [],
+      storyObjects: Array.isArray(value.storyObjects) ? value.storyObjects : [],
+      timelineEvents: Array.isArray(value.timelineEvents)
+        ? value.timelineEvents
+        : [],
       revision:
         typeof value.revision === "number" ? value.revision + 1 : value.revision,
     };

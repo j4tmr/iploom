@@ -1,4 +1,4 @@
-export const WORKSPACE_SCHEMA_VERSION = 2 as const;
+export const WORKSPACE_SCHEMA_VERSION = 3 as const;
 export const ARC_REEL_SCHEMA = "iploom.arcreel/v1" as const;
 
 export type UiLocale = "zh-CN" | "en";
@@ -45,6 +45,20 @@ export type WorkflowTaskStatus =
   | "active"
   | "review"
   | "done";
+export type TimelineSubjectKind =
+  | "character"
+  | "scene"
+  | "location"
+  | "object";
+export type TimelineEventKind =
+  | "introduction"
+  | "state-change"
+  | "transfer"
+  | "reveal"
+  | "loss"
+  | "recovery"
+  | "other";
+export type TimelineCanonStatus = "proposed" | "canon";
 
 export interface LocalizedText {
   zh: string;
@@ -150,6 +164,18 @@ export interface StoryLocation {
   updatedAt: string;
 }
 
+export interface StoryObject {
+  id: string;
+  universeId: string;
+  name: LocalizedText;
+  category: LocalizedText;
+  summary: LocalizedText;
+  visualPrompt: string;
+  sourceNotes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface StoryFaction {
   id: string;
   universeId: string;
@@ -182,6 +208,30 @@ export interface Relationship {
   status: RelationshipStatus;
   mutual: boolean;
   notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TimelineEvent {
+  id: string;
+  universeId: string;
+  workId: string;
+  chapterId?: string;
+  sceneId?: string;
+  storyTime: string;
+  order: number;
+  subjectKind: TimelineSubjectKind;
+  subjectId: string;
+  eventKind: TimelineEventKind;
+  title: LocalizedText;
+  stateBefore: string;
+  stateAfter: string;
+  canonStatus: TimelineCanonStatus;
+  relatedCharacterIds: string[];
+  relatedLocationIds: string[];
+  relatedObjectIds: string[];
+  evidence: string;
+  productionPrompt: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -235,9 +285,11 @@ export interface StudioWorkspace {
   universes: StoryUniverse[];
   characters: Character[];
   locations: StoryLocation[];
+  storyObjects: StoryObject[];
   factions: StoryFaction[];
   lore: LoreEntry[];
   relationships: Relationship[];
+  timelineEvents: TimelineEvent[];
   workflowTasks: WorkflowTask[];
   works: StoryWork[];
   exports: ExportRecord[];
@@ -278,7 +330,9 @@ export interface WorkspaceStats {
   approvedChapters: number;
   words: number;
   characters: number;
+  storyObjects: number;
   relationships: number;
+  timelineEvents: number;
   workflowTasks: number;
 }
 
@@ -318,7 +372,16 @@ export interface ArcReelBundle {
 }
 
 export interface SearchHit {
-  kind: "universe" | "work" | "chapter" | "character" | "location" | "faction" | "lore";
+  kind:
+    | "universe"
+    | "work"
+    | "chapter"
+    | "character"
+    | "location"
+    | "object"
+    | "faction"
+    | "lore"
+    | "timeline";
   id: string;
   universeId: string;
   workId?: string;
