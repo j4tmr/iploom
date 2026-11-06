@@ -8,6 +8,7 @@ IPloom Studio is an Electron application with a React renderer, a narrow preload
 React renderer
   ├─ workspace editor
   ├─ relationship graph
+  ├─ AI workflow and scoped briefs
   ├─ manuscript editor
   ├─ export preview
   └─ MCP configuration
@@ -21,7 +22,7 @@ Electron main process
         │
         ▼ stdio
 Bundled MCP server
-  ├─ seven read-only tools
+  ├─ nine read-only tools
   └─ export_arcreel_bundle
 ```
 
@@ -36,9 +37,10 @@ No renderer code receives Node.js primitives. IPC handlers validate their sender
 - `relationships`: character edges scoped to a universe, with type, direction, strength and status.
 - `works`: novels. A work references exactly one universe.
 - `chapters`: ordered content inside a work, with planning notes, prose, cast, location and optional scenes.
+- `workflowTasks`: hierarchical AI-authoring work items with explicit dependencies, readiness, scope references and reviewable results.
 - `exports`: local history of generated handoff packages.
 
-The schema is validated at both UI and storage boundaries. Duplicate IDs, duplicate chapter numbers and dangling universe/character/location references are rejected before data is written.
+The schema is validated at both UI and storage boundaries. Duplicate IDs, duplicate chapter numbers, dangling universe/character/location references, task cycles and invalid task scope are rejected before data is written. Schema v1 workspaces are upgraded to v2 on load by adding an empty workflow collection and bumping the revision.
 
 ## Persistence
 
@@ -50,7 +52,7 @@ The desktop app writes a single `workspace.json`:
 4. Copy the previous primary file to `workspace.json.bak`.
 5. Atomically rename the new file into place.
 
-The loader tries the primary file first and falls back to `.bak`. A visible banner reports recovery. This protects against truncated writes and crashes; it is not a replacement for user backups or disk encryption.
+The loader tries the primary file first and falls back to `.bak`. A visible banner reports recovery. When the window or application closes, the main process requests a final renderer save and waits for an explicit completion acknowledgement before closing. This protects against truncated writes, crashes and closing during the debounce window; it is not a replacement for user backups or disk encryption.
 
 Browser preview mode uses `localStorage` and is intended only for UI development.
 
@@ -74,6 +76,12 @@ The package is assembled as a set of in-memory files, validated, then written in
 
 See [ArcReel handoff](arcreel-handoff.md) for the exact boundary.
 
+## AI workflow
+
+Workflow tasks form a separate tree from the story hierarchy. A task can point at a universe, work, chapter and reusable cast, while `parentId` expresses decomposition and `dependsOnIds` expresses readiness. Dependencies are validated against cycles and missing tasks.
+
+Each task can produce a deterministic Markdown brief. The brief includes only the selected task's scope: objective, deliverable, parent/children, dependency state, the referenced world, novel, chapter, cast, lore, places, factions and relationships. It also carries the project's stylized 3D animation boundary when adaptation work is in scope. The same generator powers the copy action in the app and the `get_workflow_brief` MCP tool.
+
 ## MCP
 
 The MCP server is bundled by esbuild and run through the Electron executable with `ELECTRON_RUN_AS_NODE=1`. This matters on clean installs:
@@ -82,7 +90,7 @@ The MCP server is bundled by esbuild and run through the Electron executable wit
 - Windows can spawn the `.exe` directly rather than failing on a `.cmd` shim;
 - the server is bundled with its JavaScript dependencies.
 
-The seven query tools never write. `export_arcreel_bundle` is the only tool that creates files and defaults to an `exports` directory beside the workspace.
+The nine query tools, including workflow listing and brief generation, never write. `export_arcreel_bundle` is the only tool that creates files and defaults to an `exports` directory beside the workspace.
 
 ## Security boundary
 

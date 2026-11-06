@@ -11,6 +11,11 @@ import { buildArcReelBundle } from "../src/core/arcreel.ts";
 import { countWords } from "../src/core/factory.ts";
 import { buildRelationshipGraph } from "../src/core/graph.ts";
 import { searchWorkspace } from "../src/core/search.ts";
+import {
+  buildWorkflowBrief,
+  workflowSummary,
+  workflowTaskReadiness,
+} from "../src/core/workflow.ts";
 import type {
   Chapter,
   Character,
@@ -23,6 +28,7 @@ import type {
   StoryWork,
   StudioWorkspace,
   UiLocale,
+  WorkflowTask,
 } from "../src/core/types.ts";
 import { APP_VERSION } from "../src/core/version.ts";
 import { WorkspaceStore } from "../src/node/workspace-store.ts";
@@ -60,6 +66,11 @@ const chapterIdSchema = z
   .trim()
   .min(1)
   .describe("章节 ID / Chapter ID.");
+const workflowTaskIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .describe("AI 任务 ID / Workflow task ID.");
 
 function workspaceMeta(workspace: StudioWorkspace) {
   return {
@@ -264,6 +275,36 @@ function factionView(faction: StoryFaction) {
   };
 }
 
+function workflowTaskView(
+  workspace: StudioWorkspace,
+  task: WorkflowTask,
+) {
+  const readiness = workflowTaskReadiness(workspace, task);
+  return {
+    id: task.id,
+    title: task.title,
+    brief: task.brief,
+    deliverable: task.deliverable,
+    result: task.result,
+    kind: task.kind,
+    status: task.status,
+    ready: readiness.ready,
+    blockers: readiness.blockers.map((item) => ({
+      id: item.id,
+      title: item.title,
+      status: item.status,
+    })),
+    world_id: task.universeId ?? null,
+    novel_id: task.workId ?? null,
+    chapter_id: task.chapterId ?? null,
+    parent_id: task.parentId ?? null,
+    character_ids: task.characterIds,
+    depends_on_ids: task.dependsOnIds,
+    created_at: task.createdAt,
+    updated_at: task.updatedAt,
+  };
+}
+
 function loreView(entry: LoreEntry) {
   return {
     id: entry.id,
@@ -342,8 +383,8 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     { name: "IPloom Studio", version: APP_VERSION },
     {
       instructions:
-        "IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节与关系；search_ip 支持中英双语子串检索。前七个工具只读。export_arcreel_bundle 是唯一会写盘的本地导出工具，默认写入工作区同目录的 exports。\n" +
-        "IPloom Studio local IP memory: list story worlds before reading novels, chapters and relationships. The first seven tools are read-only. export_arcreel_bundle is the only tool that writes files and defaults to an exports directory beside the workspace file.",
+        "IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节、关系与 AI 工作流；search_ip 支持中英双语子串检索。前九个工具只读。export_arcreel_bundle 是唯一会写盘的本地导出工具，默认写入工作区同目录的 exports。\n" +
+        "IPloom Studio local IP memory: list story worlds before reading novels, chapters, relationships and AI workflow. The first nine tools are read-only. export_arcreel_bundle is the only tool that writes files and defaults to an exports directory beside the workspace file.",
     },
   );
 
@@ -624,6 +665,79 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
           nodes: graph.nodes,
           edges: graph.edges,
           warnings: graph.warnings,
+        };
+      }),
+  );
+
+  server.registerTool(
+    "list_workflow_tasks",
+    {
+      title: "AI 工作流任务 / Workflow tasks",
+      description:
+        "列出有依赖与独立启动状态的创作任务，可按世界、小说和状态过滤。List authoring tasks with dependency readiness, optionally filtered by world, novel and status.",
+      inputSchema: z.object({
+        world_id: worldIdSchema.optional(),
+        novel_id: novelIdSchema.optional(),
+        status: z
+          .enum(["queued", "active", "review", "done"])
+          .optional()
+          .describe("任务状态 / Task status."),
+      }),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    (args) =>
+      run(async () => {
+        const { workspace } = await store.load();
+        if (args.world_id) findWorld(workspace, args.world_id);
+        if (args.novel_id) findNovel(workspace, args.novel_id);
+        const tasks = workspace.workflowTasks.filter(
+          (task) =>
+            (!args.world_id || task.universeId === args.world_id) &&
+            (!args.novel_id || task.workId === args.novel_id) &&
+            (!args.status || task.status === args.status),
+        );
+        return {
+          schema: MCP_SCHEMA,
+          workspace: workspaceMeta(workspace),
+          filters: {
+            world_id: args.world_id ?? null,
+            novel_id: args.novel_id ?? null,
+            status: args.status ?? null,
+          },
+          count: tasks.length,
+          summary: workflowSummary(workspace),
+          tasks: tasks.map((task) => workflowTaskView(workspace, task)),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "get_workflow_brief",
+    {
+      title: "AI 任务简报 / Workflow brief",
+      description:
+        "生成一份确定性的 Markdown 简报，只包含该任务相关的世界、小说、章节、人物、关系与依赖。Build a deterministic Markdown brief scoped to one task, including only related world, novel, chapter, cast, relationships and dependencies.",
+      inputSchema: z.object({
+        task_id: workflowTaskIdSchema,
+        locale: localeSchema,
+      }),
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    (args) =>
+      run(async () => {
+        const { workspace } = await store.load();
+        const task = workspace.workflowTasks.find(
+          (item) => item.id === args.task_id,
+        );
+        if (!task) throw new Error("Unknown workflow task: " + args.task_id);
+        const locale: UiLocale = args.locale ?? workspace.settings.locale;
+        const readiness = workflowTaskReadiness(workspace, task);
+        return {
+          schema: MCP_SCHEMA,
+          workspace: workspaceMeta(workspace),
+          task: workflowTaskView(workspace, task),
+          ready: readiness.ready,
+          markdown: buildWorkflowBrief(workspace, task.id, locale),
         };
       }),
   );

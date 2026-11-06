@@ -41,6 +41,18 @@ let workspaceStore: WorkspaceStore | null = null;
 let devUrl: URL | null = null;
 const smokeMode = process.env.IPLOOM_STUDIO_SMOKE === "1";
 const allowedFolders = new Set<string>();
+let closeApproved = false;
+let closeInFlight = false;
+let quitApproved = false;
+let quitInFlight = false;
+let flushWaiter:
+  | {
+      requestId: string;
+      resolve: () => void;
+      reject: (error: Error) => void;
+      timer: NodeJS.Timeout;
+    }
+  | undefined;
 
 app.setName("IPloom Studio");
 
@@ -114,6 +126,62 @@ function assertTrustedSender(event: IpcMainInvokeEvent): void {
 function requireStore(): WorkspaceStore {
   if (!workspaceStore) throw new Error("Workspace store is not initialized");
   return workspaceStore;
+}
+
+function requestRendererFlush(window: BrowserWindow): Promise<void> {
+  if (window.webContents.isDestroyed()) {
+    return Promise.resolve();
+  }
+  if (flushWaiter) {
+    return Promise.reject(new Error("A workspace save handshake is already active"));
+  }
+  const requestId = `flush-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (flushWaiter?.requestId !== requestId) return;
+      flushWaiter = undefined;
+      reject(
+        new Error(
+          "The editor did not confirm its final save within 8 seconds. The window was kept open.",
+        ),
+      );
+    }, 8_000);
+    timer.unref();
+    flushWaiter = { requestId, resolve, reject, timer };
+    window.webContents.send("iploom:flush-request", requestId);
+  });
+}
+
+function closeAfterFlush(window: BrowserWindow, quit: boolean): void {
+  if (quit ? quitInFlight : closeInFlight) return;
+  if (quit) quitInFlight = true;
+  else closeInFlight = true;
+  void requestRendererFlush(window)
+    .then(() => {
+      closeApproved = true;
+      if (quit) {
+        quitApproved = true;
+        app.quit();
+      } else {
+        window.close();
+      }
+    })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("[IPloom Studio] close flush failed", error);
+      if (smokeMode) {
+        app.exit(1);
+        return;
+      }
+      dialog.showErrorBox(
+        "IPloom Studio could not finish saving",
+        `${message}\n\nThe window remains open so you can retry or copy your work.`,
+      );
+    })
+    .finally(() => {
+      if (quit) quitInFlight = false;
+      else closeInFlight = false;
+    });
 }
 
 function defaultLocale(): UiLocale {
@@ -273,6 +341,22 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(
+    "iploom:flush-complete",
+    async (event, requestId: string, error?: string) => {
+      assertTrustedSender(event);
+      if (typeof requestId !== "string") {
+        throw new Error("Flush request id must be a string");
+      }
+      if (!flushWaiter || flushWaiter.requestId !== requestId) return;
+      const waiter = flushWaiter;
+      flushWaiter = undefined;
+      clearTimeout(waiter.timer);
+      if (error) waiter.reject(new Error(error));
+      else waiter.resolve();
+    },
+  );
+
+  ipcMain.handle(
     "iploom:export-arc-reel",
     async (event, bundle: ArcReelBundle) => {
       assertTrustedSender(event);
@@ -398,8 +482,14 @@ function createWindow(): BrowserWindow {
   window.once("ready-to-show", () => {
     if (!smokeMode) window.show();
   });
+  window.on("close", (event) => {
+    if (closeApproved || window.webContents.isDestroyed()) return;
+    event.preventDefault();
+    closeAfterFlush(window, false);
+  });
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
+    if (smokeMode) app.exit(0);
   });
 
   const load = devUrl
@@ -433,6 +523,36 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
           const shell = document.querySelector(".studio-shell");
           const text = document.body.innerText.trim();
           if (shell && text.length > 100) {
+            const workflowNav = document.querySelector('[data-route="workflow"]');
+            if (!(workflowNav instanceof HTMLElement)) {
+              reject(new Error("workflow navigation did not render"));
+              return;
+            }
+            workflowNav.click();
+            await new Promise((resolveWorkflow, rejectWorkflow) => {
+              const workflowDeadline = Date.now() + 5_000;
+              const timeout = setTimeout(() => {
+                rejectWorkflow(new Error("workflow view timed out"));
+              }, 5_000);
+              const poll = () => {
+                if (
+                  document.querySelector(".workflow-view") &&
+                  document.querySelector(".workflow-row") &&
+                  document.querySelector(".workflow-detail")
+                ) {
+                  clearTimeout(timeout);
+                  resolveWorkflow();
+                  return;
+                }
+                if (Date.now() >= workflowDeadline) {
+                  clearTimeout(timeout);
+                  rejectWorkflow(new Error("workflow view did not become ready"));
+                  return;
+                }
+                setTimeout(poll, 100);
+              };
+              poll();
+            });
             const info = await window.iploom.appInfo();
             const server = info.mcp.mcpServers["iploom-studio"];
             if (!info.desktop || !server) {
@@ -453,6 +573,8 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
               textLength: text.length,
               shells: document.querySelectorAll(".studio-shell").length,
               navigation: document.querySelectorAll("nav button, aside button").length,
+              workflowTasks:
+                document.querySelectorAll(".workflow-row").length,
               mcpCommand: server.command,
               mcpScript: server.args[0]
             });
@@ -472,6 +594,7 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
       textLength: number;
       shells: number;
       navigation: number;
+      workflowTasks: number;
       mcpCommand: string;
       mcpScript: string;
     };
@@ -484,7 +607,45 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
       console.log(`[smoke] screenshot: ${resolve(screenshot)}`);
     }
     console.log(`[smoke] ok ${JSON.stringify(result)}`);
-    app.exit(0);
+    const saveMarker = process.env.IPLOOM_STUDIO_SMOKE_SAVE_MARKER;
+    if (saveMarker) {
+      await window.webContents.executeJavaScript(
+        `new Promise((resolve, reject) => {
+          const textarea = document.querySelector(
+            '[data-testid="workflow-result"]',
+          );
+          if (!(textarea instanceof HTMLTextAreaElement)) {
+            reject(new Error("workflow result editor did not render"));
+            return;
+          }
+          const setValue = Object.getOwnPropertyDescriptor(
+            HTMLTextAreaElement.prototype,
+            "value",
+          ).set;
+          setValue.call(textarea, ${JSON.stringify(saveMarker)});
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+          const deadline = Date.now() + 2_000;
+          const save = () => {
+            const button = document.querySelector(
+              '[data-testid="workflow-save-result"]',
+            );
+            if (button && !button.disabled) {
+              button.click();
+              setTimeout(resolve, 20);
+              return;
+            }
+            if (Date.now() >= deadline) {
+              reject(new Error("workflow result did not become saveable"));
+              return;
+            }
+            setTimeout(save, 20);
+          };
+          save();
+        })`,
+        true,
+      );
+    }
+    window.close();
   } catch (error) {
     console.error("[smoke] failed", error);
     app.exit(1);
@@ -529,6 +690,11 @@ if (!app.requestSingleInstanceLock()) {
   app.on("activate", () => {
     if (!mainWindow && workspaceStore) mainWindow = createWindow();
     else focusMainWindow();
+  });
+  app.on("before-quit", (event) => {
+    if (quitApproved || !mainWindow) return;
+    event.preventDefault();
+    closeAfterFlush(mainWindow, true);
   });
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();

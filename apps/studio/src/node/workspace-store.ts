@@ -10,6 +10,7 @@ import { constants } from "node:fs";
 import { dirname, join, normalize, resolve, sep } from "node:path";
 import { createEmptyWorkspace } from "../core/factory.ts";
 import { validateWorkspace, WorkspaceValidationError } from "../core/validate.ts";
+import { migrateWorkspace } from "../core/migrations.ts";
 import type { ArcReelBundle, StudioWorkspace } from "../core/types.ts";
 
 export interface LoadedWorkspace {
@@ -130,7 +131,7 @@ export class WorkspaceStore {
         const previous = await readFile(this.filePath, "utf8");
         let healthy = false;
         try {
-          validateWorkspace(JSON.parse(previous));
+          validateWorkspace(migrateWorkspace(JSON.parse(previous)));
           healthy = true;
         } catch {
           // A recovered workspace must not replace its good backup with corruption.

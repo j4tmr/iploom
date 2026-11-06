@@ -37,6 +37,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
   const savedRevision = useRef(-1);
   const pendingSave = useRef<Promise<void> | null>(null);
   const saveSequence = useRef(0);
+  const workspaceRef = useRef<StudioWorkspace | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -44,6 +45,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
       .load()
       .then((loaded) => {
         if (!active) return;
+        workspaceRef.current = loaded.workspace;
         setWorkspace(loaded.workspace);
         setPath(loaded.path);
         setRecovered(loaded.recoveredFromBackup);
@@ -102,19 +104,40 @@ export function useStudioWorkspace(): StudioWorkspaceState {
       change(next);
       next.revision = current.revision + 1;
       next.updatedAt = new Date().toISOString();
+      workspaceRef.current = next;
       return next;
     });
   }, []);
 
   const replaceWorkspace = useCallback((next: StudioWorkspace) => {
+    workspaceRef.current = next;
     setWorkspace(next);
     savedRevision.current = -1;
   }, []);
 
   const saveNow = useCallback(async () => {
-    if (workspace) await persist(workspace);
+    const current = workspaceRef.current;
+    if (current && current.revision !== savedRevision.current) {
+      await persist(current);
+    }
     if (pendingSave.current) await pendingSave.current;
   }, [persist, workspace]);
+
+  useEffect(() => {
+    return bridge.onFlushRequest(async (requestId) => {
+      try {
+        await saveNow();
+        await bridge.flushComplete(requestId);
+      } catch (reason) {
+        await bridge
+          .flushComplete(
+            requestId,
+            reason instanceof Error ? reason.message : String(reason),
+          )
+          .catch(() => undefined);
+      }
+    });
+  }, [saveNow]);
 
   const setLocale = useCallback(
     (locale: UiLocale) => {

@@ -1,4 +1,5 @@
 import { workspaceSchema } from "./schemas.ts";
+import { migrateWorkspace } from "./migrations.ts";
 import type { StudioWorkspace } from "./types.ts";
 
 export class WorkspaceValidationError extends Error {
@@ -12,7 +13,7 @@ export class WorkspaceValidationError extends Error {
 }
 
 export function validateWorkspace(value: unknown): StudioWorkspace {
-  const parsed = workspaceSchema.safeParse(value);
+  const parsed = workspaceSchema.safeParse(migrateWorkspace(value));
   if (parsed.success) return parsed.data as StudioWorkspace;
   throw new WorkspaceValidationError(
     parsed.error.issues.map(

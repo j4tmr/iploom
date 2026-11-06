@@ -15,6 +15,8 @@ const TOOL_NAMES = [
   "get_chapter",
   "search_ip",
   "get_relationship_graph",
+  "list_workflow_tasks",
+  "get_workflow_brief",
   "export_arcreel_bundle",
 ] as const;
 
@@ -80,7 +82,7 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
       .map((tool) => tool.name)
       .sort();
     expect(readOnlyNames).toEqual(
-      TOOL_NAMES.slice(0, 7)
+      TOOL_NAMES.slice(0, 9)
         .map((name) => name)
         .sort(),
     );
@@ -172,6 +174,32 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     }>;
     expect(nodes.find((node) => node.id === "char_lin")?.degree).toBe(3);
     expect(graph.body.warnings).toEqual([]);
+
+    const tasks = await call(client, "list_workflow_tasks", {
+      novel_id: "work_tide_clock",
+    });
+    expect(tasks.isError).toBe(false);
+    expect(tasks.body.count).toBe(3);
+    expect((tasks.body.summary as { ready: number }).ready).toBe(1);
+    const taskItems = tasks.body.tasks as Array<{
+      id: string;
+      ready: boolean;
+    }>;
+    expect(taskItems.find((task) => task.id === "task_review_first")?.ready).toBe(
+      true,
+    );
+    expect(taskItems.find((task) => task.id === "task_chapter_three")?.ready).toBe(
+      false,
+    );
+
+    const taskBrief = await call(client, "get_workflow_brief", {
+      task_id: "task_chapter_three",
+      locale: "zh-CN",
+    });
+    expect(taskBrief.isError).toBe(false);
+    expect(taskBrief.body.ready).toBe(false);
+    expect(taskBrief.body.markdown).toContain("AI 任务简报");
+    expect(taskBrief.body.markdown).toContain("task_world_rules");
 
     const missing = await call(client, "get_story_world", {
       world_id: "uni_missing",

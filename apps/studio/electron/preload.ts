@@ -4,6 +4,15 @@ import type { StudioBridge } from "../src/platform.ts";
 const api: StudioBridge = {
   load: () => ipcRenderer.invoke("iploom:load"),
   save: (workspace) => ipcRenderer.invoke("iploom:save", workspace),
+  onFlushRequest: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, requestId: string) => {
+      if (typeof requestId === "string") listener(requestId);
+    };
+    ipcRenderer.on("iploom:flush-request", handler);
+    return () => ipcRenderer.removeListener("iploom:flush-request", handler);
+  },
+  flushComplete: (requestId, error) =>
+    ipcRenderer.invoke("iploom:flush-complete", requestId, error),
   exportArcReel: (bundle) =>
     ipcRenderer.invoke("iploom:export-arc-reel", bundle),
   appInfo: () => ipcRenderer.invoke("iploom:app-info"),

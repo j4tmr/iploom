@@ -52,6 +52,15 @@ const loreCategorySchema = z.enum([
   "power",
   "mystery",
 ]);
+const workflowTaskKindSchema = z.enum([
+  "world",
+  "novel",
+  "chapter",
+  "character",
+  "review",
+  "adaptation",
+]);
+const workflowTaskStatusSchema = z.enum(["queued", "active", "review", "done"]);
 
 export const storyShotSchema = z
   .object({
@@ -222,6 +231,26 @@ export const exportRecordSchema = z
   })
   .strict();
 
+export const workflowTaskSchema = z
+  .object({
+    id: identifier,
+    title: localizedSchema,
+    brief: localizedSchema,
+    deliverable: localizedSchema,
+    result: localizedSchema,
+    kind: workflowTaskKindSchema,
+    status: workflowTaskStatusSchema,
+    universeId: identifier.optional(),
+    workId: identifier.optional(),
+    chapterId: identifier.optional(),
+    parentId: identifier.optional(),
+    characterIds: z.array(identifier).max(100).default([]),
+    dependsOnIds: z.array(identifier).max(100).default([]),
+    createdAt: isoDate,
+    updatedAt: isoDate,
+  })
+  .strict();
+
 export const settingsSchema = z
   .object({
     locale: uiLocaleSchema,
@@ -247,6 +276,7 @@ export const workspaceSchema = z
     factions: z.array(factionSchema).max(20_000),
     lore: z.array(loreSchema).max(20_000),
     relationships: z.array(relationshipSchema).max(100_000),
+    workflowTasks: z.array(workflowTaskSchema).max(20_000),
     works: z.array(workSchema).max(20_000),
     exports: z.array(exportRecordSchema).max(10_000),
   })
@@ -277,7 +307,14 @@ export const workspaceSchema = z
     unique(workspace.factions, "factions", (item) => item.id);
     unique(workspace.lore, "lore", (item) => item.id);
     unique(workspace.relationships, "relationships", (item) => item.id);
+    unique(workspace.workflowTasks, "workflowTasks", (item) => item.id);
     unique(workspace.works, "works", (item) => item.id);
+    const worksById = new Map(workspace.works.map((work) => [work.id, work]));
+    const chaptersById = new Map(
+      workspace.works.flatMap((work) =>
+        work.chapters.map((chapter) => [`${work.id}:${chapter.id}`, chapter] as const),
+      ),
+    );
     for (const [workIndex, work] of workspace.works.entries()) {
       unique(work.chapters, `works.${workIndex}.chapters`, (item) => item.id);
       if (!universes.has(work.universeId))
@@ -375,6 +412,86 @@ export const workspaceSchema = z
       if (!workspace.works.some((work) => work.id === record.workId))
         issue(["exports", index, "workId"], "unknown work");
     }
+
+    const workflowTasks = new Map(
+      workspace.workflowTasks.map((task) => [task.id, task]),
+    );
+    for (const [index, task] of workspace.workflowTasks.entries()) {
+      if (!task.title.zh.trim() && !task.title.en.trim())
+        issue(["workflowTasks", index, "title"], "task title is required");
+      if (task.universeId && !universes.has(task.universeId))
+        issue(["workflowTasks", index, "universeId"], "unknown universe");
+      const work = task.workId ? worksById.get(task.workId) : undefined;
+      if (task.workId && !work)
+        issue(["workflowTasks", index, "workId"], "unknown work");
+      if (task.universeId && work && work.universeId !== task.universeId)
+        issue(["workflowTasks", index, "workId"], "work belongs to another universe");
+      if (task.chapterId && !task.workId)
+        issue(["workflowTasks", index, "workId"], "work is required for a chapter task");
+      if (
+        task.chapterId &&
+        task.workId &&
+        !chaptersById.has(`${task.workId}:${task.chapterId}`)
+      )
+        issue(["workflowTasks", index, "chapterId"], "unknown chapter");
+      if (task.parentId) {
+        if (task.parentId === task.id)
+          issue(["workflowTasks", index, "parentId"], "task cannot parent itself");
+        else if (!workflowTasks.has(task.parentId))
+          issue(["workflowTasks", index, "parentId"], "unknown parent task");
+      }
+      for (const dependencyId of task.dependsOnIds) {
+        if (dependencyId === task.id)
+          issue(
+            ["workflowTasks", index, "dependsOnIds"],
+            "task cannot depend on itself",
+          );
+        else if (!workflowTasks.has(dependencyId))
+          issue(
+            ["workflowTasks", index, "dependsOnIds"],
+            `unknown task: ${dependencyId}`,
+          );
+      }
+      for (const characterId of task.characterIds) {
+        const character = workspace.characters.find((item) => item.id === characterId);
+        if (!character)
+          issue(["workflowTasks", index, "characterIds"], "unknown character");
+        else if (task.universeId && !character.universeIds.includes(task.universeId))
+          issue(
+            ["workflowTasks", index, "characterIds"],
+            "character belongs to another universe",
+          );
+      }
+    }
+
+    const visiting = new Set<string>();
+    const visited = new Set<string>();
+    const visit = (id: string, trail: string[]) => {
+      if (visiting.has(id)) {
+        const cycleStart = trail.indexOf(id);
+        const cycle = [...trail.slice(Math.max(0, cycleStart)), id];
+        const taskIndex = workspace.workflowTasks.findIndex((item) => item.id === id);
+        issue(
+          ["workflowTasks", Math.max(0, taskIndex), "dependsOnIds"],
+          `workflow cycle: ${cycle.join(" -> ")}`,
+        );
+        return;
+      }
+      if (visited.has(id)) return;
+      const task = workflowTasks.get(id);
+      if (!task) return;
+      visiting.add(id);
+      trail.push(id);
+      const next = [
+        ...(task.parentId ? [task.parentId] : []),
+        ...task.dependsOnIds,
+      ];
+      for (const dependencyId of next) visit(dependencyId, trail);
+      trail.pop();
+      visiting.delete(id);
+      visited.add(id);
+    };
+    for (const task of workspace.workflowTasks) visit(task.id, []);
   });
 
 export type ParsedWorkspace = z.infer<typeof workspaceSchema>;

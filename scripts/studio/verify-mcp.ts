@@ -37,8 +37,8 @@ try {
   });
   await client.connect(transport);
   const tools = await client.listTools();
-  if (tools.tools.length !== 8)
-    throw new Error(`Expected 8 MCP tools, received ${tools.tools.length}`);
+  if (tools.tools.length !== 10)
+    throw new Error(`Expected 10 MCP tools, received ${tools.tools.length}`);
   const listed = await client.callTool({
     name: "list_novels",
     arguments: {},
@@ -49,6 +49,32 @@ try {
   const body = JSON.parse(text ?? "{}") as { count?: number };
   if (body.count !== 2)
     throw new Error(`Expected 2 demo novels, received ${body.count}`);
+  const workflow = await client.callTool({
+    name: "list_workflow_tasks",
+    arguments: {},
+  });
+  const workflowText = workflow.content.find(
+    (item): item is { type: "text"; text: string } => item.type === "text",
+  )?.text;
+  const workflowBody = JSON.parse(workflowText ?? "{}") as { count?: number };
+  if (workflowBody.count !== 4) {
+    throw new Error(
+      `Expected 4 demo workflow tasks, received ${workflowBody.count}`,
+    );
+  }
+  const brief = await client.callTool({
+    name: "get_workflow_brief",
+    arguments: {
+      task_id: "task_chapter_three",
+      locale: "en",
+    },
+  });
+  const briefText = brief.content.find(
+    (item): item is { type: "text"; text: string } => item.type === "text",
+  )?.text;
+  if (!briefText?.includes("task_chapter_three")) {
+    throw new Error("Bundled MCP workflow brief did not include the task");
+  }
   const exported = await client.callTool({
     name: "export_arcreel_bundle",
     arguments: {

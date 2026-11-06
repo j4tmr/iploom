@@ -13,8 +13,12 @@ import type {
   StoryWork,
   StudioWorkspace,
   UiLocale,
+  WorkflowTask,
+  WorkflowTaskKind,
+  WorkflowTaskStatus,
   WorkStatus,
 } from "../core/types.ts";
+import { taskCycleRiskIds } from "../core/workflow.ts";
 import {
   loreLabels,
   relationshipLabels,
@@ -484,6 +488,310 @@ export function ChapterModal({
     </Modal>
   );
 }
+
+export function WorkflowTaskModal({
+  open,
+  onClose,
+  t,
+  locale,
+  workspace,
+  initial,
+  defaultParentId,
+  defaultUniverseId,
+  defaultWorkId,
+  onSave,
+}: ModalBase & {
+  workspace: StudioWorkspace;
+  initial?: WorkflowTask;
+  defaultParentId?: string;
+  defaultUniverseId?: string;
+  defaultWorkId?: string;
+  onSave: (task: WorkflowTask) => void;
+}) {
+  const [titleZh, setTitleZh] = useState(initial?.title.zh ?? "");
+  const [titleEn, setTitleEn] = useState(initial?.title.en ?? "");
+  const [briefZh, setBriefZh] = useState(initial?.brief.zh ?? "");
+  const [briefEn, setBriefEn] = useState(initial?.brief.en ?? "");
+  const [deliverableZh, setDeliverableZh] = useState(
+    initial?.deliverable.zh ?? "",
+  );
+  const [deliverableEn, setDeliverableEn] = useState(
+    initial?.deliverable.en ?? "",
+  );
+  const [kind, setKind] = useState<WorkflowTaskKind>(initial?.kind ?? "novel");
+  const [status, setStatus] = useState<WorkflowTaskStatus>(
+    initial?.status ?? "queued",
+  );
+  const [universeId, setUniverseId] = useState(
+    initial?.universeId ?? defaultUniverseId ?? "",
+  );
+  const [workId, setWorkId] = useState(
+    initial?.workId ?? defaultWorkId ?? "",
+  );
+  const [chapterId, setChapterId] = useState(initial?.chapterId ?? "");
+  const [parentId, setParentId] = useState(
+    initial?.parentId ?? defaultParentId ?? "",
+  );
+  const [characterIds, setCharacterIds] = useState<string[]>(
+    initial?.characterIds ?? [],
+  );
+  const [dependsOnIds, setDependsOnIds] = useState<string[]>(
+    initial?.dependsOnIds ?? [],
+  );
+  const unavailable = new Set<string>(
+    initial ? taskCycleRiskIds(workspace.workflowTasks, initial.id) : [],
+  );
+  const eligibleParents = workspace.workflowTasks.filter(
+    (task) => !unavailable.has(task.id),
+  );
+  const eligibleDependencies = workspace.workflowTasks.filter(
+    (task) => !unavailable.has(task.id),
+  );
+  const works = universeId
+    ? workspace.works.filter((work) => work.universeId === universeId)
+    : workspace.works;
+  const selectedWork = works.find((work) => work.id === workId);
+  const chapters = selectedWork?.chapters ?? [];
+  const characters = universeId
+    ? workspace.characters.filter((character) =>
+        character.universeIds.includes(universeId),
+      )
+    : workspace.characters;
+  const canSave =
+    Boolean(titleZh.trim() || titleEn.trim()) &&
+    (!chapterId || Boolean(workId));
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={initial ? t("workflowEditTask") : t("workflowNewTask")}
+      description={t("workflowTaskLead")}
+      wide
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
+          <Button
+            variant="primary"
+            icon="check"
+            disabled={!canSave}
+            onClick={() => {
+              const now = new Date().toISOString();
+              onSave({
+                id: initial?.id ?? createId("task"),
+                title: { zh: titleZh.trim(), en: titleEn.trim() },
+                brief: { zh: briefZh.trim(), en: briefEn.trim() },
+                deliverable: {
+                  zh: deliverableZh.trim(),
+                  en: deliverableEn.trim(),
+                },
+                result: initial?.result ?? { zh: "", en: "" },
+                kind,
+                status,
+                universeId: universeId || undefined,
+                workId: workId || undefined,
+                chapterId: chapterId || undefined,
+                parentId: parentId || undefined,
+                characterIds,
+                dependsOnIds,
+                createdAt: initial?.createdAt ?? now,
+                updatedAt: now,
+              });
+              onClose();
+            }}
+          >
+            {t("save")}
+          </Button>
+        </>
+      }
+    >
+      <FieldGrid>
+        <Field label={t("kind")}>
+          <Select
+            value={kind}
+            onChange={(event) => setKind(event.target.value as WorkflowTaskKind)}
+          >
+            <option value="world">{t("taskKind_world")}</option>
+            <option value="novel">{t("taskKind_novel")}</option>
+            <option value="chapter">{t("taskKind_chapter")}</option>
+            <option value="character">{t("taskKind_character")}</option>
+            <option value="review">{t("taskKind_review")}</option>
+            <option value="adaptation">{t("taskKind_adaptation")}</option>
+          </Select>
+        </Field>
+        <Field label={t("status")}>
+          <Select
+            value={status}
+            onChange={(event) =>
+              setStatus(event.target.value as WorkflowTaskStatus)
+            }
+          >
+            <option value="queued">{t("taskStatus_queued")}</option>
+            <option value="active">{t("taskStatus_active")}</option>
+            <option value="review">{t("taskStatus_review")}</option>
+            <option value="done">{t("taskStatus_done")}</option>
+          </Select>
+        </Field>
+        <Field label={t("titleZh")}>
+          <TextInput
+            autoFocus
+            value={titleZh}
+            onChange={(event) => setTitleZh(event.target.value)}
+          />
+        </Field>
+        <Field label={t("titleEn")}>
+          <TextInput
+            value={titleEn}
+            onChange={(event) => setTitleEn(event.target.value)}
+          />
+        </Field>
+        <Field label={t("workflowObjectiveZh")} wide>
+          <TextArea
+            rows={3}
+            value={briefZh}
+            onChange={(event) => setBriefZh(event.target.value)}
+          />
+        </Field>
+        <Field label={t("workflowObjectiveEn")} wide>
+          <TextArea
+            rows={3}
+            value={briefEn}
+            onChange={(event) => setBriefEn(event.target.value)}
+          />
+        </Field>
+        <Field label={t("workflowDeliverableZh")} wide>
+          <TextArea
+            rows={2}
+            value={deliverableZh}
+            onChange={(event) => setDeliverableZh(event.target.value)}
+          />
+        </Field>
+        <Field label={t("workflowDeliverableEn")} wide>
+          <TextArea
+            rows={2}
+            value={deliverableEn}
+            onChange={(event) => setDeliverableEn(event.target.value)}
+          />
+        </Field>
+        <Field label={t("universe")}>
+          <Select
+            value={universeId}
+            onChange={(event) => {
+              const next = event.target.value;
+              setUniverseId(next);
+              const selected = workspace.works.find((work) => work.id === workId);
+              if (selected && selected.universeId !== next) {
+                setWorkId("");
+                setChapterId("");
+              }
+              setCharacterIds((current) =>
+                current.filter((id) =>
+                  workspace.characters
+                    .find((character) => character.id === id)
+                    ?.universeIds.includes(next),
+                ),
+              );
+            }}
+          >
+            <option value="">{t("workflowNoWorld")}</option>
+            {workspace.universes.map((universe) => (
+              <option key={universe.id} value={universe.id}>
+                {displayText(universe.name, locale)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t("novel")}>
+          <Select
+            value={workId}
+            onChange={(event) => {
+              setWorkId(event.target.value);
+              setChapterId("");
+            }}
+          >
+            <option value="">{t("workflowNoNovel")}</option>
+            {works.map((work) => (
+              <option key={work.id} value={work.id}>
+                {displayText(work.title, locale)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t("chapterTitle")}>
+          <Select
+            value={chapterId}
+            disabled={!workId}
+            onChange={(event) => setChapterId(event.target.value)}
+          >
+            <option value="">{t("workflowNoChapter")}</option>
+            {chapters.map((chapter) => (
+              <option key={chapter.id} value={chapter.id}>
+                {chapter.number}. {chapter.title}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t("workflowParentTask")}>
+          <Select
+            value={parentId}
+            onChange={(event) => setParentId(event.target.value)}
+          >
+            <option value="">{t("workflowIndependentTask")}</option>
+            {eligibleParents.map((task) => (
+              <option key={task.id} value={task.id}>
+                {displayText(task.title, locale)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t("workflowCast")} wide>
+          <div className="check-grid">
+            {characters.map((character) => (
+              <label className="check-card" key={character.id}>
+                <input
+                  type="checkbox"
+                  checked={characterIds.includes(character.id)}
+                  onChange={(event) =>
+                    setCharacterIds((current) =>
+                      event.target.checked
+                        ? [...current, character.id]
+                        : current.filter((id) => id !== character.id),
+                    )
+                  }
+                />
+                <span style={{ background: character.color }} />
+                {displayText(character.name, locale)}
+              </label>
+            ))}
+          </div>
+        </Field>
+        <Field label={t("workflowDependencies")} hint={t("workflowDependenciesHint")} wide>
+          <div className="check-grid">
+            {eligibleDependencies.map((task) => (
+              <label className="check-card" key={task.id}>
+                <input
+                  type="checkbox"
+                  checked={dependsOnIds.includes(task.id)}
+                  onChange={(event) =>
+                    setDependsOnIds((current) =>
+                      event.target.checked
+                        ? [...current, task.id]
+                        : current.filter((id) => id !== task.id),
+                    )
+                  }
+                />
+                <span className="task-check-mark" />
+                {displayText(task.title, locale)}
+              </label>
+            ))}
+          </div>
+        </Field>
+      </FieldGrid>
+    </Modal>
+  );
+}
+
 
 export function RelationshipModal({
   open,

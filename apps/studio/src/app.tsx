@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildRelationshipGraph } from "./core/graph.ts";
+import { taskDescendantIds } from "./core/workflow.ts";
 import {
   createId,
   displayText,
@@ -21,6 +22,8 @@ import type {
   StoryWork,
   ThemeMode,
   UiLocale,
+  WorkflowTask,
+  WorkflowTaskStatus,
   WorkspaceSettings,
 } from "./core/types.ts";
 import {
@@ -43,6 +46,7 @@ import {
   NovelModal,
   RelationshipModal,
   UniverseModal,
+  WorkflowTaskModal,
 } from "./components/forms.tsx";
 import { Icon } from "./components/icon.tsx";
 import { SearchOverlay } from "./components/search-overlay.tsx";
@@ -59,6 +63,7 @@ import { RelationshipsView } from "./views/relationships-view.tsx";
 import { SettingsView } from "./views/settings-view.tsx";
 import { UniverseView } from "./views/universe-view.tsx";
 import { WorkView } from "./views/work-view.tsx";
+import { WorkflowView } from "./views/workflow-view.tsx";
 
 type ModalState =
   | { kind: "world"; initial?: StoryUniverse }
@@ -72,6 +77,13 @@ type ModalState =
       initial?: StoryLocation | StoryFaction | LoreEntry;
     }
   | { kind: "chapter"; workId: string }
+  | {
+      kind: "task";
+      initial?: WorkflowTask;
+      parentId?: string;
+      universeId?: string;
+      workId?: string;
+    }
   | { kind: "mcp" };
 
 export function App() {
@@ -174,6 +186,8 @@ export function App() {
       return { eyebrow: "LIBRARY / 小说书架", title: t("library") };
     if (route.name === "graph")
       return { eyebrow: "RELATION MAP / 关系图", title: t("relationships") };
+    if (route.name === "workflow")
+      return { eyebrow: "AI WORKFLOW / 创作流水线", title: t("workflow") };
     if (route.name === "exports")
       return { eyebrow: "ARCREEL / 漫剧交付", title: t("exports") };
     if (route.name === "settings")
@@ -235,6 +249,27 @@ export function App() {
       draft.exports = draft.exports.filter(
         (record) => !deletedWorks.has(record.workId),
       );
+      const removedTasks = new Set(
+        draft.workflowTasks
+          .filter(
+            (task) =>
+              task.universeId === target.id ||
+              (task.workId ? deletedWorks.has(task.workId) : false),
+          )
+          .map((task) => task.id),
+      );
+      draft.workflowTasks = draft.workflowTasks
+        .filter((task) => !removedTasks.has(task.id))
+        .map((task) => ({
+          ...task,
+          parentId:
+            task.parentId && removedTasks.has(task.parentId)
+              ? undefined
+              : task.parentId,
+          dependsOnIds: task.dependsOnIds.filter(
+            (id) => !removedTasks.has(id),
+          ),
+        }));
       if (draft.lastOpenedWorkId && deletedWorks.has(draft.lastOpenedWorkId))
         draft.lastOpenedWorkId = undefined;
     });
@@ -246,7 +281,24 @@ export function App() {
   const deleteNovel = (target: StoryWork) => {
     if (!window.confirm(t("confirmDeleteNovel"))) return;
     mutate((draft) => {
+      const removedTasks = new Set(
+        draft.workflowTasks
+          .filter((task) => task.workId === target.id)
+          .map((task) => task.id),
+      );
       draft.works = draft.works.filter((item) => item.id !== target.id);
+      draft.workflowTasks = draft.workflowTasks
+        .filter((task) => !removedTasks.has(task.id))
+        .map((task) => ({
+          ...task,
+          parentId:
+            task.parentId && removedTasks.has(task.parentId)
+              ? undefined
+              : task.parentId,
+          dependsOnIds: task.dependsOnIds.filter(
+            (id) => !removedTasks.has(id),
+          ),
+        }));
       draft.exports = draft.exports.filter(
         (record) => record.workId !== target.id,
       );
@@ -284,6 +336,10 @@ export function App() {
             );
         }
       }
+      draft.workflowTasks = draft.workflowTasks.map((task) => ({
+        ...task,
+        characterIds: task.characterIds.filter((id) => id !== character.id),
+      }));
     });
   };
 
@@ -324,6 +380,66 @@ export function App() {
     });
   };
 
+  const saveWorkflowTask = (next: WorkflowTask) => {
+    mutate((draft) => {
+      const index = draft.workflowTasks.findIndex((item) => item.id === next.id);
+      if (index >= 0) draft.workflowTasks[index] = next;
+      else draft.workflowTasks.push(next);
+    });
+    notify(t("saved"));
+  };
+
+  const deleteWorkflowTask = (task: WorkflowTask) => {
+    const removed = new Set([
+      task.id,
+      ...taskDescendantIds(workspace.workflowTasks, task.id),
+    ]);
+    const message =
+      removed.size > 1
+        ? locale === "en"
+          ? `Delete this task and ${removed.size - 1} subtask(s)?`
+          : `确定删除此任务及其 ${removed.size - 1} 个子任务吗？`
+        : t("confirmDelete");
+    if (!window.confirm(message)) return;
+    mutate((draft) => {
+      draft.workflowTasks = draft.workflowTasks
+        .filter((item) => !removed.has(item.id))
+        .map((item) => ({
+          ...item,
+          parentId:
+            item.parentId && removed.has(item.parentId)
+              ? undefined
+              : item.parentId,
+          dependsOnIds: item.dependsOnIds.filter((id) => !removed.has(id)),
+        }));
+    });
+  };
+
+  const changeWorkflowStatus = (
+    task: WorkflowTask,
+    status: WorkflowTaskStatus,
+  ) => {
+    mutate((draft) => {
+      const target = draft.workflowTasks.find((item) => item.id === task.id);
+      if (!target) return;
+      target.status = status;
+      target.updatedAt = new Date().toISOString();
+    });
+  };
+
+  const saveWorkflowResult = (task: WorkflowTask, result: string) => {
+    mutate((draft) => {
+      const target = draft.workflowTasks.find((item) => item.id === task.id);
+      if (!target) return;
+      target.result =
+        locale === "zh-CN"
+          ? { ...target.result, zh: result }
+          : { ...target.result, en: result };
+      target.updatedAt = new Date().toISOString();
+    });
+    notify(t("saved"));
+  };
+
   const deleteAtlas = (kind: "location" | "faction" | "lore", id: string) => {
     if (!window.confirm(t("confirmDelete"))) return;
     mutate((draft) => {
@@ -360,6 +476,26 @@ export function App() {
       if (!target) return;
       target.chapters = target.chapters.filter((item) => item.id !== chapter.id);
       target.updatedAt = new Date().toISOString();
+      const removedTasks = new Set(
+        draft.workflowTasks
+          .filter(
+            (task) =>
+              task.workId === workId && task.chapterId === chapter.id,
+          )
+          .map((task) => task.id),
+      );
+      draft.workflowTasks = draft.workflowTasks
+        .filter((task) => !removedTasks.has(task.id))
+        .map((task) => ({
+          ...task,
+          parentId:
+            task.parentId && removedTasks.has(task.parentId)
+              ? undefined
+              : task.parentId,
+          dependsOnIds: task.dependsOnIds.filter(
+            (id) => !removedTasks.has(id),
+          ),
+        }));
     });
   };
 
@@ -613,6 +749,37 @@ export function App() {
             />
           ) : null}
 
+          {route.name === "workflow" ? (
+            <WorkflowView
+              workspace={workspace}
+              locale={locale}
+              t={t}
+              onNewTask={() =>
+                setModal({
+                  kind: "task",
+                  universeId:
+                    workspace.works.find(
+                      (item) => item.id === workspace.lastOpenedWorkId,
+                    )?.universeId ?? workspace.universes[0]?.id,
+                  workId: workspace.lastOpenedWorkId,
+                })
+              }
+              onEditTask={(initial) => setModal({ kind: "task", initial })}
+              onAddSubtask={(task) =>
+                setModal({
+                  kind: "task",
+                  parentId: task.id,
+                  universeId: task.universeId,
+                  workId: task.workId,
+                })
+              }
+              onDeleteTask={deleteWorkflowTask}
+              onStatusChange={changeWorkflowStatus}
+              onSaveResult={saveWorkflowResult}
+              onOpenWork={(workId) => navigate({ name: "work", workId })}
+            />
+          ) : null}
+
           {route.name === "settings" ? (
             <SettingsView
               workspace={workspace}
@@ -732,6 +899,21 @@ export function App() {
           locale={locale}
         />
       ) : null}
+      {modal?.kind === "task" ? (
+        <WorkflowTaskModal
+          key={`task-${modal.initial?.id ?? "new"}-${modal.parentId ?? ""}`}
+          open
+          onClose={() => setModal(null)}
+          t={t}
+          locale={locale}
+          workspace={workspace}
+          initial={modal.initial}
+          defaultParentId={modal.parentId}
+          defaultUniverseId={modal.universeId}
+          defaultWorkId={modal.workId}
+          onSave={saveWorkflowTask}
+        />
+      ) : null}
       {toast ? <Toast message={toast} /> : null}
     </div>
   );
@@ -773,6 +955,8 @@ function McpModal({
     "get_chapter",
     "search_ip",
     "get_relationship_graph",
+    "list_workflow_tasks",
+    "get_workflow_brief",
     "export_arcreel_bundle",
   ];
   return (

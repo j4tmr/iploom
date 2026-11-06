@@ -18,6 +18,13 @@ import {
 import { searchWorkspace } from "../../apps/studio/src/core/search.ts";
 import { storyboardWriteSchema } from "../../apps/studio/src/core/storyboard-contract.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
+import {
+  buildWorkflowBrief,
+  taskCycleRiskIds,
+  taskDescendantIds,
+  workflowSummary,
+  workflowTaskReadiness,
+} from "../../apps/studio/src/core/workflow.ts";
 import { APP_VERSION } from "../../apps/studio/src/core/version.ts";
 import { WorkspaceStore } from "../../apps/studio/src/node/workspace-store.ts";
 import { createElectronMcpConfig } from "../../apps/studio/src/node/mcp-config.ts";
@@ -35,6 +42,7 @@ describe("studio domain", () => {
     const stats = workspaceStats(workspace);
     expect(stats.approvedChapters).toBe(1);
     expect(stats.words).toBeGreaterThan(100);
+    expect(stats.workflowTasks).toBe(4);
     expect(() => validateWorkspace(workspace)).not.toThrow();
   });
 
@@ -99,6 +107,19 @@ describe("studio domain", () => {
     );
     dangling.characters[0]!.universeIds = ["uni_missing"];
     expect(() => validateWorkspace(dangling)).toThrow(/unknown universe/);
+  });
+
+  test("migrates schema v1 workspaces before strict validation", () => {
+    const legacy = structuredClone(
+      createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"),
+    ) as unknown as Record<string, unknown>;
+    legacy.schema_version = 1;
+    legacy.revision = 40;
+    delete legacy.workflowTasks;
+    const migrated = validateWorkspace(legacy);
+    expect(migrated.schema_version).toBe(2);
+    expect(migrated.revision).toBe(41);
+    expect(migrated.workflowTasks).toEqual([]);
   });
 
   test("keeps package, UI and generated manifests on one version", async () => {
@@ -237,6 +258,86 @@ describe("ArcReel export", () => {
   });
 });
 
+describe("AI workflow", () => {
+  test("derives independent work from explicit dependencies", () => {
+    const workspace = createDemoWorkspace(
+      "zh-CN",
+      "2026-11-06T00:00:00.000Z",
+    );
+    const summary = workflowSummary(workspace);
+    expect(summary).toMatchObject({
+      total: 4,
+      active: 1,
+      ready: 1,
+      waiting: 2,
+      done: 0,
+    });
+    const review = workspace.workflowTasks.find(
+      (task) => task.id === "task_review_first",
+    )!;
+    expect(workflowTaskReadiness(workspace, review)).toMatchObject({
+      ready: true,
+      complete: false,
+      blockers: [],
+    });
+    const chapter = workspace.workflowTasks.find(
+      (task) => task.id === "task_chapter_three",
+    )!;
+    expect(workflowTaskReadiness(workspace, chapter).ready).toBe(false);
+    expect(workflowTaskReadiness(workspace, chapter).blockers.map((item) => item.id)).toEqual([
+      "task_world_rules",
+    ]);
+    expect(taskDescendantIds(workspace.workflowTasks, "task_world_rules").sort()).toEqual([
+      "task_chapter_three",
+      "task_review_first",
+    ]);
+    expect(
+      taskCycleRiskIds(workspace.workflowTasks, "task_review_first").sort(),
+    ).toEqual(["task_adaptation_pass", "task_review_first"]);
+  });
+
+  test("builds a scoped, deterministic AI brief", () => {
+    const workspace = createDemoWorkspace(
+      "zh-CN",
+      "2026-11-06T00:00:00.000Z",
+    );
+    const brief = buildWorkflowBrief(
+      workspace,
+      "task_chapter_three",
+      "zh-CN",
+    );
+    expect(brief).toContain("# AI 任务简报");
+    expect(brief).toContain("task_chapter_three");
+    expect(brief).toContain("潮汐钟");
+    expect(brief).toContain("第七响");
+    expect(brief).toContain("task_world_rules");
+    expect(brief).toContain("不得把下游结果标记为已验收");
+    expect(brief).not.toContain("末班列车");
+    expect(
+      buildWorkflowBrief(workspace, "task_review_first", "en"),
+    ).toContain("can start independently");
+  });
+
+  test("rejects task cycles and dangling dependencies", () => {
+    const cyclic = createDemoWorkspace(
+      "en",
+      "2026-11-06T00:00:00.000Z",
+    );
+    cyclic.workflowTasks[0]!.parentId = "task_chapter_three";
+    expect(() => validateWorkspace(cyclic)).toThrow(/workflow cycle/);
+
+    const dangling = createDemoWorkspace(
+      "en",
+      "2026-11-06T00:00:00.000Z",
+    );
+    dangling.workflowTasks[1]!.dependsOnIds = ["task_missing"];
+    expect(() => validateWorkspace(dangling)).toThrow(
+      /unknown task: task_missing/,
+    );
+  });
+});
+
+
 describe("workspace store", () => {
   test("round-trips atomically and writes an ArcReel package", async () => {
     const root = mkdtempSync(join(tmpdir(), "iploom-studio-"));
@@ -332,6 +433,34 @@ describe("workspace store", () => {
       expect(afterMissingPrimary.recoveredFromBackup).toBe(true);
       expect(afterMissingPrimary.workspace.name).toBe("Previous");
       expect(readdirSync(root).some((name) => name.includes(".tmp-"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("loads a schema v1 file and persists the upgraded shape", async () => {
+    const root = mkdtempSync(join(tmpdir(), "iploom-studio-migrate-"));
+    try {
+      const file = join(root, "workspace.json");
+      const legacy = structuredClone(
+        createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"),
+      ) as unknown as Record<string, unknown>;
+      legacy.schema_version = 1;
+      legacy.revision = 3;
+      delete legacy.workflowTasks;
+      await Bun.write(file, JSON.stringify(legacy));
+      const store = new WorkspaceStore(file);
+      const loaded = await store.load();
+      expect(loaded.workspace.schema_version).toBe(2);
+      expect(loaded.workspace.workflowTasks).toEqual([]);
+      expect(loaded.workspace.revision).toBe(4);
+      await store.save(loaded.workspace);
+      const persisted = JSON.parse(readFileSync(file, "utf8")) as {
+        schema_version: number;
+        workflowTasks: unknown[];
+      };
+      expect(persisted.schema_version).toBe(2);
+      expect(persisted.workflowTasks).toEqual([]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

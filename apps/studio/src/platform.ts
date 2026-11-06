@@ -37,6 +37,8 @@ export interface AppInfo {
 export interface StudioBridge {
   load(): Promise<LoadedWorkspace>;
   save(workspace: StudioWorkspace): Promise<{ savedAt: string }>;
+  onFlushRequest(listener: (requestId: string) => void): () => void;
+  flushComplete(requestId: string, error?: string): Promise<void>;
   exportArcReel(bundle: ArcReelBundle): Promise<WrittenBundle>;
   appInfo(): Promise<AppInfo>;
   copyText(value: string): Promise<void>;
@@ -96,6 +98,10 @@ export const browserFallback: StudioBridge = {
     localStorage.setItem(browserKey, JSON.stringify(workspace));
     return { savedAt: new Date().toISOString() };
   },
+  onFlushRequest() {
+    return () => undefined;
+  },
+  async flushComplete() {},
   async exportArcReel(bundle) {
     const payload = {
       schema: bundle.schema,

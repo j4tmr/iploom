@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import {
   mkdtempSync,
+  readFileSync,
   rmSync,
 } from "node:fs";
 import { createRequire } from "node:module";
@@ -37,10 +38,12 @@ async function main(): Promise<void> {
   const screenshot = process.env.IPLOOM_STUDIO_SMOKE_SCREENSHOT
     ? resolve(process.env.IPLOOM_STUDIO_SMOKE_SCREENSHOT)
     : undefined;
+  const saveMarker = "smoke-close-save-verified";
   const environment: NodeJS.ProcessEnv = {
     ...process.env,
     IPLOOM_STUDIO_SMOKE: "1",
     IPLOOM_STUDIO_WORKSPACE: join(temporary, "workspace.json"),
+    IPLOOM_STUDIO_SMOKE_SAVE_MARKER: saveMarker,
     ...(screenshot ? { IPLOOM_STUDIO_SMOKE_SCREENSHOT: screenshot } : {}),
   };
   delete environment.ELECTRON_RUN_AS_NODE;
@@ -83,6 +86,16 @@ async function main(): Promise<void> {
       });
     });
     if (exitCode !== 0) throw new Error(`Desktop smoke exited ${exitCode}`);
+    const persisted = readFileSync(
+      join(temporary, "workspace.json"),
+      "utf8",
+    );
+    if (!persisted.includes(saveMarker)) {
+      throw new Error(
+        "Desktop smoke did not persist the workflow result during close",
+      );
+    }
+    console.log("[smoke] close-time workspace save verified");
   } finally {
     rmSync(temporary, { recursive: true, force: true });
   }

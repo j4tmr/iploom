@@ -11,6 +11,8 @@ IPloom Studio is a local-first desktop workspace for keeping a story world, its 
 
 ![IPloom Studio dashboard](docs/images/dashboard.png)
 
+![IPloom Studio AI workflow](docs/images/workflow.png)
+
 ## Why it exists
 
 Most writing tools start with a document. Screen adaptation then starts again from a script, a character sheet, and a pile of disconnected notes. IPloom starts one level earlier:
@@ -34,11 +36,12 @@ The result is a small, inspectable IP graph instead of a folder of files whose r
 - **World-to-novel hierarchy** — many novels can inherit one world's cast, places, factions, lore and relationships.
 - **Reusable cast** — one character can belong to several universes and be marked as reusable.
 - **Relationship map** — deterministic graph layout with relationship type, direction, strength, status and warnings.
+- **AI workflow** — hierarchical authoring tasks, explicit dependencies, readiness states, result capture and scoped bilingual briefs for local MCP assistants.
 - **Manuscript editor** — chapters, summaries, outlines, beats, POV, cast, location, prose and approval state.
 - **Novel shelf** — cross-universe filtering, search, status filters and word-count sorting.
-- **Local persistence** — atomic `workspace.json` writes, a `.bak` recovery copy and visible save state.
+- **Local persistence** — atomic `workspace.json` writes, a `.bak` recovery copy, schema migration, a save-before-close handshake and visible save state.
 - **ArcReel-style handoff** — selected chapters become a directory of world, episode and storyboard JSON plus a Markdown handoff.
-- **Local MCP server** — eight tools for IP queries and handoff export; seven are read-only.
+- **Local MCP server** — ten tools for IP queries, workflow briefs and handoff export; nine are read-only.
 - **Desktop security baseline** — context isolation, sandboxed renderer, strict CSP, validated IPC and an explicit export boundary.
 - **No account and no telemetry** — the app does not require a cloud service.
 

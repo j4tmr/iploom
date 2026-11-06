@@ -34,6 +34,7 @@ export function Sidebar({
     { route: "library", label: t("library"), icon: "book" },
     { route: "cast", label: t("cast"), icon: "users" },
     { route: "graph", label: t("relationships"), icon: "graph" },
+    { route: "workflow", label: t("workflow"), icon: "sparkles" },
     { route: "exports", label: t("exports"), icon: "package" },
   ];
   return (
@@ -57,6 +58,7 @@ export function Sidebar({
         {nav.map((item) => (
           <button
             key={item.route}
+            data-route={item.route}
             className={route.name === item.route ? "active" : ""}
             onClick={() => onNavigate({ name: item.route } as StudioRoute)}
           >

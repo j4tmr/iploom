@@ -7,7 +7,9 @@ import type {
   StudioWorkspace,
   UiLocale,
   WorkspaceStats,
+  WorkflowTask,
 } from "./types.ts";
+import { WORKSPACE_SCHEMA_VERSION } from "./types.ts";
 
 export function localized(zh: string, en = ""): LocalizedText {
   return { zh, en };
@@ -49,6 +51,7 @@ export function workspaceStats(workspace: StudioWorkspace): WorkspaceStats {
     ),
     characters: workspace.characters.length,
     relationships: workspace.relationships.length,
+    workflowTasks: workspace.workflowTasks.length,
   };
 }
 
@@ -104,7 +107,7 @@ export function createEmptyWorkspace(
   now = new Date().toISOString(),
 ): StudioWorkspace {
   return {
-    schema_version: 1,
+    schema_version: WORKSPACE_SCHEMA_VERSION,
     id: createId("workspace"),
     name,
     revision: 1,
@@ -122,6 +125,7 @@ export function createEmptyWorkspace(
     factions: [],
     lore: [],
     relationships: [],
+    workflowTasks: [],
     works: [],
     exports: [],
   };
@@ -133,7 +137,7 @@ export function createDemoWorkspace(
 ): StudioWorkspace {
   const createdAt = now;
   const demo: StudioWorkspace = {
-    schema_version: 1,
+    schema_version: WORKSPACE_SCHEMA_VERSION,
     id: "workspace_demo",
     name: locale === "en" ? "My Story Multiverse" : "我的故事宇宙",
     revision: 7,
@@ -574,6 +578,92 @@ export function createDemoWorkspace(
             updatedAt: createdAt,
           },
         ],
+      },
+    ],
+    workflowTasks: [
+      {
+        id: "task_world_rules",
+        title: localized("锁定雾港钟声规则", "Lock the Mist Harbor bell rules"),
+        brief: localized(
+          "对照已有正文与世界设定，确认第七响、记忆删除和解释权的因果关系，不改写已定稿事实。",
+          "Reconcile the seventh chime, memory erasure and interpretive authority with published prose. Do not rewrite established facts.",
+        ),
+        deliverable: localized(
+          "一份带来源章节与冲突清单的规则审查。",
+          "A rule review with source chapters and a conflict list.",
+        ),
+        result: localized("", ""),
+        kind: "world",
+        status: "active",
+        universeId: "uni_mist_harbor",
+        characterIds: ["char_lin", "char_shen"],
+        dependsOnIds: [],
+        createdAt,
+        updatedAt: createdAt,
+      },
+      {
+        id: "task_chapter_three",
+        title: localized("补写第三章停摆现场", "Draft the third tower stop"),
+        brief: localized(
+          "只使用已确立的十三条钟摆、父亲失踪夜与旧塔空间规则，写出可感知的后果和代价。",
+          "Use only the established thirteen pendulums, the father's disappearance and tower geography. Show consequences and costs.",
+        ),
+        deliverable: localized(
+          "第三章正文草案与待核验事实清单。",
+          "A chapter-three prose draft and a facts-to-check list.",
+        ),
+        result: localized("", ""),
+        kind: "chapter",
+        status: "queued",
+        universeId: "uni_mist_harbor",
+        workId: "work_tide_clock",
+        chapterId: "chapter_tide_003",
+        parentId: "task_world_rules",
+        characterIds: ["char_lin", "char_shen", "char_gu"],
+        dependsOnIds: ["task_world_rules"],
+        createdAt,
+        updatedAt: createdAt,
+      },
+      {
+        id: "task_review_first",
+        title: localized("审校第一章的连续性", "Review chapter-one continuity"),
+        brief: localized(
+          "检查钥匙、信件、沈雁到访顺序和第七响是否与后续章节一致。",
+          "Check the key, letter, Shen Yan's arrival and seventh chime against later chapters.",
+        ),
+        deliverable: localized("逐条 finding 与证据位置。", "Itemized findings with evidence."),
+        result: localized("", ""),
+        kind: "review",
+        status: "queued",
+        universeId: "uni_mist_harbor",
+        workId: "work_tide_clock",
+        chapterId: "chapter_tide_001",
+        parentId: "task_world_rules",
+        characterIds: ["char_lin", "char_shen"],
+        dependsOnIds: [],
+        createdAt,
+        updatedAt: createdAt,
+      },
+      {
+        id: "task_adaptation_pass",
+        title: localized("生成 3D 漫剧镜头清单", "Prepare the 3D comic shot list"),
+        brief: localized(
+          "按风格化 3D 动画、9:16 和现有制作边界，把已定稿章节转成可审查的镜头草案。",
+          "Turn approved chapters into reviewable shots for stylized 3D animation in 9:16 within the existing production boundary.",
+        ),
+        deliverable: localized(
+          "包含场景、镜头、角色锚点与风险的 ArcReel 交接草案。",
+          "An ArcReel handoff draft with scenes, shots, character anchors and risks.",
+        ),
+        result: localized("", ""),
+        kind: "adaptation",
+        status: "queued",
+        universeId: "uni_mist_harbor",
+        workId: "work_tide_clock",
+        characterIds: ["char_lin", "char_shen"],
+        dependsOnIds: ["task_review_first"],
+        createdAt,
+        updatedAt: createdAt,
       },
     ],
     exports: [],

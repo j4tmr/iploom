@@ -5,6 +5,7 @@ export type StudioRoute =
   | { name: "work"; workId: string }
   | { name: "cast"; universeId?: string }
   | { name: "graph"; universeId?: string }
+  | { name: "workflow" }
   | { name: "exports" }
   | { name: "settings" };
 

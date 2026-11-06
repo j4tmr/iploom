@@ -29,6 +29,8 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 | `get_chapter` | yes | Read a chapter's full prose, outline, beats and scenes |
 | `search_ip` | yes | Search the bilingual IP library |
 | `get_relationship_graph` | yes | Return graph nodes, edges, degrees and warnings |
+| `list_workflow_tasks` | yes | List AI authoring tasks with readiness, blockers and optional world/novel/status filters |
+| `get_workflow_brief` | yes | Generate a deterministic, task-scoped bilingual Markdown brief |
 | `export_arcreel_bundle` | no | Write an ArcReel-style handoff package |
 
 Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision.
@@ -46,6 +48,11 @@ does not match the world graph. Do not rewrite the prose.
 
 ```text
 Export chapters 1 and 2 of work_tide_clock as an ArcReel bundle.
+```
+
+```text
+List tasks that are ready to start, then give me the full brief for the
+highest-priority 3D comic-drama adaptation task.
 ```
 
 ## Command-line check

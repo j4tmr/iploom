@@ -1,4 +1,4 @@
-export const WORKSPACE_SCHEMA_VERSION = 1 as const;
+export const WORKSPACE_SCHEMA_VERSION = 2 as const;
 export const ARC_REEL_SCHEMA = "iploom.arcreel/v1" as const;
 
 export type UiLocale = "zh-CN" | "en";
@@ -33,6 +33,18 @@ export type LoreCategory =
   | "technology"
   | "power"
   | "mystery";
+export type WorkflowTaskKind =
+  | "world"
+  | "novel"
+  | "chapter"
+  | "character"
+  | "review"
+  | "adaptation";
+export type WorkflowTaskStatus =
+  | "queued"
+  | "active"
+  | "review"
+  | "done";
 
 export interface LocalizedText {
   zh: string;
@@ -174,6 +186,24 @@ export interface Relationship {
   updatedAt: string;
 }
 
+export interface WorkflowTask {
+  id: string;
+  title: LocalizedText;
+  brief: LocalizedText;
+  deliverable: LocalizedText;
+  result: LocalizedText;
+  kind: WorkflowTaskKind;
+  status: WorkflowTaskStatus;
+  universeId?: string;
+  workId?: string;
+  chapterId?: string;
+  parentId?: string;
+  characterIds: string[];
+  dependsOnIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface WorkspaceSettings {
   locale: UiLocale;
   theme: ThemeMode;
@@ -208,6 +238,7 @@ export interface StudioWorkspace {
   factions: StoryFaction[];
   lore: LoreEntry[];
   relationships: Relationship[];
+  workflowTasks: WorkflowTask[];
   works: StoryWork[];
   exports: ExportRecord[];
 }
@@ -246,6 +277,7 @@ export interface WorkspaceStats {
   words: number;
   characters: number;
   relationships: number;
+  workflowTasks: number;
 }
 
 export interface ArcReelFile {
