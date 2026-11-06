@@ -235,9 +235,9 @@ export const workflowTaskSchema = z
   .object({
     id: identifier,
     title: localizedSchema,
-    brief: localizedSchema,
-    deliverable: localizedSchema,
-    result: localizedSchema,
+    brief: localizedSchema.extend({ zh: z.string().max(100_000).default(""), en: z.string().max(100_000).default("") }),
+    deliverable: localizedSchema.extend({ zh: z.string().max(100_000).default(""), en: z.string().max(100_000).default("") }),
+    result: localizedSchema.extend({ zh: z.string().max(200_000).default(""), en: z.string().max(200_000).default("") }),
     kind: workflowTaskKindSchema,
     status: workflowTaskStatusSchema,
     universeId: identifier.optional(),

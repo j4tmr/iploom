@@ -25,6 +25,8 @@ import {
   type LoadedWorkspace,
 } from "../src/node/workspace-store.ts";
 import { createElectronMcpConfig } from "../src/node/mcp-config.ts";
+import { aiConfigSchema, aiRequestSchema, runCompletion } from "../src/node/ai-client.ts";
+import type { AiConfig } from "../src/core/ai.ts";
 import type {
   AppInfo,
   McpClientConfig,
@@ -41,6 +43,9 @@ let workspaceStore: WorkspaceStore | null = null;
 let devUrl: URL | null = null;
 const smokeMode = process.env.IPLOOM_STUDIO_SMOKE === "1";
 const allowedFolders = new Set<string>();
+let aiConfig: AiConfig = { endpoint: "", model: "", apiKey: "" };
+const aiRuns = new Map<string, AbortController>();
+const aiInfo = () => ({ endpoint: aiConfig.endpoint, model: aiConfig.model, configured: Boolean(aiConfig.endpoint && aiConfig.model) });
 let closeApproved = false;
 let closeInFlight = false;
 let quitApproved = false;
@@ -329,6 +334,36 @@ async function exportArcReel(bundle: ArcReelBundle): Promise<WrittenBundle> {
 }
 
 function registerIpcHandlers(): void {
+  ipcMain.handle("iploom:ai-config", (event) => { assertTrustedSender(event); return aiInfo(); });
+  ipcMain.handle("iploom:configure-ai", (event, config: unknown) => {
+    assertTrustedSender(event);
+    if (aiRuns.size) throw new Error("Wait for the current AI task or cancel it before changing configuration.");
+    aiConfig = aiConfigSchema.parse(config);
+    return aiInfo();
+  });
+  ipcMain.handle("iploom:cancel-ai", (event, id: string) => { assertTrustedSender(event); aiRuns.get(id)?.abort(); });
+  ipcMain.handle("iploom:run-ai", async (event, input: unknown) => {
+    assertTrustedSender(event);
+    const request = aiRequestSchema.parse(input);
+    if (aiRuns.size) throw new Error("Another AI task is running. Wait or cancel it first.");
+    if (!aiInfo().configured) throw new Error("Configure the model API in Settings first.");
+    const controller = new AbortController();
+    aiRuns.set(request.id, controller);
+    const timeout = setTimeout(() => controller.abort(), 180_000);
+    let lastSent = 0;
+    try {
+      return await runCompletion(aiConfig, request, controller.signal, (text) => {
+        if (!event.sender.isDestroyed() && Date.now() - lastSent >= 80) {
+          lastSent = Date.now();
+          event.sender.send("iploom:ai-progress", { id: request.id, label: request.label, text });
+        }
+      });
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error("AI task canceled or timed out; no result was applied.");
+      // Never echo provider payloads or credential-bearing fetch errors into IPC/logs.
+      throw new Error(error instanceof Error && /^(Model |Incomplete |Configure )/.test(error.message) ? error.message : "Model request failed. Check configuration and retry.");
+    } finally { clearTimeout(timeout); aiRuns.delete(request.id); }
+  });
   ipcMain.handle("iploom:load", async (event) => {
     assertTrustedSender(event);
     return loadWorkspace();
@@ -599,6 +634,47 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
       mcpScript: string;
     };
     await new Promise((resolveWait) => setTimeout(resolveWait, 600));
+    const mockEndpoint = process.env.IPLOOM_STUDIO_SMOKE_AI_ENDPOINT;
+    if (mockEndpoint) {
+      await window.webContents.executeJavaScript(`(async () => {
+        const waitFor = async (test) => {
+          const deadline = Date.now() + 8000;
+          while (!test()) { if (Date.now() > deadline) throw new Error("Production UI smoke timed out"); await new Promise(r => setTimeout(r, 30)); }
+        };
+        const setValue = (selector, value) => {
+          const element = document.querySelector(selector);
+          if (!element) throw new Error("Missing smoke input: " + selector);
+          const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+          Object.getOwnPropertyDescriptor(prototype, "value").set.call(element, value);
+          element.dispatchEvent(new Event("input", { bubbles: true }));
+        };
+        await window.iploom.configureAi({ endpoint: ${JSON.stringify(mockEndpoint)}, model: "smoke-model", apiKey: "" });
+        const config = await window.iploom.aiConfig();
+        if ("apiKey" in config) throw new Error("AI config exposed a secret field");
+        document.querySelector('.production-panel').open = true;
+        document.querySelector('[data-testid="production-compose"]').click();
+        await waitFor(() => !document.querySelector('[data-testid="production-run"]').disabled);
+        const originalConfirm = window.confirm;
+        window.confirm = () => true;
+        try { document.querySelector('[data-testid="production-run"]').click();
+          await waitFor(() => document.querySelector('[data-testid="production-output"]')?.value.length > 500 && !document.querySelector('[data-testid="production-run"]').disabled);
+        } finally { window.confirm = originalConfirm; }
+        document.querySelector('[data-route="library"]').click();
+        await waitFor(() => document.querySelector('[data-testid="import-open"]'));
+        document.querySelector('[data-testid="import-open"]').click();
+        await waitFor(() => document.querySelector('[data-testid="import-title"]'));
+        setValue('[data-testid="import-title"]', 'smoke-import-novel');
+        setValue('[data-testid="import-text"]', 'Chapter 1\\nA traveler arrived at the lighthouse.\\nChapter 2\\nThe lamp turned blue.');
+        await waitFor(() => !document.querySelector('[data-testid="import-confirm"]').disabled);
+        document.querySelector('[data-testid="import-confirm"]').click();
+        await waitFor(() => document.querySelector('.work-view h1')?.textContent === 'smoke-import-novel');
+        document.querySelector('[data-route="workflow"]').click();
+        await waitFor(() => document.querySelector('[data-testid="workflow-result"]'));
+      })()`, true);
+      console.log("[smoke] live model output, review persistence and novel import verified (local mock)");
+      await window.webContents.executeJavaScript(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+      await new Promise((resolveWait) => setTimeout(resolveWait, 500));
+    }
     const screenshot = process.env.IPLOOM_STUDIO_SMOKE_SCREENSHOT;
     if (screenshot) {
       const image = await window.webContents.capturePage();

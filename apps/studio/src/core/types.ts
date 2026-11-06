@@ -260,6 +260,8 @@ export interface RelationshipEdge {
   label: string;
   strength: number;
   status: RelationshipStatus;
+  mutual: boolean;
+  notes: string;
 }
 
 export interface RelationshipGraph {

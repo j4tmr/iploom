@@ -8,6 +8,7 @@ import type {
 import type { Translate } from "../i18n.ts";
 import { bridge, type AppInfo } from "../platform.ts";
 import { Icon } from "../components/icon.tsx";
+import { AiSettings } from "../components/ai-settings.tsx";
 import {
   Button,
   Field,
@@ -79,6 +80,7 @@ export function SettingsView({
         <p>{t("settingsLead")}</p>
       </header>
       <div className="settings-layout">
+        <AiSettings locale={locale} />
         <section className="settings-panel">
           <SectionTitle title={t("interfaceLanguage")} />
           <div className="segmented large">

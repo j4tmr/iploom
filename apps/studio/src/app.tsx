@@ -64,12 +64,16 @@ import { SettingsView } from "./views/settings-view.tsx";
 import { UniverseView } from "./views/universe-view.tsx";
 import { WorkView } from "./views/work-view.tsx";
 import { WorkflowView } from "./views/workflow-view.tsx";
+import { ProductionPanel } from "./components/production-panel.tsx";
+import { ManuscriptImport } from "./components/manuscript-import.tsx";
+import { mergeManuscriptImport } from "./core/manuscript.ts";
 
 type ModalState =
+  | { kind: "import" }
   | { kind: "world"; initial?: StoryUniverse }
   | { kind: "novel"; universeId?: string; initial?: StoryWork }
   | { kind: "character"; initial?: Character; universeId?: string }
-  | { kind: "relationship"; universeId: string }
+  | { kind: "relationship"; universeId: string; initial?: Relationship }
   | {
       kind: "atlas";
       atlasKind: "location" | "faction" | "lore";
@@ -345,7 +349,9 @@ export function App() {
 
   const saveRelationship = (relationship: Relationship) => {
     mutate((draft) => {
-      draft.relationships.push(relationship);
+      const index = draft.relationships.findIndex((item) => item.id === relationship.id);
+      if (index < 0) draft.relationships.push(relationship);
+      else draft.relationships[index] = relationship;
     });
   };
 
@@ -629,6 +635,12 @@ export function App() {
           onMcp={() => setModal({ kind: "mcp" })}
         />
         <main className="studio-main">
+          <ProductionPanel
+            workspace={workspace} locale={locale}
+            context={{ universeId: defaultUniverseId ?? workspace.universes[0]?.id, workId: work?.id, characterId: modal?.kind === "character" ? modal.initial?.id : undefined }}
+            onTasks={(tasks) => mutate((draft) => { for (const task of tasks) { const index = draft.workflowTasks.findIndex((item) => item.id === task.id); if (index < 0) draft.workflowTasks.push(task); else draft.workflowTasks[index] = task; } })}
+            onStatus={changeWorkflowStatus} onResult={saveWorkflowResult}
+          />
           {state.recovered ? (
             <div className="recovery-banner">
               <Icon name="check" size={16} />
@@ -658,6 +670,7 @@ export function App() {
 
           {route.name === "library" ? (
             <LibraryView
+              onImportNovel={() => setModal({ kind: "import" })}
               workspace={workspace}
               locale={locale}
               t={t}
@@ -725,6 +738,7 @@ export function App() {
 
           {route.name === "graph" ? (
             <RelationshipsView
+              onEditRelationship={(initial) => setModal({ kind: "relationship", universeId: initial.universeId, initial })}
               workspace={workspace}
               locale={locale}
               t={t}
@@ -814,6 +828,12 @@ export function App() {
         onSelect={selectSearchHit}
       />
 
+      {modal?.kind === "import" ? <ManuscriptImport locale={locale} onClose={() => setModal(null)} onImport={(imported) => {
+        // Validate the combined snapshot before scheduling the mutation.
+        mergeManuscriptImport(workspace, imported);
+        mutate((draft) => Object.assign(draft, mergeManuscriptImport(draft, imported)));
+        navigate({ name: "work", workId: imported.works[0]!.id });
+      }} /> : null}
       {modal?.kind === "world" ? (
         <UniverseModal
           key={`world-${modal.initial?.id ?? "new"}`}
@@ -853,7 +873,8 @@ export function App() {
       ) : null}
       {modal?.kind === "relationship" ? (
         <RelationshipModal
-          key={`relationship-${modal.universeId}`}
+          initial={modal.initial}
+          key={`relationship-${modal.initial?.id ?? modal.universeId}`}
           open
           onClose={() => setModal(null)}
           t={t}

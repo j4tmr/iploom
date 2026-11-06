@@ -18,6 +18,7 @@ import {
 } from "../i18n.ts";
 import { bridge } from "../platform.ts";
 import { Icon } from "../components/icon.tsx";
+import { SceneEditor } from "../components/scene-editor.tsx";
 import {
   Badge,
   Button,
@@ -345,6 +346,7 @@ export function WorkView({
                       }
                     />
                   </Field>
+                  <SceneEditor chapter={selected} characters={characters} locations={locations} locale={locale} onChange={(change) => onChangeChapter(selected.id, change)} />
                 </aside>
               </div>
             </section>

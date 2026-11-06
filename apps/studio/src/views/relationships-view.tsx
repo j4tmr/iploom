@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { buildRelationshipGraph } from "../core/graph.ts";
 import { displayText } from "../core/factory.ts";
-import type { Character, StudioWorkspace, UiLocale } from "../core/types.ts";
+import type { Character, Relationship, StudioWorkspace, UiLocale } from "../core/types.ts";
 import {
   relationshipLabels,
   relationStatusLabels,
@@ -23,6 +23,7 @@ export function RelationshipsView({
   initialUniverseId,
   onAddRelationship,
   onDeleteRelationship,
+  onEditRelationship,
   onEditCharacter,
 }: {
   workspace: StudioWorkspace;
@@ -31,6 +32,7 @@ export function RelationshipsView({
   initialUniverseId?: string;
   onAddRelationship: (universeId: string) => void;
   onDeleteRelationship: (id: string) => void;
+  onEditRelationship: (relationship: Relationship) => void;
   onEditCharacter: (character: Character) => void;
 }) {
   const [universeId, setUniverseId] = useState(
@@ -98,12 +100,14 @@ export function RelationshipsView({
                   <div>
                     <strong>
                       {source ? displayText(source.name, locale) : edge.source}
-                      <span className="relation-arrow">↔</span>
+                      <span className="relation-arrow">{edge.mutual ? "↔" : "→"}</span>
                       {target ? displayText(target.name, locale) : edge.target}
                     </strong>
                     <p>{relationshipLabels[locale][edge.type]} · {edge.label}</p>
                     <small>{relationStatusLabels[locale][edge.status]} · {edge.strength}/5</small>
+                    {edge.notes ? <details><summary>{locale === "en" ? "Notes / source evidence" : "说明 / 原文依据"}</summary><p>{edge.notes}</p></details> : null}
                   </div>
+                  <IconButton label={t("edit")} icon="edit" onClick={() => { const relationship = workspace.relationships.find((item) => item.id === edge.id); if (relationship) onEditRelationship(relationship); }} />
                   <IconButton label={t("delete")} icon="trash" onClick={() => onDeleteRelationship(edge.id)} />
                 </article>
               );
