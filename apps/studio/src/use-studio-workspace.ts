@@ -7,7 +7,10 @@ import {
   type SetStateAction,
 } from "react";
 import { bridge } from "./platform.ts";
-import { applyWorkspaceChange } from "./core/integrity.ts";
+import {
+  applyWorkspaceChange,
+  type WorkspaceChangeResult,
+} from "./core/integrity.ts";
 import type { StudioWorkspace, UiLocale } from "./core/types.ts";
 
 export type SaveState = "loading" | "saved" | "saving" | "error";
@@ -18,9 +21,11 @@ export interface StudioWorkspaceState {
   mutate: (change: (draft: StudioWorkspace) => void) => void;
   /**
    * Apply a structural change only when the result is still a valid workspace.
-   * Returns a readable reason when the change was rejected, otherwise null.
+   * The outcome carries the applied workspace or the rejection details.
    */
-  applyChange: (change: (draft: StudioWorkspace) => void) => string | null;
+  applyChange: (
+    change: (draft: StudioWorkspace) => void,
+  ) => WorkspaceChangeResult;
   replaceWorkspace: (workspace: StudioWorkspace) => void;
   saveState: SaveState;
   error: string | null;
@@ -116,14 +121,20 @@ export function useStudioWorkspace(): StudioWorkspaceState {
   }, []);
 
   const applyChange = useCallback(
-    (change: (draft: StudioWorkspace) => void): string | null => {
+    (change: (draft: StudioWorkspace) => void): WorkspaceChangeResult => {
       const current = workspaceRef.current;
-      if (!current) return "workspace is not loaded";
+      if (!current)
+        return {
+          ok: false,
+          error: "workspace is not loaded",
+          issues: [],
+          details: [],
+        };
       const outcome = applyWorkspaceChange(current, change);
-      if (!outcome.ok) return outcome.error;
+      if (!outcome.ok) return outcome;
       workspaceRef.current = outcome.workspace;
       setWorkspace(outcome.workspace);
-      return null;
+      return outcome;
     },
     [],
   );

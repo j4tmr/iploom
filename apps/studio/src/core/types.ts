@@ -6,6 +6,20 @@ export const MAX_WORKFLOW_RESULT_LENGTH = 200_000 as const;
 export const MAX_LOCALIZED_LENGTH = 500 as const;
 /** Longest prompt the model client accepts for a single request. */
 export const MAX_AI_PROMPT_LENGTH = 100_000 as const;
+/**
+ * Chapter text caps. Shared by the workspace schema and the manuscript
+ * editor so the inputs stop at the same bound the save would reject.
+ */
+export const CHAPTER_LIMITS = {
+  title: 300,
+  pov: 300,
+  summary: 20_000,
+  outline: 200_000,
+  content: 2_000_000,
+  beats: 100,
+  beatLength: 5_000,
+  adaptationNotes: 50_000,
+} as const;
 
 export type UiLocale = "zh-CN" | "en";
 export type ThemeMode = "system" | "light" | "dark";

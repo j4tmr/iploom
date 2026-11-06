@@ -1,5 +1,9 @@
 import type { StoryWork, StudioWorkspace, TimelineEvent } from "./types.ts";
-import { validateWorkspace, WorkspaceValidationError } from "./validate.ts";
+import {
+  validateWorkspace,
+  WorkspaceValidationError,
+  type WorkspaceIssueDetail,
+} from "./validate.ts";
 
 export interface WorkspaceChangeApplied {
   ok: true;
@@ -11,6 +15,8 @@ export interface WorkspaceChangeRejected {
   /** A human-readable summary of the first validation issues. */
   error: string;
   issues: string[];
+  /** Structured locations for the same failures, in validator order. */
+  details: WorkspaceIssueDetail[];
 }
 
 export type WorkspaceChangeResult =
@@ -22,12 +28,13 @@ function describeFailure(reason: unknown): WorkspaceChangeRejected {
     const issues = reason.issues;
     const shown = issues.slice(0, 3).join("; ");
     const remainder = issues.length > 3 ? ` (+${issues.length - 3} more)` : "";
-    return { ok: false, error: `${shown}${remainder}`, issues };
+    return { ok: false, error: `${shown}${remainder}`, issues, details: reason.details };
   }
   return {
     ok: false,
     error: reason instanceof Error ? reason.message : String(reason),
     issues: [],
+    details: [],
   };
 }
 
@@ -52,6 +59,7 @@ export function applyWorkspaceChange(
         reason instanceof Error ? reason.message : String(reason)
       }`,
       issues: [],
+      details: [],
     };
   }
   draft.revision = workspace.revision + 1;
