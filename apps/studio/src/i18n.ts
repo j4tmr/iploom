@@ -396,7 +396,6 @@ const zh = {
   updateTrustNote:
     "只会打开 GitHub 发布链接；IPloom 不会安装或运行下载的文件。",
   checkedAt: "检查于 {time}",
-  untitledChapter: "未命名章节",
   validationIssue: "{where}：{reason}（{path}）",
   validationWhere: "{entity}「{name}」· {field}",
   validationWhereUnnamed: "{entity} · {field}",
@@ -433,6 +432,10 @@ const zh = {
   issueMissingChapterOrTime: "需要绑定章节或填写故事内时间",
   issueMissingState: "需要填写变化前或变化后的状态",
   issueMissingNovel: "章节任务需要先选择小说",
+  issueDuplicateChapterNumber: "章节序号重复",
+  issueSelfRelation: "人物不能与自身建立关系",
+  issueSceneNeedsChapter: "场景需要先绑定章节",
+  issueSceneSubjectNeedsChapter: "场景主体需要先绑定章节",
   issueMoreIssues: "（另有 {count} 项问题）",
 } as const;
 
@@ -842,7 +845,6 @@ const en: Record<MessageKey, string> = {
   updateTrustNote:
     "Only GitHub release links are opened. IPloom never installs or runs downloaded files.",
   checkedAt: "Checked {time}",
-  untitledChapter: "Untitled chapter",
   validationIssue: "{where}: {reason} ({path})",
   validationWhere: '{entity} "{name}" · {field}',
   validationWhereUnnamed: "{entity} · {field}",
@@ -879,6 +881,10 @@ const en: Record<MessageKey, string> = {
   issueMissingChapterOrTime: "Bind a chapter or fill in story time",
   issueMissingState: "Fill in the state before or after",
   issueMissingNovel: "Choose a novel for a chapter task",
+  issueDuplicateChapterNumber: "Duplicate chapter number",
+  issueSelfRelation: "A character cannot relate to itself",
+  issueSceneNeedsChapter: "A scene requires a chapter",
+  issueSceneSubjectNeedsChapter: "A scene subject requires a chapter",
   issueMoreIssues: " (+{count} more)",
 };
 
@@ -892,7 +898,7 @@ export function translator(locale: UiLocale) {
     let message = dictionaries[locale][key] ?? key;
     if (values) {
       for (const [name, value] of Object.entries(values))
-        message = message.replaceAll(`{${name}}`, String(value));
+        message = message.replaceAll(`{${name}}`, () => String(value));
     }
     return message;
   };

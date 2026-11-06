@@ -294,10 +294,19 @@ function describeCustomReason(message: string, t: Translate): string {
   if (message === "work is required for a chapter task")
     return t("issueMissingNovel");
   if (message === "at least one state is required") return t("issueMissingState");
+  if (message === "duplicate chapter number")
+    return t("issueDuplicateChapterNumber");
+  if (message === "self relation") return t("issueSelfRelation");
+  if (message === "chapter is required for a scene")
+    return t("issueSceneNeedsChapter");
+  if (message === "scene subject requires a chapter")
+    return t("issueSceneSubjectNeedsChapter");
   if (message.endsWith("is required")) return t("issueRequired");
-  if (/^duplicate (id|standard):/.test(message)) return t("issueDuplicate");
-  if (/^unknown (task|standard): /.test(message)) {
-    return t("issueUnknownNamed", { id: message.slice(message.indexOf(": ") + 2) });
+  if (/^duplicate (id|standard|chapter):/.test(message)) return t("issueDuplicate");
+  if (/^unknown [a-z ]+: /.test(message)) {
+    return t("issueUnknownNamed", {
+      id: message.slice(message.indexOf(": ") + 2),
+    });
   }
   if (/^unknown /.test(message)) return t("issueUnknownReference");
   if (/cannot (parent|depend on) itself/.test(message)) return t("issueSelfReference");

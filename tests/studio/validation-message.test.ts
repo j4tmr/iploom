@@ -66,6 +66,47 @@ describe("validation messages", () => {
     expect(text).toContain("另有 2 项问题");
   });
 
+  test("translates every cross-entity rule the editors can surface", () => {
+    const cases: Array<[string, string]> = [
+      ["duplicate chapter number", "章节序号重复"],
+      ["self relation", "人物不能与自身建立关系"],
+      ["chapter is required for a scene", "场景需要先绑定章节"],
+      ["scene subject requires a chapter", "场景主体需要先绑定章节"],
+    ];
+    for (const [message, expected] of cases) {
+      const text = describeWorkspaceProblem(
+        [detail({ path: "timelineEvents.0", code: "custom", message })],
+        workspace,
+        "zh-CN",
+        translator("zh-CN"),
+      );
+      expect(text).toContain(expected);
+    }
+    const named = describeWorkspaceProblem(
+      [
+        detail({
+          path: "timelineEvents.0",
+          code: "custom",
+          message: "unknown character: char_missing",
+        }),
+      ],
+      workspace,
+      "zh-CN",
+      translator("zh-CN"),
+    );
+    expect(named).toContain("char_missing");
+  });
+
+  test("inserts names literally even when they contain replacement patterns", () => {
+    const t = translator("zh-CN");
+    const text = t("validationWhere", {
+      entity: t("entityNovel"),
+      name: "A$&B$'C",
+      field: t("title"),
+    });
+    expect(text).toContain("A$&B$'C");
+  });
+
   test("falls back to cross-entity rule text it cannot translate", () => {
     const text = describeWorkspaceProblem(
       [
