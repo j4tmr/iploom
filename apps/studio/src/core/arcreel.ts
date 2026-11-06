@@ -603,6 +603,25 @@ export async function buildArcReelBundle(
     }),
   });
 
+  const exportedChapterIds = new Set(chapters.map((chapter) => chapter.id));
+  const approvedDesigns = workspace.workflowTasks.filter((task) =>
+    task.status === "done" &&
+    (task.workId === work.id || (!task.workId && task.universeId === universe.id)) &&
+    (!task.chapterId || exportedChapterIds.has(task.chapterId)) &&
+    (task.result.zh.trim() || task.result.en.trim()),
+  );
+  files.push({
+    path: "production/approved-designs.json",
+    mediaType: "application/json",
+    content: json({
+      schema: "iploom.production-designs/v1",
+      source_workspace_revision: workspace.revision,
+      work_id: work.id,
+      note: "Author-reviewed text specifications and reusable prompts. Not rendered media or automatically applied storyboard data.",
+      tasks: approvedDesigns,
+    }),
+  });
+
   const hashedFiles = await Promise.all(
     files.map(async (file) => ({
       path: file.path,

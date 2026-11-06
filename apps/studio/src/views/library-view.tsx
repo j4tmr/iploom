@@ -33,12 +33,14 @@ export function LibraryView({
   t,
   onOpenWork,
   onNewNovel,
+  onImportNovel,
 }: {
   workspace: StudioWorkspace;
   locale: UiLocale;
   t: Translate;
   onOpenWork: (workId: string) => void;
   onNewNovel: () => void;
+  onImportNovel: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [universeId, setUniverseId] = useState("all");
@@ -84,6 +86,7 @@ export function LibraryView({
           <p>{t("libraryLead")}</p>
         </div>
         <div className="page-heading-actions">
+          <Button data-testid="import-open" icon="file" onClick={onImportNovel}>{locale === "en" ? "Import novel" : "导入已有小说"}</Button>
           <Button variant="primary" icon="plus" onClick={onNewNovel}>
             {t("writeNovel")}
           </Button>

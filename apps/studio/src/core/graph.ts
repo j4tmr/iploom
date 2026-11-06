@@ -36,6 +36,8 @@ export function buildRelationshipGraph(
       label: displayText(relationship.label, locale),
       strength: relationship.strength,
       status: relationship.status,
+      mutual: relationship.mutual,
+      notes: relationship.notes,
     }));
 
   const nodesById = new Map(nodes.map((node) => [node.id, node]));

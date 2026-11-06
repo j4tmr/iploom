@@ -2,6 +2,7 @@ import { createDemoWorkspace, createEmptyWorkspace } from "./core/factory.ts";
 import type { ArcReelBundle, StudioWorkspace, UiLocale } from "./core/types.ts";
 import { APP_VERSION } from "./core/version.ts";
 import { loadBrowserWorkspace, saveBrowserWorkspace } from "./browser-workspace.ts";
+import type { AiConfig, AiConfigInfo, AiProgress, AiRequest } from "./core/ai.ts";
 
 export interface LoadedWorkspace {
   workspace: StudioWorkspace;
@@ -36,6 +37,11 @@ export interface AppInfo {
 }
 
 export interface StudioBridge {
+  aiConfig(): Promise<AiConfigInfo>;
+  configureAi(config: AiConfig): Promise<AiConfigInfo>;
+  runAi(request: AiRequest): Promise<string>;
+  cancelAi(id: string): Promise<void>;
+  onAiProgress(listener: (progress: AiProgress) => void): () => void;
   load(): Promise<LoadedWorkspace>;
   save(workspace: StudioWorkspace): Promise<{ savedAt: string }>;
   onFlushRequest(listener: (requestId: string) => void): () => void;
@@ -74,6 +80,11 @@ function browserMcpConfig(): McpClientConfig {
 }
 
 export const browserFallback: StudioBridge = {
+  async aiConfig() { return { endpoint: "", model: "", configured: false }; },
+  async configureAi() { throw new Error("模型 API 请在桌面版配置 / Configure model APIs in the desktop app."); },
+  async runAi() { throw new Error("模型 API 请使用桌面版 / Model APIs require the desktop app."); },
+  async cancelAi() {},
+  onAiProgress() { return () => undefined; },
   async load() {
     return browserLoad();
   },

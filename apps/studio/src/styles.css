@@ -4869,3 +4869,11 @@ select.input {
     max-height: 480px;
   }
 }
+/* Shared production desk stays mounted while navigating between asset views. */
+.production-panel { margin: 16px 32px; padding: 18px 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); }
+.production-panel summary { cursor: pointer; font-weight: 700; }
+.production-panel p { margin: 12px 0; line-height: 1.6; }
+.production-controls { border: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; align-items: end; min-width: 0; }
+.production-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+.production-output { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 700px) { .production-panel { margin: 12px; padding: 14px; } }

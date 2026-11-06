@@ -801,28 +801,30 @@ export function RelationshipModal({
   workspace,
   universeId,
   onSave,
+  initial,
 }: ModalBase & {
   workspace: StudioWorkspace;
   universeId: string;
+  initial?: Relationship;
   onSave: (relationship: Relationship) => void;
 }) {
   const characters = workspace.characters.filter((character) =>
     character.universeIds.includes(universeId),
   );
-  const [sourceId, setSourceId] = useState(characters[0]?.id ?? "");
-  const [targetId, setTargetId] = useState(characters[1]?.id ?? "");
-  const [type, setType] = useState<RelationshipType>("ally");
-  const [labelZh, setLabelZh] = useState("");
-  const [labelEn, setLabelEn] = useState("");
-  const [strength, setStrength] = useState("3");
-  const [status, setStatus] = useState<RelationshipStatus>("active");
-  const [mutual, setMutual] = useState(true);
-  const [notes, setNotes] = useState("");
+  const [sourceId, setSourceId] = useState(initial?.sourceId ?? characters[0]?.id ?? "");
+  const [targetId, setTargetId] = useState(initial?.targetId ?? characters[1]?.id ?? "");
+  const [type, setType] = useState<RelationshipType>(initial?.type ?? "ally");
+  const [labelZh, setLabelZh] = useState(initial?.label.zh ?? "");
+  const [labelEn, setLabelEn] = useState(initial?.label.en ?? "");
+  const [strength, setStrength] = useState(String(initial?.strength ?? 3));
+  const [status, setStatus] = useState<RelationshipStatus>(initial?.status ?? "active");
+  const [mutual, setMutual] = useState(initial?.mutual ?? true);
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={t("createRelationshipTitle")}
+      title={initial ? t("edit") : t("createRelationshipTitle")}
       description={t("relationshipLead")}
       footer={
         <>
@@ -834,7 +836,7 @@ export function RelationshipModal({
             onClick={() => {
               const now = new Date().toISOString();
               onSave({
-                id: createId("rel"),
+                id: initial?.id ?? createId("rel"),
                 universeId,
                 sourceId,
                 targetId,
@@ -844,13 +846,13 @@ export function RelationshipModal({
                 status,
                 mutual,
                 notes,
-                createdAt: now,
+                createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
               onClose();
             }}
           >
-            {t("add")}
+            {initial ? t("save") : t("add")}
           </Button>
         </>
       }

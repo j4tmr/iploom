@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   layoutRelationshipGraph,
   type GraphLayoutNode,
@@ -26,6 +26,7 @@ export function RelationshipCanvas({
   onNodeClick?: (node: GraphLayoutNode) => void;
 }) {
   const [hovered, setHovered] = useState<RelationshipEdge | null>(null);
+  const arrowId = useId().replaceAll(":", "");
   const width = 860;
   const height = 540;
   const nodes = layoutRelationshipGraph(graph, width, height);
@@ -47,6 +48,7 @@ export function RelationshipCanvas({
         aria-label={locale === "en" ? "Character relationship graph" : "人物关系图"}
       >
         <defs>
+          <marker id={arrowId} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="context-stroke" /></marker>
           <radialGradient id="graph-glow" cx="50%" cy="45%" r="55%">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity=".14" />
             <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
@@ -65,6 +67,8 @@ export function RelationshipCanvas({
           const target = byId.get(edge.target);
           if (!source || !target) return null;
           const active = hovered?.id === edge.id;
+          const distance = Math.hypot(target.x - source.x, target.y - source.y) || 1;
+          const dx = (target.x - source.x) / distance, dy = (target.y - source.y) / distance;
           return (
             <g
               key={edge.id}
@@ -81,11 +85,13 @@ export function RelationshipCanvas({
                 strokeWidth="18"
               />
               <line
-                x1={source.x}
-                y1={source.y}
-                x2={target.x}
-                y2={target.y}
+                x1={source.x + dx * (source.radius + 9)}
+                y1={source.y + dy * (source.radius + 9)}
+                x2={target.x - dx * (target.radius + 9)}
+                y2={target.y - dy * (target.radius + 9)}
                 stroke={edgeColors[edge.status]}
+                markerEnd={`url(#${arrowId})`}
+                markerStart={edge.mutual ? `url(#${arrowId})` : undefined}
                 strokeWidth={active ? 3.4 : 1.2 + edge.strength * 0.38}
                 strokeDasharray={edge.status === "hidden" ? "7 6" : undefined}
                 opacity={edge.status === "broken" ? 0.5 : active ? 1 : 0.74}
