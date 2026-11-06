@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="IPloom Studio：从世界观、人物、关系和小说，到服装、场景、分镜与漫剧交付的本地优先创作工作台。功能说明、AI 工作流和 macOS / Windows 下载。">
+  <meta name="theme-color" content="#163e34">
+  <meta property="og:title" content="IPloom Studio · 把故事，织成一个世界">
+  <meta property="og:description" content="世界观、人物关系、小说与漫剧制作资料，在同一个本地工作台里持续生长。">
+  <meta property="og:type" content="website">
+  <title>IPloom Studio · IP 与漫剧制作工作台</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#main">跳转至正文</a>
+  <header class="header">
+    <a class="brand" href="#"><span class="brand-icon">界</span><span>IPloom <small>STUDIO</small></span></a>
+    <nav aria-label="主导航"><a href="#features">功能</a><a href="#workflow">制作流程</a><a href="#guide">使用指南</a><a href="#download">下载</a><a class="github" href="https://github.com/j4tmr/iploom">GitHub ↗</a></nav>
+  </header>
+  <main id="main">
+    <section class="hero wrap">
+      <div class="hero-copy"><p class="eyebrow">YOUR STORIES. ONE CONNECTED WORLD.</p><h1>把故事，<br>织成一个<span>世界。</span></h1><p class="lead">从一段小说，到有记忆的人物、有逻辑的关系、有连续性的场景。<br>让每一份创作，都成为下一部漫剧的制作资产。</p><div class="actions"><a class="button primary" href="#download">下载桌面版 <span>↓</span></a><a class="button" href="#workflow">了解制作流程 <span>↗</span></a></div><div class="meta"><span>本地优先</span><span>中文 / English</span><span>macOS / Windows</span><span>MIT 开源</span></div></div>
+      <div class="world-art" aria-label="故事世界由小说、人物、场景与分镜相互连接的示意图"><div class="orb orb-one"></div><div class="orb orb-two"></div><div class="world-center"><span>界</span><strong>一个 IP 世界</strong><small>CANON · CONTINUITY · CREATION</small></div><div class="world-node node-book">01 <b>小说与章节</b><small>故事从这里生长</small></div><div class="world-node node-cast">02 <b>人物与关系</b><small>每个选择都有来处</small></div><div class="world-node node-scene">03 <b>服装与场景</b><small>让设定变得可制作</small></div><div class="world-node node-shot">04 <b>分镜与交付</b><small>走向下一种表达</small></div><span class="art-note">FROM STORY BIBLE TO COMIC DRAMA</span></div>
+    </section>
+
+    <div class="version-note wrap"><span class="pill">版本说明</span><p><strong>可下载版本：0.3.0。</strong>本页同时介绍新的制作流程。标注“新版源码”的小说导入、模型执行、服装提示词等能力不包含在 0.3.0 安装包中；新安装包发布前，请从源码运行。<a href="https://github.com/j4tmr/iploom/pull/10">查看开发变更 ↗</a></p></div>
+
+    <section id="features" class="wrap section"><div class="section-heading"><div><p class="eyebrow">A HOME FOR YOUR IP</p><h2>一套事实来源，<br>连接整个创作世界。</h2></div><p>小说、人物、设定与改编资料共享引用。<br>每一次写作，都在积累可复用的 IP 资产。</p></div>
+      <div class="feature-grid">
+        <article><span class="number">01 / WORLD</span><h3>世界观与设定集</h3><p>集中维护世界简介、规则、历史、文化、技术、势力和地点，让角色的行动有明确边界。</p><ul><li>多个故事宇宙独立管理</li><li>设定、地点与作品相互关联</li><li>中文与英文内容字段</li></ul><span class="availability">0.3.0 已有</span></article>
+        <article><span class="number">02 / CAST</span><h3>人物与关系图谱</h3><p>从外貌、性格、动机、缺陷、秘密到声音，保留人物的完整设计；用关系网络理解冲突。</p><ul><li>跨作品可复用人物</li><li>关系类型、强度与公开状态</li><li>新版：方向箭头、依据与编辑</li></ul><span class="availability">已有基础 · 新版增强</span></article>
+        <article><span class="number">03 / MANUSCRIPT</span><h3>小说与章节工作区</h3><p>正文、大纲、剧情节拍、视角、出场人物和改编备注一起管理，保留写作与制作的联系。</p><ul><li>章节状态与字数进度</li><li>跨人物、世界、正文搜索</li><li>新版：TXT / Markdown 导入</li></ul><span class="availability">已有基础 · 新版增强</span></article>
+        <article><span class="number">04 / AI DESK</span><h3>看得见的 AI 工作</h3><p>查看“正在设计人物服装”“正在创作章节”的任务名称与实时产出，保留提示词编辑和作者审阅。</p><ul><li>可配置兼容模型 API</li><li>流式输出、取消与超时处理</li><li>依赖任务与待审结果</li></ul><span class="availability new">新版源码</span></article>
+        <article><span class="number">05 / PRODUCTION</span><h3>场景、服装与分镜</h3><p>把抽象创意转换成具体制作规格：身份连续性、服装变体、空间布局、镜头调度与声音。</p><ul><li>九类上下文提示词模板</li><li>场景人物、地点与原文依据</li><li>镜头景别、运镜、时长与提示词</li></ul><span class="availability new">新版源码</span></article>
+        <article><span class="number">06 / HANDOFF</span><h3>ArcReel 与本地 MCP</h3><p>将创作资料交给后续制作工具。导出保留来源修订与哈希，本地 MCP 读取同一份工作区。</p><ul><li>风格化 3D 漫剧改编包</li><li>角色、场景、分镜与清单</li><li>新版：已审设计与提示词随包交付</li></ul><span class="availability">已有基础 · 新版增强</span></article>
+      </div>
+    </section>
+
+    <section class="screen-section wrap"><div class="window-bar"><span></span><span></span><span></span><small>IPloom Studio · 工作区总览</small></div><img src="assets/dashboard.png" width="1440" height="888" alt="IPloom Studio 0.3.0 桌面总览：左侧世界和导航，主区域展示小说、人物关系及最近创作" loading="lazy"><p class="caption">0.3.0 实际界面。浅色纸面与深绿侧栏，让故事资产有一个安静的工作空间。</p></section>
+
+    <section id="workflow" class="workflow-section"><div class="wrap section"><p class="eyebrow">FROM MANUSCRIPT TO PRODUCTION</p><h2>让 AI 的每一步，<br>都有对象、依据和交付物。</h2><p class="section-intro">新版制作流程 · 自动执行由你发起，完成由你确认。</p><div class="pipeline">
+      <article><span>01</span><h3>导入原稿</h3><p>TXT、Markdown 或粘贴正文；先预览章节拆分，保留原文和章节标题。</p><small>交付：小说 + 章节</small></article>
+      <article><span>02</span><h3>提取故事资产</h3><p>模型分段分析人物、地点、组织、设定、方向性关系与场景，附原文引用。</p><small>交付：可审阅的资产草案</small></article>
+      <article><span>03</span><h3>设计制作规格</h3><p>将世界、人物、服装、场景与分镜拆成任务，带入相关设定及已完成设计。</p><small>交付：设计稿 + 提示词</small></article>
+      <article><span>04</span><h3>审阅并交付</h3><p>核对人物身份、空间与剧情连续性；已完成设计进入带哈希的改编包。</p><small>交付：可追溯的制作资料</small></article>
+    </div><div class="workflow-example"><div><span class="pill light">一个具体例子</span><h3>“为第七章的夜雨追逐，<br>准备可复用的制作资料。”</h3><p>先选中章节与人物，确认人物设计，再设计雨夜服装与旧城街道，最后制作分镜。服装任务会引用前置人物设计；分镜任务会引用已完成的场景设计。</p></div><ol><li><span>已完成</span>世界规则：夜间钟声改变城市路径</li><li><span>已完成</span>人物设计：身份、轮廓、固定特征</li><li class="current"><span>执行中</span>服装设计：雨披、材质、配色、湿润状态</li><li><span>等待依赖</span>场景设计：街道、入口、光源、路线</li><li><span>等待依赖</span>分镜设计：景别、运镜、动作、对白</li><li><span>待审</span>作者核对后，进入下一步</li></ol><p class="example-note">流程示意，非实时任务状态。当前版本生成文字规格与提示词；图片、视频、配音和成片由下游工具制作。</p></div></div></section>
+
+    <section id="prompts" class="wrap section"><div class="section-heading"><div><p class="eyebrow">CONTEXT-AWARE PROMPTS</p><h2>每一类设计，<br>都有对应的提示词。</h2></div><p>选择对象 → 自动带入上下文 → 编辑 → 复制或执行。<br>固定身份与风格，给创意留出空间。</p></div><div class="prompt-grid">
+      <article><h3>世界观</h3><p>规则、历史、地理、组织与未解之谜；区分既定事实和新提案。</p></article><article><h3>章节创作</h3><p>章节目标、视角、人物动机、剧情顺序与伏笔；生成正文和连续性备注。</p></article><article><h3>人物设计</h3><p>身份、轮廓、外貌、性格、声音与三视图提示词；明确固定特征。</p></article><article><h3>人物服装</h3><p>场合、材质、颜色、层次、配饰、磨损与变体；保持脸和身体一致。</p></article><article><h3>关系审查</h3><p>关系方向、动机、明暗状态、演变与章节证据；不把同场出现当作关系。</p></article><article><h3>地点布景</h3><p>地理、入口、比例、布局、道具、光照和色彩；维护空间连续性。</p></article><article><h3>场景拆解</h3><p>时间、地点、人物、服装状态、目标冲突、动作节拍、对白和过渡。</p></article><article><h3>镜头分镜</h3><p>景别、镜头运动、调度、时长、对白、图像提示词、视频提示词与负向约束。</p></article><article><h3>连续性审查</h3><p>核对剧情、关系、服装、地理与镜头；列出证据、问题等级与修复建议。</p></article>
+    </div><p class="callout">默认改编方向：风格化 3D 动画。模板要求非写实、非真人，并持续保持人物身份与服装连续性。</p></section>
+
+    <section id="guide" class="wrap section guide"><div><p class="eyebrow">GET STARTED</p><h2>从你的第一份原稿开始。</h2><p class="section-intro">下列导入与模型步骤适用于新版源码。0.3.0 可先手动创建世界、小说、人物与工作流。</p><ol class="steps"><li><h3>安装并建立本地工作区</h3><p>下载对应系统安装包。先探索示例世界，再创建自己的故事。设置页可查看数据目录与 MCP 配置。</p></li><li><h3>导入，或直接开始写作</h3><p>新版在“小说书架 → 导入已有小说”选择 TXT/Markdown。其他格式先导出 UTF-8 文本。检查标题和章节预览，再决定是否使用 AI 分析。</p></li><li><h3>配置你的模型</h3><p>桌面“设置 → 模型 API”填写兼容 Chat Completions 的基础地址、模型 ID 和密钥。支持 HTTPS，或回环 HTTP 本地模型。配置只在当前会话有效。</p></li><li><h3>审阅资产，建立制作任务</h3><p>分析结果中的名字、别名、关系方向与原文依据都需要核对。制作台可建立六阶段依赖任务，也可以独立创作章节或地点。</p></li><li><h3>边看生成，边确认交付</h3><p>查看实时输出、编辑草案、保存审阅修改。前置任务标记“完成”后再执行下一步。场景与镜头的结构化内容在章节编辑区维护。</p></li><li><h3>导出改编包</h3><p>选择作品与章节，导出 ArcReel 资料。新版的已完成制作设计随包输出；待审结果不会混入已审设计清单。</p></li></ol></div><aside class="guide-aside"><h3>数据与调用边界</h3><dl><dt>你的稿件存在哪里？</dt><dd>桌面使用本地工作区文件与备份；浏览器预览使用 localStorage。</dd><dt>什么时候联网？</dt><dd>仅当你明确执行模型任务或分析，并确认端点、模型和发送内容时。</dd><dt>密钥会进入导出吗？</dt><dd>不会。密钥只在桌面主进程内存中，退出后需重新填写。</dd><dt>任务失败怎么办？</dt><dd>可以取消和重试。超时或不完整输出不记作成功；分析失败不写入部分资产。</dd><dt>支持多长的小说？</dt><dd>文件 ≤8 MB，文本 ≤200 万字符，≤1,000 章。每次 AI 分析 ≤40 段，每段 ≤8,000 字符；更长内容请拆分或纯导入。</dd></dl><a class="text-link" href="https://github.com/j4tmr/iploom/blob/main/docs/ai-production.md">完整 AI 制作指南 ↗</a></aside></section>
+
+    <section class="wrap screen-section"><div class="window-bar"><span></span><span></span><span></span><small>IPloom Studio · 任务与交付管理</small></div><img src="assets/workflow.png" width="1440" height="888" alt="IPloom Studio 0.3.0 AI 工作流界面，展示任务状态、依赖关系、任务简报与结果编辑区" loading="lazy"><p class="caption">0.3.0 工作流界面。新版在其上增加真实模型执行、实时产出、长设计稿与制作提示词。</p></section>
+
+    <section id="download" class="wrap section"><p class="eyebrow">MAKE ROOM FOR YOUR NEXT WORLD</p><h2>下载 IPloom Studio</h2><p class="section-intro">当前发行版 0.3.0 · macOS 与 Windows。新版制作功能请查看源码与后续发行记录。</p><div class="download-grid"><article><span class="platform">macOS</span><h3>一个安装包，<br>两种 Mac 架构。</h3><p>Universal · Apple silicon + Intel</p><a class="button primary" href="https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-darwin-universal.dmg">下载 DMG <span>↓</span></a><a class="text-link" href="https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-darwin-universal.zip">下载 ZIP 版本 ↗</a></article><article><span class="platform">Windows</span><h3>在桌面，<br>继续你的故事。</h3><p>x64 · 安装程序</p><a class="button primary" href="https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-win32-x64.exe">下载 EXE <span>↓</span></a><a class="text-link" href="https://github.com/j4tmr/iploom/releases/latest">查看全部发行文件 ↗</a></article></div><p class="download-note">0.3.0 安装包未签名。请从此仓库下载，并核对 <a href="https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/SHA256SUMS.txt">SHA256 校验和</a>；macOS / Windows 可能显示来源提示。源码与新版安装包是不同交付状态。</p></section>
+
+    <section id="faq" class="wrap section faq"><p class="eyebrow">GOOD TO KNOW</p><h2>开始之前，你可能想知道。</h2><details><summary>这是写小说的软件，还是漫剧生成器？</summary><p>它是连接两者的 IP 制作工作台：维护故事事实来源，把小说、人物、服装、场景、分镜与提示词组织成可追溯的资料。当前不内置图片、视频或最终成片渲染引擎。</p></details><details><summary>AI 会自动改掉我的小说吗？</summary><p>不会。导入分析要经过审阅；制作任务结果保存到工作流待审区。作者确认后再更新正文或结构化资产。</p></details><details><summary>我可以使用本地模型吗？</summary><p>可以配置兼容 Chat Completions 的回环 HTTP 服务。远程服务必须使用 HTTPS；具体模型需要支持所需上下文与输出格式。不同提供商的兼容性需要实际验证。</p></details><details><summary>为什么导入时需要核对人物名字与关系？</summary><p>模型可能把别名当成新人、把同名人物合并，或误判关系。系统检查精确原文引用与引用完整性，但无法代替作者判断。审阅阶段可编辑提取结果。</p></details><details><summary>MCP 能做什么？</summary><p>本地 MCP 客户端可列出世界和小说、读取章节、搜索设定、读取关系图和工作流简报，并按明确工具调用导出 ArcReel 包。查询工具保持只读；导出工具会写文件。</p></details><details><summary>如何运行新版源码？</summary><p>克隆仓库，按 <a href="https://github.com/j4tmr/iploom/blob/main/CONTRIBUTING.md">开发说明</a> 安装仓库指定的 Bun / Node，执行 <code>bun install --frozen-lockfile</code> 和 <code>bun run dev</code>。源码已合并不意味着新桌面安装包已经发布。</p></details><details><summary>可以把工作区交回旧版本吗？</summary><p>新版兼容读取原有工作区。工作流长文本上限已经放宽；旧版 0.3.0 无法读取超过旧 500 字符限制的任务内容。降级前保留独立备份。</p></details></section>
+  </main>
+  <footer class="wrap"><a class="brand" href="#"><span class="brand-icon">界</span><span>IPloom <small>STUDIO</small></span></a><p>让每个故事，都拥有继续生长的结构。</p><div><a href="https://github.com/j4tmr/iploom">源代码</a><a href="https://github.com/j4tmr/iploom/issues">反馈问题</a><a href="https://github.com/j4tmr/iploom/blob/main/README.md">English docs</a><a href="https://github.com/j4tmr/iploom/blob/main/LICENSE">MIT License</a></div></footer>
+</body>
+</html>
