@@ -1,4 +1,4 @@
-import type { StudioWorkspace, TimelineEvent } from "./types.ts";
+import type { StoryWork, StudioWorkspace, TimelineEvent } from "./types.ts";
 import { validateWorkspace, WorkspaceValidationError } from "./validate.ts";
 
 export interface WorkspaceChangeApplied {
@@ -61,6 +61,29 @@ export function applyWorkspaceChange(
   } catch (reason) {
     return describeFailure(reason);
   }
+}
+
+/**
+ * Save a work built by an editor form.
+ *
+ * The incoming object is copied before it enters the draft because forms build
+ * it from live workspace data (the novel form reuses the stored chapter array),
+ * and a universe change below rewrites cast and location references on those
+ * chapters. Without the copy, a rejected save would mutate the previous
+ * workspace through the shared array even though the draft is discarded.
+ */
+export function saveWorkFromEditor(
+  draft: StudioWorkspace,
+  next: StoryWork,
+): void {
+  const saved = structuredClone(next);
+  const index = draft.works.findIndex((item) => item.id === saved.id);
+  const previous = index >= 0 ? draft.works[index] : undefined;
+  if (index >= 0) draft.works[index] = saved;
+  else draft.works.push(saved);
+  draft.lastOpenedWorkId = saved.id;
+  if (previous && previous.universeId !== saved.universeId)
+    reassignWorkUniverse(draft, saved.id, saved.universeId);
 }
 
 /**

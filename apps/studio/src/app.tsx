@@ -5,7 +5,7 @@ import { taskDescendantIds } from "./core/workflow.ts";
 import { removeSceneReferences } from "./core/timeline.ts";
 import {
   deleteUniverseFromDraft,
-  reassignWorkUniverse,
+  saveWorkFromEditor,
   unlinkCharacterFromUniverse,
 } from "./core/integrity.ts";
 import {
@@ -260,15 +260,7 @@ export function App() {
 
   const saveNovel = (next: StoryWork) => {
     const exists = workspace.works.some((item) => item.id === next.id);
-    const applied = mutateChecked((draft) => {
-      const index = draft.works.findIndex((item) => item.id === next.id);
-      const previous = index >= 0 ? draft.works[index] : undefined;
-      if (index >= 0) draft.works[index] = next;
-      else draft.works.push(next);
-      draft.lastOpenedWorkId = next.id;
-      if (previous && previous.universeId !== next.universeId)
-        reassignWorkUniverse(draft, next.id, next.universeId);
-    });
+    const applied = mutateChecked((draft) => saveWorkFromEditor(draft, next));
     if (!applied) return;
     if (!exists) navigate({ name: "work", workId: next.id });
     notify(t("saved"));

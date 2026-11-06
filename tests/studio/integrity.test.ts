@@ -4,6 +4,7 @@ import {
   applyWorkspaceChange,
   deleteUniverseFromDraft,
   reassignWorkUniverse,
+  saveWorkFromEditor,
   unlinkCharacterFromUniverse,
 } from "../../apps/studio/src/core/integrity.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
@@ -91,6 +92,36 @@ describe("workspace integrity", () => {
       id: scoped.id,
       version: scoped.version,
     });
+    workById(workspace, "work_tide_clock").chapters[0]?.scenes.push({
+      id: "scene_tide_rain_shop",
+      title: "雨夜修表铺",
+      summary: "",
+      locationId: "loc_old_tower",
+      characterIds: ["char_lin", "char_gu"],
+      shots: [],
+    });
+    workspace.timelineEvents.push({
+      id: "timeline_echo_courier",
+      universeId: "uni_mist_harbor",
+      workId: "work_tide_clock",
+      chapterId: "chapter_tide_001",
+      storyTime: "雨夜 22:45",
+      order: 30,
+      subjectKind: "character",
+      subjectId: "char_echo",
+      eventKind: "state-change",
+      title: { zh: "回声换班", en: "Echo changes shifts" },
+      stateBefore: "回声在修表铺外等候。",
+      stateAfter: "回声接过铜钥匙，消失在同一场雨里。",
+      canonStatus: "proposed",
+      relatedCharacterIds: ["char_lin", "char_gu"],
+      relatedLocationIds: ["loc_old_tower"],
+      relatedObjectIds: [],
+      evidence: "",
+      productionPrompt: "",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
     expect(() => validateWorkspace(workspace)).not.toThrow();
 
     const outcome = applyWorkspaceChange(workspace, (draft) => {
@@ -109,9 +140,18 @@ describe("workspace integrity", () => {
     expect(moved.chapters[2]?.characterIds).toEqual(["char_gu"]);
     expect(moved.chapters[2]?.locationId).toBeUndefined();
 
-    expect(
-      next.timelineEvents.filter((event) => event.workId === "work_tide_clock"),
-    ).toHaveLength(0);
+    const movedScene = moved.chapters[0]?.scenes[0];
+    expect(movedScene?.characterIds).toEqual(["char_gu"]);
+    expect(movedScene?.locationId).toBeUndefined();
+
+    const movedEvents = next.timelineEvents.filter(
+      (event) => event.workId === "work_tide_clock",
+    );
+    expect(movedEvents).toHaveLength(1);
+    expect(movedEvents[0]?.id).toBe("timeline_echo_courier");
+    expect(movedEvents[0]?.universeId).toBe("uni_ninth_station");
+    expect(movedEvents[0]?.relatedCharacterIds).toEqual(["char_gu"]);
+    expect(movedEvents[0]?.relatedLocationIds).toEqual([]);
 
     const chapterTask = taskById(next, "task_chapter_three");
     expect(chapterTask.universeId).toBe("uni_ninth_station");
@@ -129,7 +169,17 @@ describe("workspace integrity", () => {
   });
 
   test("unlinking a character from a world clears its references in that world", () => {
-    const outcome = applyWorkspaceChange(demo(), (draft) => {
+    const workspace = demo();
+    workById(workspace, "work_tide_clock").chapters[2]?.scenes.push({
+      id: "scene_tide_pendulums",
+      title: "十三钟摆",
+      summary: "",
+      characterIds: ["char_gu", "char_lin"],
+      shots: [],
+    });
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+
+    const outcome = applyWorkspaceChange(workspace, (draft) => {
       unlinkCharacterFromUniverse(draft, "char_gu", "uni_mist_harbor");
     });
     expect(outcome.ok).toBe(true);
@@ -151,6 +201,9 @@ describe("workspace integrity", () => {
     expect(workById(next, "work_tide_clock").chapters[2]?.characterIds).toEqual(
       ["char_lin", "char_shen"],
     );
+    expect(
+      workById(next, "work_tide_clock").chapters[2]?.scenes[0]?.characterIds,
+    ).toEqual(["char_lin"]);
     expect(taskById(next, "task_chapter_three").characterIds).toEqual([
       "char_lin",
       "char_shen",
@@ -170,6 +223,14 @@ describe("workspace integrity", () => {
       ...unscopedTask(),
       standardRefs: [{ id: scoped.id, version: scoped.version }],
     });
+    workById(workspace, "work_last_train").chapters[0]?.scenes.push({
+      id: "scene_train_blank_ticket",
+      title: "空白车票",
+      summary: "",
+      locationId: "loc_old_tower",
+      characterIds: ["char_lin", "char_echo"],
+      shots: [],
+    });
     expect(() => validateWorkspace(workspace)).not.toThrow();
 
     const outcome = applyWorkspaceChange(workspace, (draft) => {
@@ -185,6 +246,10 @@ describe("workspace integrity", () => {
     expect(survivor.standardRefs).toEqual([]);
     expect(next.characters.some((item) => item.id === "char_lin")).toBe(false);
     expect(next.standards.some((item) => item.id === scoped.id)).toBe(false);
+    const survivorScene =
+      workById(next, "work_last_train").chapters[0]?.scenes[0];
+    expect(survivorScene?.characterIds).toEqual(["char_echo"]);
+    expect(survivorScene?.locationId).toBeUndefined();
 
     expect(() => validateWorkspace(next)).not.toThrow();
   });
@@ -276,5 +341,38 @@ describe("workspace integrity", () => {
       if (work) work.status = "complete";
     });
     expect(recovered.ok).toBe(true);
+  });
+
+  test("a rejected novel save cannot mutate the live workspace through form state", () => {
+    const before = demo();
+    const snapshot = structuredClone(before);
+    const live = workById(before, "work_tide_clock");
+
+    // The novel form builds its result from the stored work, so the chapters
+    // array it hands to the save handler is the one still held by the live
+    // workspace. The invalid word target makes validation reject the save
+    // after the universe cascade has already run.
+    const rejected = applyWorkspaceChange(before, (draft) => {
+      saveWorkFromEditor(draft, {
+        ...live,
+        universeId: "uni_ninth_station",
+        targetWords: 1.5,
+        chapters: live.chapters,
+      });
+    });
+
+    expect(rejected.ok).toBe(false);
+    if (rejected.ok) return;
+    expect(rejected.error).toContain("targetWords");
+
+    const untouched = workById(before, "work_tide_clock");
+    expect(untouched.universeId).toBe("uni_mist_harbor");
+    expect(untouched.chapters[0]?.characterIds).toEqual([
+      "char_lin",
+      "char_shen",
+      "char_echo",
+    ]);
+    expect(untouched.chapters[0]?.locationId).toBe("loc_old_tower");
+    expect(before).toEqual(snapshot);
   });
 });
