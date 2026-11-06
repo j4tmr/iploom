@@ -5358,7 +5358,6 @@ select.input {
 
 .model-button.unconfigured {
   border-color: color-mix(in srgb, #c08a2e 45%, var(--line));
-  color: #9a6b1f;
 }
 
 .online-dot.offline {

@@ -19,7 +19,7 @@ import { createDemoWorkspace } from "../src/core/factory.ts";
 import {
   RELEASES_API_URL,
   buildUpdateCheck,
-  parseGithubReleases,
+  parseReleasePayload,
   unavailableUpdateCheck,
   type UpdateCheckResult,
 } from "../src/core/updates.ts";
@@ -134,7 +134,7 @@ let updateCheckInFlight: Promise<UpdateCheckResult> | null = null;
 
 async function checkForUpdates(): Promise<UpdateCheckResult> {
   const currentVersion = app.getVersion();
-  const checkedAt = new Date().toISOString();
+  const checkedAt = () => new Date().toISOString();
   try {
     const response = await net.fetch(RELEASES_API_URL, {
       headers: {
@@ -147,17 +147,21 @@ async function checkForUpdates(): Promise<UpdateCheckResult> {
     if (!response.ok) {
       return unavailableUpdateCheck(
         currentVersion,
-        checkedAt,
+        checkedAt(),
         "http",
         response.status,
       );
     }
     const payload: unknown = await response.json().catch(() => null);
+    const releases = parseReleasePayload(payload);
+    if (!releases) {
+      return unavailableUpdateCheck(currentVersion, checkedAt(), "response");
+    }
     return buildUpdateCheck(
-      parseGithubReleases(payload),
+      releases,
       currentVersion,
       process.platform,
-      checkedAt,
+      checkedAt(),
     );
   } catch (error) {
     const timedOut =
@@ -165,7 +169,7 @@ async function checkForUpdates(): Promise<UpdateCheckResult> {
       (error.name === "TimeoutError" || error.name === "AbortError");
     return unavailableUpdateCheck(
       currentVersion,
-      checkedAt,
+      checkedAt(),
       timedOut ? "timeout" : "network",
     );
   }

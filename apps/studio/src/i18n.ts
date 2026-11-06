@@ -349,11 +349,9 @@ const zh = {
   modelSetupTitle: "尚未配置模型",
   modelSetupBody:
     "连接兼容 Chat Completions 的模型后即可发送制作提示词；其余功能均可本地使用。",
-  modelCurrent: "当前模型",
   modelEndpoint: "接口地址",
   modelIdentifier: "模型标识",
 
-  updates: "版本更新",
   updateTitle: "应用更新",
   checkUpdates: "检查更新",
   checkingUpdates: "检查中…",
@@ -366,6 +364,7 @@ const zh = {
   updateReasonTimeout: "请求超时，请稍后重试。",
   updateReasonNetwork: "无法连接 GitHub，请检查网络后重试。",
   updateReasonHttp: "GitHub 返回 HTTP {status}。",
+  updateReasonResponse: "GitHub 返回了无法识别的数据，请稍后重试。",
   updateReasonVersion: "当前版本号无法解析，无法比较版本。",
   updateReasonDesktopOnly: "更新检查仅在桌面版可用。",
   releaseNotes: "版本说明",
@@ -730,11 +729,9 @@ const en: Record<MessageKey, string> = {
   modelSetupTitle: "No model configured yet",
   modelSetupBody:
     "Connect a Chat Completions-compatible endpoint to send production prompts. Everything else still works locally.",
-  modelCurrent: "Current model",
   modelEndpoint: "Endpoint",
   modelIdentifier: "Model ID",
 
-  updates: "Updates",
   updateTitle: "Application updates",
   checkUpdates: "Check for updates",
   checkingUpdates: "Checking…",
@@ -747,6 +744,8 @@ const en: Record<MessageKey, string> = {
   updateReasonTimeout: "The request timed out. Try again shortly.",
   updateReasonNetwork: "Could not reach GitHub. Check your connection and retry.",
   updateReasonHttp: "GitHub returned HTTP {status}.",
+  updateReasonResponse:
+    "GitHub returned an unreadable response. Try again later.",
   updateReasonVersion:
     "The current version cannot be parsed, so versions cannot be compared.",
   updateReasonDesktopOnly: "Update checks are available in the desktop app only.",

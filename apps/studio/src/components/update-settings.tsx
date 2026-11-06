@@ -14,6 +14,8 @@ function failureText(result: UpdateCheckResult, t: Translate): string {
       return t("updateReasonNetwork");
     case "http":
       return t("updateReasonHttp", { status: result.httpStatus ?? "?" });
+    case "response":
+      return t("updateReasonResponse");
     case "version":
       return t("updateReasonVersion");
     case "desktop-only":
@@ -34,6 +36,7 @@ export function UpdateSettings({ locale, t }: { locale: UiLocale; t: Translate }
     try {
       setResult(await bridge.checkForUpdates());
     } catch (reason) {
+      setResult(null);
       setError(String(reason));
     } finally {
       setBusy(false);
@@ -84,7 +87,7 @@ export function UpdateSettings({ locale, t }: { locale: UiLocale; t: Translate }
         {result.recent.map((item) => <li key={item.tag}>
           <button className="release-link" onClick={() => void bridge.openExternal(item.notesUrl)}>
             <strong>v{item.version}</strong>
-            <span>{formatDate(item.publishedAt, locale)}</span>
+            {item.publishedAt ? <span>{formatDate(item.publishedAt, locale)}</span> : null}
           </button>
         </li>)}
       </ul>

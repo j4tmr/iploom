@@ -4,6 +4,7 @@ import {
   compareSemver,
   isAllowedReleaseUrl,
   parseGithubReleases,
+  parseReleasePayload,
   parseReleaseTag,
   parseSemver,
   platformDownload,
@@ -124,6 +125,35 @@ describe("update check", () => {
     expect(parseGithubReleases(null)).toEqual([]);
     expect(parseGithubReleases({})).toEqual([]);
     expect(parseGithubReleases([null, 42])).toEqual([]);
+  });
+
+  test("distinguishes a non-release payload from an empty release list", () => {
+    expect(parseReleasePayload(null)).toBeNull();
+    expect(parseReleasePayload({ message: "rate limited" })).toBeNull();
+    expect(parseReleasePayload("<html>proxy error</html>")).toBeNull();
+    expect(parseReleasePayload([])).toEqual([]);
+    expect(parseReleasePayload({})).toBeNull();
+  });
+
+  test("drops unparseable publication dates instead of rendering blanks", () => {
+    const parsed = parseGithubReleases([
+      {
+        tag_name: "studio-v0.4.0",
+        html_url: "https://github.com/j4tmr/iploom/releases/tag/studio-v0.4.0",
+        draft: false,
+        prerelease: false,
+        assets: [],
+      },
+      {
+        tag_name: "studio-v0.5.0",
+        html_url: "https://github.com/j4tmr/iploom/releases/tag/studio-v0.5.0",
+        published_at: "not a date",
+        draft: false,
+        prerelease: false,
+        assets: [],
+      },
+    ]);
+    expect(parsed.map((item) => item.publishedAt)).toEqual(["", ""]);
   });
 
   test("selects the newest stable release and maps platform downloads", () => {

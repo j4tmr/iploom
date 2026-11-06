@@ -23,7 +23,7 @@ export function AiSettings({ locale, t, info, onConfigured }: {
     setEndpoint(info.endpoint);
     setModel(info.model);
   }, [info]);
-  return <section className="settings-panel ai-settings-card">
+  return <section className="settings-panel">
     <h2>{t("modelSettings")}</h2>
     <p>{en ? "Chat Completions compatible. Configuration and key stay in desktop memory for this session only; re-enter after restart. Sending requires an explicit run action. Local servers may leave the key blank." : "兼容 Chat Completions。配置与密钥仅保存在本次桌面会话内存，重启后需重新填写；只有点击执行才发送内容。本地服务可不填密钥。"}</p>
     {info?.configured ? <div className="model-status">

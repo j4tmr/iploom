@@ -40,6 +40,7 @@ export type UpdateCheckFailureReason =
   | "timeout"
   | "network"
   | "http"
+  | "response"
   | "version"
   | "desktop-only";
 
@@ -123,15 +124,19 @@ export function parseGithubReleases(payload: unknown): GithubRelease[] {
       if (!name || !isAllowedReleaseUrl(url)) continue;
       assets.push({ name, url });
     }
-    releases.push({
-      tag,
-      notesUrl,
-      publishedAt:
-        typeof item.published_at === "string" ? item.published_at : "",
-      assets,
-    });
+    const publishedAt =
+      typeof item.published_at === "string" &&
+      !Number.isNaN(Date.parse(item.published_at))
+        ? item.published_at
+        : "";
+    releases.push({ tag, notesUrl, publishedAt, assets });
   }
   return releases;
+}
+
+/** Returns null when the API response is not a release list at all. */
+export function parseReleasePayload(payload: unknown): GithubRelease[] | null {
+  return Array.isArray(payload) ? parseGithubReleases(payload) : null;
 }
 
 const PLATFORM_EXTENSIONS: Record<string, readonly UpdateDownloadKind[]> = {
