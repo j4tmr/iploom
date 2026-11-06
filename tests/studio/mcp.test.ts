@@ -50,6 +50,16 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
   const root = mkdtempSync(join(tmpdir(), "iploom-studio-mcp-"));
   const workspacePath = join(root, "workspace.json");
   const workspace = createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z");
+  const trainTask = structuredClone(workspace.workflowTasks[0]!);
+  trainTask.id = "task_train_standards";
+  trainTask.universeId = "uni_ninth_station";
+  trainTask.workId = "work_last_train";
+  trainTask.chapterId = "chapter_train_001";
+  trainTask.characterIds = ["char_echo"];
+  trainTask.parentId = undefined;
+  trainTask.dependsOnIds = [];
+  trainTask.standardRefs = [{ id: "std_baseline_language", version: 1 }];
+  workspace.workflowTasks.push(trainTask);
   await new WorkspaceStore(workspacePath).save(workspace);
   const before = readFileSync(workspacePath, "utf8");
   const serverPath = resolve(
@@ -262,7 +272,7 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     expect(standard.isError).toBe(false);
     expect(standard.body.applies_to).toBe("project");
     const pinnedBy = standard.body.pinned_by_task_ids as string[];
-    expect(pinnedBy).toHaveLength(4);
+    expect(pinnedBy).toHaveLength(5);
     expect(pinnedBy).toContain("task_world_rules");
     const standardData = standard.body.standard as {
       id: string;
@@ -358,6 +368,20 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     expect(statusEdited.version).toBe(2);
     expect(statusEdited.status).toBe("active");
 
+    const retarget = await call(client, "update_standard", {
+      standard_id: "std_baseline_language",
+      universe_id: "uni_mist_harbor",
+    });
+    expect(retarget.isError).toBe(false);
+    expect(retarget.body.revision).toBe(11);
+    expect(retarget.body.version_bumped).toBe(true);
+    const retargeted = retarget.body.standard as {
+      universe_id: string | null;
+      version: number;
+    };
+    expect(retargeted.universe_id).toBe("uni_mist_harbor");
+    expect(retargeted.version).toBe(2);
+
     const invalidKind = await call(client, "create_standard", {
       kind: "bogus",
       title: { zh: "无效类型", en: "Invalid kind" },
@@ -393,8 +417,28 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     const writtenAfterWrites = JSON.parse(afterWrites) as {
       revision: number;
       standards: Array<{ id: string; version: number; status: string }>;
+      workflowTasks: Array<{
+        id: string;
+        standardRefs: Array<{ id: string; version: number }>;
+      }>;
     };
-    expect(writtenAfterWrites.revision).toBe(10);
+    expect(writtenAfterWrites.revision).toBe(11);
+    const trainAfterRetarget = writtenAfterWrites.workflowTasks.find(
+      (task) => task.id === "task_train_standards",
+    );
+    expect(
+      trainAfterRetarget?.standardRefs.some(
+        (ref) => ref.id === "std_baseline_language",
+      ),
+    ).toBe(false);
+    const tideAfterRetarget = writtenAfterWrites.workflowTasks.find(
+      (task) => task.id === "task_review_first",
+    );
+    expect(
+      tideAfterRetarget?.standardRefs.some(
+        (ref) => ref.id === "std_baseline_language",
+      ),
+    ).toBe(true);
     expect(writtenAfterWrites.standards).toHaveLength(7);
     const persisted = writtenAfterWrites.standards.find(
       (item) => item.id === createdStandard.id,

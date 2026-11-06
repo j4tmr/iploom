@@ -1,5 +1,11 @@
-export const WORKSPACE_SCHEMA_VERSION = 4 as const;
+export const WORKSPACE_SCHEMA_VERSION = 5 as const;
 export const ARC_REEL_SCHEMA = "iploom.arcreel/v1" as const;
+/** Longest result text the workspace stores per language. */
+export const MAX_WORKFLOW_RESULT_LENGTH = 200_000 as const;
+/** Longest text a localized name, tagline or summary field may hold per language. */
+export const MAX_LOCALIZED_LENGTH = 500 as const;
+/** Longest prompt the model client accepts for a single request. */
+export const MAX_AI_PROMPT_LENGTH = 100_000 as const;
 
 export type UiLocale = "zh-CN" | "en";
 export type ThemeMode = "system" | "light" | "dark";

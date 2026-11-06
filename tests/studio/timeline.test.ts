@@ -162,11 +162,71 @@ describe("story timeline", () => {
     anchored.sceneId = "scene_rain_counter";
     const kept = removeSceneReferences(
       [sceneSubject, anchored],
+      workspace.works[0]!.id,
       chapter.id,
       new Set(["scene_rain_counter"]),
     );
     expect(kept.map((event) => event.id)).toEqual(["timeline_scene_anchor"]);
     expect(kept[0]!.sceneId).toBeUndefined();
+  });
+
+  test("scene removal is scoped by novel so equal chapter and scene ids elsewhere survive", () => {
+    const workspace = createDemoWorkspace("en");
+    const work = workspace.works[0]!;
+    const otherWork = workspace.works[1]!;
+    const sharedChapterId = work.chapters[0]!.id;
+    work.chapters[0]!.scenes.push({
+      id: "scene_shared",
+      title: "Shared",
+      summary: "",
+      characterIds: [],
+      shots: [],
+    });
+    const collisionChapter = structuredClone(otherWork.chapters[0]!);
+    collisionChapter.id = sharedChapterId;
+    collisionChapter.number = 2;
+    collisionChapter.scenes.push({
+      id: "scene_shared",
+      title: "Shared",
+      summary: "",
+      characterIds: [],
+      shots: [],
+    });
+    otherWork.chapters.push(collisionChapter);
+
+    const tideEvent = structuredClone(workspace.timelineEvents[0]!);
+    tideEvent.id = "timeline_tide_scene";
+    tideEvent.workId = work.id;
+    tideEvent.chapterId = sharedChapterId;
+    tideEvent.sceneId = "scene_shared";
+    tideEvent.subjectKind = "scene";
+    tideEvent.subjectId = "scene_shared";
+    const trainEvent = {
+      ...structuredClone(workspace.timelineEvents[0]!),
+      id: "timeline_train_scene",
+      universeId: otherWork.universeId,
+      workId: otherWork.id,
+      chapterId: sharedChapterId,
+      sceneId: "scene_shared",
+      subjectKind: "location" as const,
+      subjectId: "loc_platform_seven",
+      relatedCharacterIds: ["char_echo"],
+      relatedLocationIds: [],
+      relatedObjectIds: [],
+    };
+    workspace.timelineEvents.push(tideEvent, trainEvent);
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+
+    const kept = removeSceneReferences(
+      workspace.timelineEvents,
+      work.id,
+      sharedChapterId,
+      new Set(["scene_shared"]),
+    );
+    expect(kept.some((event) => event.id === "timeline_tide_scene")).toBe(false);
+    const survivor = kept.find((event) => event.id === "timeline_train_scene");
+    expect(survivor?.sceneId).toBe("scene_shared");
+    expect(survivor?.workId).toBe(otherWork.id);
   });
 
   test("rejects scene subjects without a chapter and cross-universe links", () => {

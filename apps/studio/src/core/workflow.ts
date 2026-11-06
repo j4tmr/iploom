@@ -23,6 +23,27 @@ export interface WorkflowSummary {
   waiting: number;
 }
 
+/**
+ * Writes a reviewed result into the matching task and reports whether the task
+ * was still present. Callers that report success must check the return value:
+ * a workspace change that finds no target is still a valid no-op.
+ */
+export function setWorkflowTaskResult(
+  draft: StudioWorkspace,
+  taskId: string,
+  result: string,
+  locale: UiLocale,
+): boolean {
+  const target = draft.workflowTasks.find((item) => item.id === taskId);
+  if (!target) return false;
+  target.result =
+    locale === "zh-CN"
+      ? { ...target.result, zh: result }
+      : { ...target.result, en: result };
+  target.updatedAt = new Date().toISOString();
+  return true;
+}
+
 export function workflowTaskReadiness(
   workspace: StudioWorkspace,
   task: WorkflowTask,

@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AiConfigInfo } from "./core/ai.ts";
 import { buildRelationshipGraph } from "./core/graph.ts";
-import { taskDescendantIds } from "./core/workflow.ts";
+import { setWorkflowTaskResult, taskDescendantIds } from "./core/workflow.ts";
 import { removeSceneReferences } from "./core/timeline.ts";
 import {
+  deleteChapterFromDraft,
+  deleteCharacterFromDraft,
   deleteUniverseFromDraft,
+  deleteWorkFromDraft,
+  reassignStandardUniverse,
   saveWorkFromEditor,
   unlinkCharacterFromUniverse,
 } from "./core/integrity.ts";
@@ -44,6 +48,7 @@ import {
   translator,
   type Translate,
 } from "./i18n.ts";
+import { MAX_WORKFLOW_RESULT_LENGTH } from "./core/types.ts";
 import { bridge, type AppInfo } from "./platform.ts";
 import {
   applyTheme,
@@ -249,11 +254,12 @@ export function App() {
 
   const saveUniverse = (next: StoryUniverse) => {
     const exists = workspace.universes.some((item) => item.id === next.id);
-    mutate((draft) => {
+    const applied = mutateChecked((draft) => {
       const index = draft.universes.findIndex((item) => item.id === next.id);
       if (index >= 0) draft.universes[index] = next;
       else draft.universes.push(next);
     });
+    if (!applied) return;
     if (!exists) navigate({ name: "universe", id: next.id });
     notify(t("saved"));
   };
@@ -277,35 +283,8 @@ export function App() {
 
   const deleteNovel = (target: StoryWork) => {
     if (!window.confirm(t("confirmDeleteNovel"))) return;
-    const applied = mutateChecked((draft) => {
-      const removedTasks = new Set(
-        draft.workflowTasks
-          .filter((task) => task.workId === target.id)
-          .map((task) => task.id),
-      );
-      draft.works = draft.works.filter((item) => item.id !== target.id);
-      draft.timelineEvents = draft.timelineEvents.filter(
-        (event) => event.workId !== target.id,
-      );
-      draft.workflowTasks = draft.workflowTasks
-        .filter((task) => !removedTasks.has(task.id))
-        .map((task) => ({
-          ...task,
-          parentId:
-            task.parentId && removedTasks.has(task.parentId)
-              ? undefined
-              : task.parentId,
-          dependsOnIds: task.dependsOnIds.filter(
-            (id) => !removedTasks.has(id),
-          ),
-        }));
-      draft.exports = draft.exports.filter(
-        (record) => record.workId !== target.id,
-      );
-      if (draft.lastOpenedWorkId === target.id)
-        draft.lastOpenedWorkId = undefined;
-    });
-    if (!applied) return;
+    if (!mutateChecked((draft) => deleteWorkFromDraft(draft, target.id)))
+      return;
     replaceRoute({ name: "universe", id: target.universeId, tab: "stories" });
     notify(t("saved"));
   };
@@ -326,40 +305,7 @@ export function App() {
 
   const deleteCharacter = (character: Character) => {
     if (!window.confirm(t("confirmDelete"))) return;
-    mutateChecked((draft) => {
-      draft.characters = draft.characters.filter((item) => item.id !== character.id);
-      draft.relationships = draft.relationships.filter(
-        (item) =>
-          item.sourceId !== character.id && item.targetId !== character.id,
-      );
-      draft.timelineEvents = draft.timelineEvents
-        .filter(
-          (event) =>
-            event.subjectKind !== "character" ||
-            event.subjectId !== character.id,
-        )
-        .map((event) => ({
-          ...event,
-          relatedCharacterIds: event.relatedCharacterIds.filter(
-            (id) => id !== character.id,
-          ),
-        }));
-      for (const item of draft.works) {
-        for (const chapter of item.chapters) {
-          chapter.characterIds = chapter.characterIds.filter(
-            (id) => id !== character.id,
-          );
-          for (const scene of chapter.scenes)
-            scene.characterIds = scene.characterIds.filter(
-              (id) => id !== character.id,
-            );
-        }
-      }
-      draft.workflowTasks = draft.workflowTasks.map((task) => ({
-        ...task,
-        characterIds: task.characterIds.filter((id) => id !== character.id),
-      }));
-    });
+    mutateChecked((draft) => deleteCharacterFromDraft(draft, character.id));
   };
 
   const saveRelationship = (relationship: Relationship) => {
@@ -495,17 +441,22 @@ export function App() {
     });
   };
 
-  const saveWorkflowResult = (task: WorkflowTask, result: string) => {
-    mutate((draft) => {
-      const target = draft.workflowTasks.find((item) => item.id === task.id);
-      if (!target) return;
-      target.result =
-        locale === "zh-CN"
-          ? { ...target.result, zh: result }
-          : { ...target.result, en: result };
-      target.updatedAt = new Date().toISOString();
+  const saveWorkflowResult = (task: WorkflowTask, result: string): boolean => {
+    if (result.length > MAX_WORKFLOW_RESULT_LENGTH) {
+      notify(
+        t("resultTooLong", {
+          limit: formatNumber(MAX_WORKFLOW_RESULT_LENGTH, locale),
+        }),
+      );
+      return false;
+    }
+    let found = false;
+    const applied = mutateChecked((draft) => {
+      found = setWorkflowTaskResult(draft, task.id, result, locale);
     });
-    notify(t("saved"));
+    const saved = applied && found;
+    if (saved) notify(t("saved"));
+    return saved;
   };
 
   const saveStandard = (next: WorkspaceStandard) => {
@@ -513,6 +464,7 @@ export function App() {
       const index = draft.standards.findIndex((item) => item.id === next.id);
       if (index >= 0) draft.standards[index] = next;
       else draft.standards.push(next);
+      reassignStandardUniverse(draft, next.id, next.universeId);
     });
     if (applied) notify(t("saved"));
   };
@@ -605,33 +557,9 @@ export function App() {
   const deleteChapter = (workId: string, chapter: Chapter) => {
     if (!window.confirm(t("confirmDelete"))) return;
     mutateChecked((draft) => {
+      deleteChapterFromDraft(draft, workId, chapter.id);
       const target = draft.works.find((item) => item.id === workId);
-      if (!target) return;
-      target.chapters = target.chapters.filter((item) => item.id !== chapter.id);
-      draft.timelineEvents = draft.timelineEvents.filter(
-        (event) => event.chapterId !== chapter.id,
-      );
-      target.updatedAt = new Date().toISOString();
-      const removedTasks = new Set(
-        draft.workflowTasks
-          .filter(
-            (task) =>
-              task.workId === workId && task.chapterId === chapter.id,
-          )
-          .map((task) => task.id),
-      );
-      draft.workflowTasks = draft.workflowTasks
-        .filter((task) => !removedTasks.has(task.id))
-        .map((task) => ({
-          ...task,
-          parentId:
-            task.parentId && removedTasks.has(task.parentId)
-              ? undefined
-              : task.parentId,
-          dependsOnIds: task.dependsOnIds.filter(
-            (id) => !removedTasks.has(id),
-          ),
-        }));
+      if (target) target.updatedAt = new Date().toISOString();
     });
   };
 
@@ -654,6 +582,7 @@ export function App() {
       if (removedSceneIds.size > 0) {
         draft.timelineEvents = removeSceneReferences(
           draft.timelineEvents,
+          workId,
           chapterId,
           removedSceneIds,
         );
@@ -670,21 +599,33 @@ export function App() {
     files: number,
     bytes: number,
   ) => {
-    const record: ExportRecord = {
-      id: createId("export"),
-      workId: bundle.workId,
-      workTitle: bundle.workTitle,
-      createdAt: new Date().toISOString(),
-      chapterIds: bundle.chapters.map((chapter) => chapter.chapterId),
-      fileCount: files,
-      bytes,
-      manifestSha256: bundle.manifestSha256,
-      outputPath: directory,
-    };
-    mutate((draft) => {
+    let recorded = false;
+    const applied = mutateChecked((draft) => {
+      const work = draft.works.find((item) => item.id === bundle.workId);
+      if (!work) return;
+      const chapterIds = new Set(work.chapters.map((item) => item.id));
+      const record: ExportRecord = {
+        id: createId("export"),
+        workId: work.id,
+        workTitle: bundle.workTitle,
+        createdAt: new Date().toISOString(),
+        chapterIds: [
+          ...new Set(
+            bundle.chapters
+              .map((chapter) => chapter.chapterId)
+              .filter((id) => chapterIds.has(id)),
+          ),
+        ],
+        fileCount: files,
+        bytes,
+        manifestSha256: bundle.manifestSha256,
+        outputPath: directory,
+      };
       draft.exports.unshift(record);
+      recorded = true;
     });
-    notify(t("exportSuccess"));
+    if (!applied) return;
+    notify(recorded ? t("exportSuccess") : t("exportWorkMissing"));
   };
 
   const updateSettings = (change: Partial<WorkspaceSettings>) => {
@@ -795,7 +736,7 @@ export function App() {
             aiInfo={aiInfo}
             onOpenSettings={() => navigate({ name: "settings" })}
             context={{ universeId: defaultUniverseId ?? workspace.universes[0]?.id, workId: work?.id, characterId: modal?.kind === "character" ? modal.initial?.id : undefined }}
-            onTasks={(tasks) => mutate((draft) => { for (const task of tasks) { const index = draft.workflowTasks.findIndex((item) => item.id === task.id); if (index < 0) draft.workflowTasks.push(task); else draft.workflowTasks[index] = task; } })}
+            onTasks={(tasks) => mutateChecked((draft) => { for (const task of tasks) { const index = draft.workflowTasks.findIndex((item) => item.id === task.id); if (index < 0) draft.workflowTasks.push(task); else draft.workflowTasks[index] = task; } })}
             onStatus={changeWorkflowStatus} onResult={saveWorkflowResult}
           />
           {state.recovered ? (

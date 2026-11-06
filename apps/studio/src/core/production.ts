@@ -19,7 +19,26 @@ export type ProductionTemplate = keyof typeof productionTemplates;
 export interface ProductionScope { universeId?: string; workId?: string; chapterId?: string; characterId?: string; characterIds?: string[] }
 export interface ProductionPromptOptions { includeStandards?: boolean }
 
+/**
+ * Resolve a production scope against the current workspace.
+ *
+ * Panel state can outlive the entities it was built from: while an export or a
+ * model call runs, the novel may be deleted or moved to another world. Prompts,
+ * created tasks and saved results are pinned only to entities that still exist
+ * and belong together, so the checked commit never rejects them and a task can
+ * never pair a stale chapter with a different work's world.
+ */
+export function resolveProductionScope(workspace: StudioWorkspace, scope: ProductionScope): ProductionScope {
+  const work = scope.workId ? workspace.works.find((item) => item.id === scope.workId) : undefined;
+  const universeId = work?.universeId ?? (scope.universeId && workspace.universes.some((item) => item.id === scope.universeId) ? scope.universeId : undefined);
+  const chapter = work?.chapters.find((item) => item.id === scope.chapterId);
+  const requestedCharacters = scope.characterIds ?? (scope.characterId ? [scope.characterId] : []);
+  const characterIds = requestedCharacters.filter((id) => workspace.characters.some((item) => item.id === id && (!universeId || item.universeIds.includes(universeId))));
+  return { universeId, workId: work?.id, chapterId: chapter?.id, characterId: scope.characterId && characterIds.includes(scope.characterId) ? scope.characterId : undefined, characterIds };
+}
+
 export function buildProductionPrompt(workspace: StudioWorkspace, template: ProductionTemplate, scope: ProductionScope, locale: UiLocale, options: ProductionPromptOptions = {}): string {
+  scope = resolveProductionScope(workspace, scope);
   const work = workspace.works.find((item) => item.id === scope.workId);
   const universeId = work?.universeId ?? scope.universeId;
   const chapter = work?.chapters.find((item) => item.id === scope.chapterId);
@@ -44,8 +63,9 @@ export function buildProductionPrompt(workspace: StudioWorkspace, template: Prod
 }
 
 export function createProductionTasks(workspace: StudioWorkspace, scope: ProductionScope, locale: UiLocale): WorkflowTask[] {
+  scope = resolveProductionScope(workspace, scope);
   const work = workspace.works.find((item) => item.id === scope.workId);
-  const universeId = work?.universeId ?? scope.universeId;
+  const universeId = scope.universeId;
   if (!universeId) throw new Error("请先选择故事世界 / Select a story world first.");
   const now = new Date().toISOString();
   const stages: ProductionTemplate[] = ["world", "character", "costume", "scene", "storyboard", "review"];

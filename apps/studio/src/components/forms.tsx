@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createId, displayText } from "../core/factory.ts";
 import { STANDARD_KINDS, standardKindLabel, standardRefsFor } from "../core/standards.ts";
+import { MAX_LOCALIZED_LENGTH } from "../core/types.ts";
 import type {
   Chapter,
   Character,
@@ -253,22 +254,22 @@ export function UniverseModal({
     >
       <FieldGrid>
         <Field label={t("nameZh")}>
-          <TextInput autoFocus value={nameZh} onChange={(event) => setNameZh(event.target.value)} />
+          <TextInput autoFocus maxLength={MAX_LOCALIZED_LENGTH} value={nameZh} onChange={(event) => setNameZh(event.target.value)} />
         </Field>
         <Field label={t("nameEn")}>
-          <TextInput value={nameEn} onChange={(event) => setNameEn(event.target.value)} />
+          <TextInput maxLength={MAX_LOCALIZED_LENGTH} value={nameEn} onChange={(event) => setNameEn(event.target.value)} />
         </Field>
         <Field label={t("titleZh")}>
-          <TextInput value={taglineZh} onChange={(event) => setTaglineZh(event.target.value)} />
+          <TextInput maxLength={MAX_LOCALIZED_LENGTH} value={taglineZh} onChange={(event) => setTaglineZh(event.target.value)} />
         </Field>
         <Field label={t("titleEn")}>
-          <TextInput value={taglineEn} onChange={(event) => setTaglineEn(event.target.value)} />
+          <TextInput maxLength={MAX_LOCALIZED_LENGTH} value={taglineEn} onChange={(event) => setTaglineEn(event.target.value)} />
         </Field>
         <Field label={t("summaryZh")} wide>
-          <TextArea rows={4} value={summaryZh} onChange={(event) => setSummaryZh(event.target.value)} />
+          <TextArea rows={4} maxLength={MAX_LOCALIZED_LENGTH} value={summaryZh} onChange={(event) => setSummaryZh(event.target.value)} />
         </Field>
         <Field label={t("summaryEn")} wide>
-          <TextArea rows={4} value={summaryEn} onChange={(event) => setSummaryEn(event.target.value)} />
+          <TextArea rows={4} maxLength={MAX_LOCALIZED_LENGTH} value={summaryEn} onChange={(event) => setSummaryEn(event.target.value)} />
         </Field>
         <Field label={t("genre")} hint={t("tagPlaceholder")}>
           <TextInput value={genres} onChange={(event) => setGenres(event.target.value)} />

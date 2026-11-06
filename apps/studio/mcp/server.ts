@@ -10,6 +10,7 @@ import { z } from "zod";
 import { buildArcReelBundle } from "../src/core/arcreel.ts";
 import { countWords, createId } from "../src/core/factory.ts";
 import { buildRelationshipGraph } from "../src/core/graph.ts";
+import { reassignStandardUniverse } from "../src/core/integrity.ts";
 import { standardSchema } from "../src/core/schemas.ts";
 import { searchWorkspace } from "../src/core/search.ts";
 import { applicableStandards, STANDARD_KINDS } from "../src/core/standards.ts";
@@ -1066,6 +1067,8 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
             updatedAt: now,
           });
           current.standards[index] = next;
+          if (universeId !== existing.universeId)
+            reassignStandardUniverse(current, args.standard_id, universeId);
           current.updatedAt = now;
           updated = next;
           versionBumped = contentChanged;
