@@ -1,0 +1,187 @@
+name: Studio Release
+
+on:
+  push:
+    tags:
+      - "studio-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+jobs:
+  verify:
+    name: verify tag and release inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Verify tag matches package version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          test "${GITHUB_REF_NAME}" = "studio-v${version}"
+          test -s "docs/release-notes/${version}.md"
+          echo "Releasing IPloom Studio ${version}"
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run test
+      - run: bun run studio:build:release
+      - name: Verify release inputs
+        run: |
+          set -euo pipefail
+          test -s dist-studio/electron/main.cjs
+          test -s dist-studio/electron/preload.cjs
+          test -s dist-studio/bin/iploom-mcp
+          test -s dist-studio/app/bin/iploom-mcp
+          test -s dist-studio/bin/package.json
+          test -s dist-studio/app/package.json
+          test -s dist-studio/app/renderer/index.html
+          test -s apps/studio/build/icon.icns
+          test -s apps/studio/build/icon.ico
+          node --check dist-studio/electron/main.cjs
+          node --check dist-studio/electron/preload.cjs
+          node --check dist-studio/bin/iploom-mcp
+          grep -q 'Content-Security-Policy' dist-studio/app/renderer/index.html
+          grep -q 'ELECTRON_RUN_AS_NODE' dist-studio/electron/main.cjs
+      - run: bun run studio:verify-mcp
+
+  package:
+    name: build and smoke (${{ matrix.os }})
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: bun install --frozen-lockfile
+      - run: bun run studio:package
+      - name: Verify and smoke macOS packages
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          dmg="release/IPloom-Studio-${version}-darwin-universal.dmg"
+          zip="release/IPloom-Studio-${version}-darwin-universal.zip"
+          test -s "$dmg"
+          test -s "$zip"
+          hdiutil verify "$dmg"
+          unzip -t "$zip" >/dev/null
+          app="$(find release -path '*.app/Contents/MacOS/IPloom Studio' -type f -print -quit)"
+          test -n "$app"
+          lipo -archs "$app" | grep -q arm64
+          lipo -archs "$app" | grep -q x86_64
+      - name: Verify Windows packages
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $installer = Get-ChildItem release -Filter '*.exe' |
+            Where-Object { $_.Length -gt 10000000 } |
+            Select-Object -First 1
+          if (-not $installer) { throw 'NSIS installer not found' }
+          $app = Get-ChildItem release -Recurse -Filter 'IPloom Studio.exe' |
+            Where-Object { $_.Length -gt 1000000 } |
+            Select-Object -First 1
+          if (-not $app) { throw 'Packaged Windows executable not found' }
+          Write-Host "Installer: $($installer.FullName)"
+      - run: bun run studio:smoke:package
+      - name: Upload macOS packages
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-macos-packages
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.blockmap
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Windows packages
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-windows-packages
+          path: |
+            release/*.exe
+            release/*.blockmap
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: publish GitHub Release
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: studio-*-packages
+          path: release-artifacts
+          merge-multiple: true
+      - name: Verify assets and create checksums
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          test "${GITHUB_REF_NAME}" = "studio-v${version}"
+          find release-artifacts -maxdepth 1 -type f -printf '%f\n' | sort
+          test -n "$(find release-artifacts -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$(find release-artifacts -maxdepth 1 -name '*-darwin-universal.zip' -print -quit)"
+          test -n "$(find release-artifacts -maxdepth 1 -name '*.exe' -print -quit)"
+          find release-artifacts -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -print0 |
+            sort -z |
+            xargs -0 sha256sum > release-artifacts/SHA256SUMS.txt
+          cat release-artifacts/SHA256SUMS.txt
+      - name: Create or update Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          notes="docs/release-notes/${version}.md"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-artifacts/* --clobber
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "IPloom Studio ${version}" \
+              --notes-file "$notes" \
+              --latest
+          else
+            gh release create "$GITHUB_REF_NAME" release-artifacts/* \
+              --title "IPloom Studio ${version}" \
+              --notes-file "$notes" \
+              --latest
+          fi
+      - name: Read back published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release view "$GITHUB_REF_NAME" --json tagName,isDraft,isPrerelease,url,assets

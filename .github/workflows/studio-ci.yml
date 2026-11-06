@@ -1,0 +1,131 @@
+name: Studio CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+jobs:
+  quality:
+    name: typecheck, tests and release inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run test
+      - run: bun run studio:build:release
+      - name: Verify release inputs
+        run: |
+          set -euo pipefail
+          test -s dist-studio/electron/main.cjs
+          test -s dist-studio/electron/preload.cjs
+          test -s dist-studio/bin/iploom-mcp
+          test -s dist-studio/app/bin/iploom-mcp
+          test -s dist-studio/bin/package.json
+          test -s dist-studio/app/package.json
+          test -s dist-studio/app/renderer/index.html
+          test -s apps/studio/build/icon.icns
+          test -s apps/studio/build/icon.ico
+          test -s apps/studio/build/icon.png
+          node --check dist-studio/electron/main.cjs
+          node --check dist-studio/electron/preload.cjs
+          node --check dist-studio/bin/iploom-mcp
+          grep -q 'Content-Security-Policy' dist-studio/app/renderer/index.html
+          grep -q 'ELECTRON_RUN_AS_NODE' dist-studio/electron/main.cjs
+          test "$(node -p "require('./package.json').version")" = "$(node -p "require('./dist-studio/app/package.json').version")"
+      - run: bun run studio:verify-mcp
+
+  desktop-smoke:
+    name: desktop smoke (${{ matrix.os }})
+    needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: bun install --frozen-lockfile
+      - run: bun run studio:build:release
+      - run: bun run studio:smoke
+
+  package-smoke:
+    name: package smoke (${{ matrix.os }})
+    needs: desktop-smoke
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: bun install --frozen-lockfile
+      - run: bun run studio:dir
+      - name: Verify macOS package
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          app="$(find release -path '*.app/Contents/MacOS/IPloom Studio' -type f -print -quit)"
+          test -n "$app"
+          lipo -archs "$app" | grep -q arm64
+          lipo -archs "$app" | grep -q x86_64
+          test -s "apps/studio/build/icon.icns"
+      - name: Verify Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $app = Get-ChildItem release -Recurse -Filter 'IPloom Studio.exe' |
+            Where-Object { $_.Length -gt 1000000 } |
+            Select-Object -First 1
+          if (-not $app) { throw 'Packaged Windows executable not found' }
+          if ((Get-Item 'apps/studio/build/icon.ico').Length -lt 1000) {
+            throw 'Windows icon is missing or empty'
+          }
+      - run: bun run studio:smoke:package
+      - name: Upload package-smoke bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-ci-${{ runner.os }}-bundle
+          path: |
+            release/**/IPloom Studio.app/Contents/MacOS/IPloom Studio
+            release/win-unpacked/IPloom Studio.exe
+          if-no-files-found: error
+          retention-days: 7

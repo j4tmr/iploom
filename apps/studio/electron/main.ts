@@ -1,0 +1,537 @@
+import { constants, existsSync } from "node:fs";
+import { access, mkdir, stat, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  session,
+  shell,
+  type IpcMainInvokeEvent,
+  type OpenDialogOptions,
+  type WebContents,
+} from "electron";
+import { createDemoWorkspace } from "../src/core/factory.ts";
+import type {
+  ArcReelBundle,
+  StudioWorkspace,
+  UiLocale,
+} from "../src/core/types.ts";
+import {
+  WorkspaceStore,
+  type LoadedWorkspace,
+} from "../src/node/workspace-store.ts";
+import { createElectronMcpConfig } from "../src/node/mcp-config.ts";
+import type {
+  AppInfo,
+  McpClientConfig,
+  WrittenBundle,
+} from "../src/platform.ts";
+
+const APP_ID = "com.j4tmr.iploom.studio";
+const RENDERER_FILE = join(__dirname, "..", "renderer", "index.html");
+const RENDERER_ROOT = dirname(RENDERER_FILE);
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+let mainWindow: BrowserWindow | null = null;
+let workspaceStore: WorkspaceStore | null = null;
+let devUrl: URL | null = null;
+const smokeMode = process.env.IPLOOM_STUDIO_SMOKE === "1";
+const allowedFolders = new Set<string>();
+
+app.setName("IPloom Studio");
+
+function canonicalFolder(value: string): string {
+  const absolute = resolve(value);
+  return process.platform === "win32" ? absolute.toLocaleLowerCase() : absolute;
+}
+
+function isWithin(parent: string, child: string): boolean {
+  const path = relative(canonicalFolder(parent), canonicalFolder(child));
+  return (
+    path === "" ||
+    (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path))
+  );
+}
+
+function parseDevUrl(): URL | null {
+  if (app.isPackaged) return null;
+  const raw = process.env.IPLOOM_STUDIO_DEV_URL?.trim();
+  if (!raw) return null;
+  const url = new URL(raw);
+  if (url.protocol !== "http:" || !LOOPBACK_HOSTS.has(url.hostname)) {
+    throw new Error(
+      "IPLOOM_STUDIO_DEV_URL must be a loopback HTTP URL in development",
+    );
+  }
+  return url;
+}
+
+function isTrustedRendererUrl(value: string): boolean {
+  try {
+    const target = new URL(value);
+    if (devUrl) return target.origin === devUrl.origin;
+    if (target.protocol !== "file:") return false;
+    return isWithin(RENDERER_ROOT, fileURLToPath(target));
+  } catch {
+    return false;
+  }
+}
+
+function safeExternalUrl(value: string): URL | null {
+  try {
+    const url = new URL(value);
+    if (
+      (url.protocol !== "https:" && url.protocol !== "http:") ||
+      url.username ||
+      url.password ||
+      value.length > 8_192
+    ) {
+      return null;
+    }
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+async function openExternalSafely(value: string): Promise<void> {
+  const url = safeExternalUrl(value);
+  if (!url) throw new Error("Only credential-free HTTP(S) links can be opened");
+  await shell.openExternal(url.toString());
+}
+
+function assertTrustedSender(event: IpcMainInvokeEvent): void {
+  const senderUrl = event.senderFrame?.url ?? event.sender.getURL();
+  if (!isTrustedRendererUrl(senderUrl)) {
+    throw new Error("Rejected IPC call from an untrusted renderer");
+  }
+}
+
+function requireStore(): WorkspaceStore {
+  if (!workspaceStore) throw new Error("Workspace store is not initialized");
+  return workspaceStore;
+}
+
+function defaultLocale(): UiLocale {
+  return app.getLocale().toLocaleLowerCase().startsWith("zh") ? "zh-CN" : "en";
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function rememberFolders(workspace: StudioWorkspace): void {
+  const store = requireStore();
+  allowedFolders.add(canonicalFolder(dirname(store.filePath)));
+  for (const record of workspace.exports) {
+    if (record.outputPath)
+      allowedFolders.add(canonicalFolder(record.outputPath));
+  }
+}
+
+async function loadWorkspace(): Promise<LoadedWorkspace> {
+  const store = requireStore();
+  try {
+    const loaded = await store.load();
+    rememberFolders(loaded.workspace);
+    return loaded;
+  } catch (error) {
+    if (await exists(store.filePath)) throw error;
+    const workspace = createDemoWorkspace(defaultLocale());
+    await store.save(workspace);
+    rememberFolders(workspace);
+    return {
+      workspace,
+      path: store.filePath,
+      recoveredFromBackup: false,
+    };
+  }
+}
+
+function assertArcReelBundle(value: unknown): asserts value is ArcReelBundle {
+  if (!value || typeof value !== "object") {
+    throw new Error("Invalid ArcReel bundle");
+  }
+  const bundle = value as Partial<ArcReelBundle>;
+  if (
+    bundle.schema !== "iploom.arcreel/v1" ||
+    typeof bundle.workTitle !== "string" ||
+    typeof bundle.generatedAt !== "string" ||
+    !Array.isArray(bundle.files)
+  ) {
+    throw new Error("Invalid ArcReel bundle");
+  }
+  for (const file of bundle.files) {
+    if (
+      !file ||
+      typeof file.path !== "string" ||
+      typeof file.content !== "string"
+    ) {
+      throw new Error("Invalid ArcReel bundle file");
+    }
+  }
+}
+
+function resolveMcpBinary(): string {
+  const names = ["iploom-mcp"];
+  const resourcesRoot = app.isPackaged
+    ? process.resourcesPath
+    : join(__dirname, "..");
+  const bundledDirectory = join(resourcesRoot, "bin");
+  const candidates = [
+    process.env.IPLOOM_MCP_BINARY,
+    ...names.map((name) => join(bundledDirectory, name)),
+    ...names.map((name) => join(resourcesRoot, name)),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  return (
+    candidates.find((candidate) => existsSync(candidate)) ??
+    join(bundledDirectory, "iploom-mcp")
+  );
+}
+
+function mcpClientConfig(): McpClientConfig {
+  const binary = resolveMcpBinary();
+  if (existsSync(binary)) {
+    return createElectronMcpConfig({
+      executable: process.execPath,
+      mcpScript: binary,
+      workspacePath: requireStore().filePath,
+    });
+  }
+  const sourceMcp = [
+    join(
+      __dirname,
+      "..",
+      "..",
+      "..",
+      "apps",
+      "studio",
+      "mcp",
+      "server.ts",
+    ),
+    join(__dirname, "..", "..", "apps", "studio", "mcp", "server.ts"),
+  ].find((candidate) => existsSync(candidate));
+  if (!sourceMcp) {
+    throw new Error("Bundled MCP server is missing from this installation");
+  }
+  return {
+    mcpServers: {
+      "iploom-studio": {
+        command: "bun",
+        args: [
+          sourceMcp,
+          "--workspace",
+          requireStore().filePath,
+        ],
+      },
+    },
+  };
+}
+
+async function exportArcReel(bundle: ArcReelBundle): Promise<WrittenBundle> {
+  assertArcReelBundle(bundle);
+  const options: OpenDialogOptions = {
+    title:
+      bundle.workLanguage === "zh-CN"
+        ? "选择 ArcReel 导出目录"
+        : "Choose an ArcReel export folder",
+    buttonLabel: bundle.workLanguage === "zh-CN" ? "导出" : "Export",
+    defaultPath: app.getPath("documents"),
+    properties: ["openDirectory", "createDirectory"],
+  };
+  const selection = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, options)
+    : await dialog.showOpenDialog(options);
+  const destination = selection.filePaths[0];
+  if (selection.canceled || !destination) {
+    return { directory: "", files: 0, bytes: 0, canceled: true };
+  }
+  const written = await requireStore().exportArcReel(bundle, destination);
+  allowedFolders.add(canonicalFolder(written.directory));
+  return written;
+}
+
+function registerIpcHandlers(): void {
+  ipcMain.handle("iploom:load", async (event) => {
+    assertTrustedSender(event);
+    return loadWorkspace();
+  });
+
+  ipcMain.handle("iploom:save", async (event, workspace: StudioWorkspace) => {
+    assertTrustedSender(event);
+    await requireStore().save(workspace);
+    return { savedAt: new Date().toISOString() };
+  });
+
+  ipcMain.handle(
+    "iploom:export-arc-reel",
+    async (event, bundle: ArcReelBundle) => {
+      assertTrustedSender(event);
+      return exportArcReel(bundle);
+    },
+  );
+
+  ipcMain.handle("iploom:app-info", async (event): Promise<AppInfo> => {
+    assertTrustedSender(event);
+    return {
+      version: app.getVersion(),
+      platform: process.platform,
+      workspacePath: requireStore().filePath,
+      desktop: true,
+      mcp: mcpClientConfig(),
+      mcpBinary: resolveMcpBinary(),
+    };
+  });
+
+  ipcMain.handle("iploom:copy-text", async (event, value: string) => {
+    assertTrustedSender(event);
+    if (typeof value !== "string") throw new Error("Text must be a string");
+    clipboard.writeText(value);
+  });
+
+  ipcMain.handle("iploom:open-folder", async (event, value: string) => {
+    assertTrustedSender(event);
+    if (typeof value !== "string" || !value.trim()) {
+      throw new Error("Folder path must be a string");
+    }
+    const folder = canonicalFolder(value);
+    if (!allowedFolders.has(folder)) {
+      throw new Error("Folder is outside this workspace's export history");
+    }
+    const info = await stat(value);
+    if (!info.isDirectory()) throw new Error("Path is not a directory");
+    const failure = await shell.openPath(resolve(value));
+    if (failure) throw new Error(failure);
+  });
+
+  ipcMain.handle("iploom:open-external", async (event, value: string) => {
+    assertTrustedSender(event);
+    if (typeof value !== "string") throw new Error("URL must be a string");
+    await openExternalSafely(value);
+  });
+
+  ipcMain.handle("iploom:reset-demo", async (event, locale: UiLocale) => {
+    assertTrustedSender(event);
+    if (locale !== "zh-CN" && locale !== "en") {
+      throw new Error("Unsupported locale");
+    }
+    const workspace = createDemoWorkspace(locale);
+    await requireStore().save(workspace);
+    rememberFolders(workspace);
+    return {
+      workspace,
+      path: requireStore().filePath,
+      recoveredFromBackup: false,
+    } satisfies LoadedWorkspace;
+  });
+}
+
+function guardWebContents(contents: WebContents): void {
+  contents.on("will-navigate", (event) => {
+    if (isTrustedRendererUrl(event.url)) return;
+    event.preventDefault();
+    const external = safeExternalUrl(event.url);
+    if (external) void shell.openExternal(external.toString());
+  });
+
+  contents.on("will-redirect", (event) => {
+    if (isTrustedRendererUrl(event.url)) return;
+    event.preventDefault();
+  });
+
+  contents.on("will-frame-navigate", (event) => {
+    if (event.isMainFrame || isTrustedRendererUrl(event.url)) return;
+    event.preventDefault();
+  });
+
+  contents.on("will-attach-webview", (event) => {
+    event.preventDefault();
+  });
+
+  contents.setWindowOpenHandler(({ url }) => {
+    const external = safeExternalUrl(url);
+    if (external) void shell.openExternal(external.toString());
+    return { action: "deny" };
+  });
+}
+
+function configureSessionSecurity(): void {
+  session.defaultSession.setPermissionRequestHandler(
+    (_contents, _permission, callback) => callback(false),
+  );
+  session.defaultSession.setPermissionCheckHandler(() => false);
+}
+
+function createWindow(): BrowserWindow {
+  const window = new BrowserWindow({
+    width: 1440,
+    height: 920,
+    minWidth: 1040,
+    minHeight: 680,
+    show: false,
+    title: "IPloom Studio",
+    backgroundColor: "#0b1115",
+    autoHideMenuBar: process.platform !== "darwin",
+    webPreferences: {
+      preload: join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      navigateOnDragDrop: false,
+      webviewTag: false,
+      spellcheck: false,
+      devTools: !app.isPackaged || process.env.IPLOOM_STUDIO_DEVTOOLS === "1",
+    },
+  });
+
+  window.once("ready-to-show", () => {
+    if (!smokeMode) window.show();
+  });
+  window.on("closed", () => {
+    if (mainWindow === window) mainWindow = null;
+  });
+
+  const load = devUrl
+    ? window.loadURL(devUrl.toString())
+    : window.loadFile(RENDERER_FILE);
+  if (smokeMode) {
+    window.webContents.once("did-finish-load", () => {
+      void finishSmoke(window);
+    });
+    window.webContents.once(
+      "did-fail-load",
+      (_event, code, description) => {
+        console.error(`[smoke] renderer failed: ${code} ${description}`);
+        app.exit(1);
+      },
+    );
+  }
+  void load.catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    dialog.showErrorBox("IPloom Studio failed to load", message);
+  });
+  return window;
+}
+
+async function finishSmoke(window: BrowserWindow): Promise<void> {
+  try {
+    const result = (await window.webContents.executeJavaScript(
+      `new Promise((resolve, reject) => {
+        const deadline = Date.now() + 20_000;
+        const check = async () => {
+          const shell = document.querySelector(".studio-shell");
+          const text = document.body.innerText.trim();
+          if (shell && text.length > 100) {
+            const info = await window.iploom.appInfo();
+            const server = info.mcp.mcpServers["iploom-studio"];
+            if (!info.desktop || !server) {
+              reject(new Error("desktop bridge did not initialize"));
+              return;
+            }
+            if (server.env?.ELECTRON_RUN_AS_NODE !== "1") {
+              reject(
+                new Error(
+                  "MCP is not using the Electron runtime: " +
+                    JSON.stringify(server),
+                ),
+              );
+              return;
+            }
+            resolve({
+              title: document.title,
+              textLength: text.length,
+              shells: document.querySelectorAll(".studio-shell").length,
+              navigation: document.querySelectorAll("nav button, aside button").length,
+              mcpCommand: server.command,
+              mcpScript: server.args[0]
+            });
+            return;
+          }
+          if (Date.now() >= deadline) {
+            reject(new Error("studio shell did not become ready"));
+            return;
+          }
+          setTimeout(check, 100);
+        };
+        check();
+      })`,
+      true,
+    )) as {
+      title: string;
+      textLength: number;
+      shells: number;
+      navigation: number;
+      mcpCommand: string;
+      mcpScript: string;
+    };
+    await new Promise((resolveWait) => setTimeout(resolveWait, 600));
+    const screenshot = process.env.IPLOOM_STUDIO_SMOKE_SCREENSHOT;
+    if (screenshot) {
+      const image = await window.webContents.capturePage();
+      await mkdir(dirname(resolve(screenshot)), { recursive: true });
+      await writeFile(resolve(screenshot), image.toPNG());
+      console.log(`[smoke] screenshot: ${resolve(screenshot)}`);
+    }
+    console.log(`[smoke] ok ${JSON.stringify(result)}`);
+    app.exit(0);
+  } catch (error) {
+    console.error("[smoke] failed", error);
+    app.exit(1);
+  }
+}
+
+function focusMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+async function bootstrap(): Promise<void> {
+  app.setAppUserModelId(APP_ID);
+  devUrl = parseDevUrl();
+  const workspacePath = process.env.IPLOOM_STUDIO_WORKSPACE
+    ? resolve(process.env.IPLOOM_STUDIO_WORKSPACE)
+    : join(app.getPath("userData"), "workspace.json");
+  workspaceStore = new WorkspaceStore(workspacePath);
+  await loadWorkspace();
+  configureSessionSecurity();
+  app.on("web-contents-created", (_event, contents) => {
+    guardWebContents(contents);
+  });
+  registerIpcHandlers();
+  mainWindow = createWindow();
+}
+
+function fail(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error("[IPloom Studio]", error);
+  dialog.showErrorBox("IPloom Studio could not start", message);
+  process.exitCode = 1;
+  app.quit();
+}
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", focusMainWindow);
+  app.on("activate", () => {
+    if (!mainWindow && workspaceStore) mainWindow = createWindow();
+    else focusMainWindow();
+  });
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
+  void app.whenReady().then(bootstrap).catch(fail);
+}
