@@ -350,6 +350,9 @@ function workflowTaskView(
     result: task.result,
     kind: task.kind,
     status: task.status,
+    result_superseded: task.resultSuperseded === true,
+    previous_result: task.previousResult ?? null,
+    last_run: task.lastRun ?? null,
     ready: readiness.ready,
     blockers: readiness.blockers.map((item) => ({
       id: item.id,

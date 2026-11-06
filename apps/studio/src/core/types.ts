@@ -1,4 +1,4 @@
-export const WORKSPACE_SCHEMA_VERSION = 5 as const;
+export const WORKSPACE_SCHEMA_VERSION = 6 as const;
 export const ARC_REEL_SCHEMA = "iploom.arcreel/v1" as const;
 /** Longest result text the workspace stores per language. */
 export const MAX_WORKFLOW_RESULT_LENGTH = 200_000 as const;
@@ -286,12 +286,26 @@ export interface StandardRef {
   version: number;
 }
 
+/** Metadata about the model run that produced a task's current result. */
+export interface WorkflowTaskRunMeta {
+  model: string;
+  promptSha256: string;
+  sourceRevision: number;
+  at: string;
+}
+
 export interface WorkflowTask {
   id: string;
   title: LocalizedText;
   brief: LocalizedText;
   deliverable: LocalizedText;
   result: LocalizedText;
+  /** The result this task had before the most recent model run overwrote it. */
+  previousResult?: LocalizedText;
+  /** Metadata for the run that produced the current result, if it came from a run. */
+  lastRun?: WorkflowTaskRunMeta;
+  /** Set on done dependents when an upstream task's result was replaced. */
+  resultSuperseded?: boolean;
   kind: WorkflowTaskKind;
   status: WorkflowTaskStatus;
   universeId?: string;

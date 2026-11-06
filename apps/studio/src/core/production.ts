@@ -2,7 +2,7 @@ import { createId, displayText } from "./factory.ts";
 import { standardsPromptSection, standardRefsFor } from "./standards.ts";
 import { timelinePromptContext } from "./timeline.ts";
 import { buildWorkflowBrief } from "./workflow.ts";
-import type { StudioWorkspace, UiLocale, WorkflowTask } from "./types.ts";
+import type { LocalizedText, StudioWorkspace, UiLocale, WorkflowTask } from "./types.ts";
 
 export const productionTemplates = {
   world: ["世界观设计", "World bible", "Design rules, history, geography, factions and unresolved mysteries. Separate canon from proposals."],
@@ -16,6 +16,11 @@ export const productionTemplates = {
   review: ["连续性审查", "Continuity review", "Review canon, chronology, relationships, costumes, geography and shot continuity. Cite exact source conflicts, severity and proposed fixes without rewriting approved facts."],
 } as const;
 export type ProductionTemplate = keyof typeof productionTemplates;
+/** Deliverable text every generated production task starts with. */
+export const PRODUCTION_TASK_DELIVERABLE: LocalizedText = {
+  zh: "审阅设计结果与可复用提示词，再标记完成。",
+  en: "Review the design and reusable prompts before marking done.",
+};
 export interface ProductionScope { universeId?: string; workId?: string; chapterId?: string; characterId?: string; characterIds?: string[] }
 export interface ProductionPromptOptions { includeStandards?: boolean }
 
@@ -75,7 +80,7 @@ export function createProductionTasks(workspace: StudioWorkspace, scope: Product
     const id = createId("task");
     const task: WorkflowTask = {
       id, title: { zh, en }, brief: { zh: brief, en: brief },
-      deliverable: { zh: "审阅设计结果与可复用提示词，再标记完成。", en: "Review the design and reusable prompts before marking done." },
+      deliverable: { ...PRODUCTION_TASK_DELIVERABLE },
       result: { zh: "", en: "" }, kind: template === "world" ? "world" : template === "character" || template === "costume" ? "character" : template === "review" ? "review" : "adaptation",
       status: "queued", universeId, workId: work?.id, chapterId: scope.chapterId,
       characterIds: scope.characterId ? [scope.characterId] : [], dependsOnIds: previous ? [previous] : [],

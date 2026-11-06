@@ -5,6 +5,7 @@ import type {
   StudioWorkspace,
   UiLocale,
   WorkflowTask,
+  WorkflowTaskRunMeta,
   WorkflowTaskStatus,
 } from "./types.ts";
 
@@ -25,23 +26,58 @@ export interface WorkflowSummary {
 
 /**
  * Writes a reviewed result into the matching task and reports whether the task
- * was still present. Callers that report success must check the return value:
- * a workspace change that finds no target is still a valid no-op.
+ * was still present. The pre-run result is kept in `previousResult` (first
+ * snapshot wins, so the earliest approved design survives repeated runs), run
+ * metadata is recorded, and done tasks that consume this output are flagged
+ * for re-review. Callers that report success must check the return value: a
+ * workspace change that finds no target is still a valid no-op.
  */
 export function setWorkflowTaskResult(
   draft: StudioWorkspace,
   taskId: string,
   result: string,
   locale: UiLocale,
+  runMeta?: WorkflowTaskRunMeta,
 ): boolean {
   const target = draft.workflowTasks.find((item) => item.id === taskId);
   if (!target) return false;
-  target.result =
-    locale === "zh-CN"
-      ? { ...target.result, zh: result }
-      : { ...target.result, en: result };
+  const key = locale === "zh-CN" ? "zh" : "en";
+  const previous = target.result[key];
+  if (
+    !target.previousResult &&
+    (target.result.zh.trim() || target.result.en.trim()) &&
+    previous !== result
+  ) {
+    target.previousResult = { ...target.result };
+  }
+  target.result = { ...target.result, [key]: result };
+  if (runMeta) target.lastRun = runMeta;
+  if (previous !== result && previous.trim() && target.status === "done") {
+    for (const dependentId of taskDependentIds(draft.workflowTasks, taskId)) {
+      const dependent = draft.workflowTasks.find(
+        (item) => item.id === dependentId,
+      );
+      if (dependent && dependent.status === "done")
+        dependent.resultSuperseded = true;
+    }
+  }
+  delete target.resultSuperseded;
   target.updatedAt = new Date().toISOString();
   return true;
+}
+
+/**
+ * Whether sending another model result over this task needs a confirm: a done
+ * task would lose its approved status, and a review task already holds a
+ * result the run would replace. The old text stays in `previousResult`
+ * either way.
+ */
+export function workflowResultReplaceConfirm(task: WorkflowTask): boolean {
+  return (
+    task.status === "done" ||
+    (task.status === "review" &&
+      Boolean(task.result.zh.trim() || task.result.en.trim()))
+  );
 }
 
 export function workflowTaskReadiness(
@@ -92,6 +128,36 @@ export function taskDescendantIds(
     }
   };
   visit(taskId);
+  return [...found];
+}
+
+/**
+ * Returns every task that transitively consumes this task's output through
+ * `dependsOnIds` edges only (parent links are excluded on purpose: replacing
+ * a result invalidates dependency consumers, not children in a hierarchy).
+ */
+export function taskDependentIds(
+  tasks: WorkflowTask[],
+  taskId: string,
+): string[] {
+  const incoming = new Map<string, string[]>();
+  for (const task of tasks) {
+    for (const dependencyId of task.dependsOnIds) {
+      const current = incoming.get(dependencyId);
+      if (current) current.push(task.id);
+      else incoming.set(dependencyId, [task.id]);
+    }
+  }
+  const found = new Set<string>();
+  const queue = [taskId];
+  for (let index = 0; index < queue.length; index += 1) {
+    const current = queue[index]!;
+    for (const dependentId of incoming.get(current) ?? []) {
+      if (found.has(dependentId)) continue;
+      found.add(dependentId);
+      queue.push(dependentId);
+    }
+  }
   return [...found];
 }
 

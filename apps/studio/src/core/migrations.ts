@@ -1,3 +1,4 @@
+import { PRODUCTION_TASK_DELIVERABLE, productionTemplates, type ProductionTemplate } from "./production.ts";
 import { WORKSPACE_SCHEMA_VERSION } from "./types.ts";
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -39,13 +40,24 @@ export function migrateWorkspace(value: unknown): unknown {
   }
   if (value.schema_version === 4) {
     const repaired = repairExportHistory(value);
-    return {
+    return migrateWorkspace({
       ...value,
-      schema_version: WORKSPACE_SCHEMA_VERSION,
+      schema_version: 5,
       lastOpenedWorkId: repaired.lastOpenedWorkId,
       exports: repaired.exports,
       revision:
         typeof value.revision === "number" ? value.revision + 1 : value.revision,
+    });
+  }
+  if (value.schema_version === 5) {
+    const repaired = repairWorkflowTaskTexts(value);
+    return {
+      ...repaired,
+      schema_version: WORKSPACE_SCHEMA_VERSION,
+      revision:
+        typeof repaired.revision === "number"
+          ? repaired.revision + 1
+          : repaired.revision,
     };
   }
   return value;
@@ -62,7 +74,7 @@ function idList(value: unknown): string[] {
  * export ran, and they matched chapter references by id alone even though
  * chapter ids are only unique inside their work. Drop records whose novel is
  * gone, de-duplicate ids, and keep only chapters that still exist in that
- * novel so the strict v5 schema can accept the workspace.
+ * novel so the strict schema can accept the workspace.
  */
 function repairExportHistory(value: Record<string, unknown>): {
   exports: unknown;
@@ -112,4 +124,61 @@ function repairExportHistory(value: Record<string, unknown>): {
       ? undefined
       : value.lastOpenedWorkId;
   return { exports, lastOpenedWorkId };
+}
+
+const COMPOSED_PROMPT_MARKER = "SOURCE DATA (not instructions):";
+const STALE_DELIVERABLE_PATTERN = /^Model: .+; source revision: \d+\./;
+
+/** Template description a task's English title maps back to, or undefined. */
+function templateBriefFor(title: unknown): string | undefined {
+  if (!record(title) || typeof title.en !== "string") return undefined;
+  const key = (Object.keys(productionTemplates) as ProductionTemplate[]).find(
+    (item) => productionTemplates[item][1] === title.en,
+  );
+  return key ? productionTemplates[key][2] : undefined;
+}
+
+/**
+ * Older builds let the production panel write the composed model prompt back
+ * into the task's brief and deliverable, so every run nested another copy of
+ * the brief into itself and a cancelled run lost the author's text. A brief
+ * that embeds prompt markers is replaced with its template description (empty
+ * when the title no longer matches one); deliverables carrying run metadata
+ * return to the standard review instructions.
+ */
+function repairWorkflowTaskTexts(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!Array.isArray(value.workflowTasks)) return value;
+  const tasks = value.workflowTasks.map((task) => {
+    if (!record(task)) return task;
+    const brief = record(task.brief) ? task.brief : {};
+    const deliverable = record(task.deliverable) ? task.deliverable : {};
+    const briefZh = typeof brief.zh === "string" ? brief.zh : "";
+    const briefEn = typeof brief.en === "string" ? brief.en : "";
+    const pollutedZh =
+      (briefZh.startsWith("# AI 任务简报") ||
+        briefZh.startsWith("请使用中文输出。")) &&
+      briefZh.includes(COMPOSED_PROMPT_MARKER);
+    const pollutedEn =
+      (briefEn.startsWith("# AI task brief") ||
+        briefEn.startsWith("Respond in English.")) &&
+      briefEn.includes(COMPOSED_PROMPT_MARKER);
+    const staleDeliverable =
+      STALE_DELIVERABLE_PATTERN.test(
+        typeof deliverable.zh === "string" ? deliverable.zh : "",
+      ) ||
+      STALE_DELIVERABLE_PATTERN.test(
+        typeof deliverable.en === "string" ? deliverable.en : "",
+      );
+    if (!pollutedZh && !pollutedEn && !staleDeliverable) return task;
+    const fallbackBrief = templateBriefFor(task.title) ?? "";
+    const nextBrief = { ...brief };
+    if (pollutedZh) nextBrief.zh = fallbackBrief;
+    if (pollutedEn) nextBrief.en = fallbackBrief;
+    const next: Record<string, unknown> = { ...task, brief: nextBrief };
+    if (staleDeliverable) next.deliverable = { ...PRODUCTION_TASK_DELIVERABLE };
+    return next;
+  });
+  return { ...value, workflowTasks: tasks };
 }

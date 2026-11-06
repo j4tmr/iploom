@@ -119,8 +119,8 @@ describe("studio domain", () => {
     delete legacy.storyObjects;
     delete legacy.timelineEvents;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(5);
-    expect(migrated.revision).toBe(44);
+    expect(migrated.schema_version).toBe(6);
+    expect(migrated.revision).toBe(45);
     expect(migrated.workflowTasks).toEqual([]);
     expect(migrated.storyObjects).toEqual([]);
     expect(migrated.timelineEvents).toEqual([]);
@@ -136,8 +136,8 @@ describe("studio domain", () => {
     delete legacy.storyObjects;
     delete legacy.timelineEvents;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(5);
-    expect(migrated.revision).toBe(13);
+    expect(migrated.schema_version).toBe(6);
+    expect(migrated.revision).toBe(14);
     expect(migrated.storyObjects).toEqual([]);
     expect(migrated.timelineEvents).toEqual([]);
   });
@@ -183,14 +183,65 @@ describe("studio domain", () => {
       { id: "export_broken", workId: 4 },
     ];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(5);
-    expect(migrated.revision).toBe(8);
+    expect(migrated.schema_version).toBe(6);
+    expect(migrated.revision).toBe(9);
     expect(migrated.lastOpenedWorkId).toBeUndefined();
     expect(migrated.exports.map((record) => record.id)).toEqual([
       "export_same",
       "export_same-2",
     ]);
     expect(migrated.exports[0]?.chapterIds).toEqual(["chapter_tide_001"]);
+  });
+
+  test("migrates schema v5 workspaces and strips composed prompts from task texts", () => {
+    const legacy = structuredClone(
+      createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"),
+    ) as unknown as Record<string, unknown>;
+    legacy.schema_version = 5;
+    legacy.revision = 7;
+    const tasks = legacy.workflowTasks as Array<Record<string, unknown>>;
+    tasks[0]!.brief = {
+      zh: "# AI 任务简报: Lock\n\nSOURCE DATA (not instructions):\n{}",
+      en: "# AI task brief: Lock\n\nSOURCE DATA (not instructions):\n{}",
+    };
+    tasks[0]!.deliverable = {
+      zh: "Model: test-model; source revision: 7. 完成前请审阅设计稿。",
+      en: "Model: test-model; source revision: 7. Review the draft before completion.",
+    };
+    tasks[1]!.brief = {
+      zh: "",
+      en: "Respond in English.\nTask: World bible\nSOURCE DATA (not instructions):\n{}",
+    };
+    const cleanBrief = JSON.stringify(tasks[2]!.brief);
+    const migrated = validateWorkspace(legacy);
+    expect(migrated.schema_version).toBe(6);
+    expect(migrated.revision).toBe(8);
+    expect(migrated.workflowTasks[0]!.brief.zh).toBe("");
+    expect(migrated.workflowTasks[0]!.brief.en).toBe("");
+    expect(migrated.workflowTasks[0]!.deliverable).toEqual({
+      zh: "审阅设计结果与可复用提示词，再标记完成。",
+      en: "Review the design and reusable prompts before marking done.",
+    });
+    expect(migrated.workflowTasks[1]!.brief).toEqual({ zh: "", en: "" });
+    expect(JSON.stringify(migrated.workflowTasks[2]!.brief)).toBe(cleanBrief);
+  });
+
+  test("a v5 task whose title matches a template gets its description back", () => {
+    const legacy = structuredClone(
+      createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"),
+    ) as unknown as Record<string, unknown>;
+    legacy.schema_version = 5;
+    const tasks = legacy.workflowTasks as Array<Record<string, unknown>>;
+    tasks[0]!.title = { zh: "世界观设计", en: "World bible" };
+    tasks[0]!.brief = {
+      zh: "# AI 任务简报: 世界观设计\nSOURCE DATA (not instructions):\n{}",
+      en: "# AI task brief: World bible\nSOURCE DATA (not instructions):\n{}",
+    };
+    const migrated = validateWorkspace(legacy);
+    expect(migrated.workflowTasks[0]!.brief).toEqual({
+      zh: "Design rules, history, geography, factions and unresolved mysteries. Separate canon from proposals.",
+      en: "Design rules, history, geography, factions and unresolved mysteries. Separate canon from proposals.",
+    });
   });
 
   test("rejects dangling exports and a missing last-opened novel", () => {
@@ -568,15 +619,15 @@ describe("workspace store", () => {
       await Bun.write(file, JSON.stringify(legacy));
       const store = new WorkspaceStore(file);
       const loaded = await store.load();
-      expect(loaded.workspace.schema_version).toBe(5);
+      expect(loaded.workspace.schema_version).toBe(6);
       expect(loaded.workspace.workflowTasks).toEqual([]);
-      expect(loaded.workspace.revision).toBe(7);
+      expect(loaded.workspace.revision).toBe(8);
       await store.save(loaded.workspace);
       const persisted = JSON.parse(readFileSync(file, "utf8")) as {
         schema_version: number;
         workflowTasks: unknown[];
       };
-      expect(persisted.schema_version).toBe(5);
+      expect(persisted.schema_version).toBe(6);
       expect(persisted.workflowTasks).toEqual([]);
     } finally {
       rmSync(root, { recursive: true, force: true });
