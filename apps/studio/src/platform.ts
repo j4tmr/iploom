@@ -1,6 +1,7 @@
 import { createDemoWorkspace, createEmptyWorkspace } from "./core/factory.ts";
 import type { ArcReelBundle, StudioWorkspace, UiLocale } from "./core/types.ts";
 import { APP_VERSION } from "./core/version.ts";
+import { loadBrowserWorkspace, saveBrowserWorkspace } from "./browser-workspace.ts";
 
 export interface LoadedWorkspace {
   workspace: StudioWorkspace;
@@ -53,27 +54,9 @@ declare global {
   }
 }
 
-const browserKey = "iploom-studio:workspace:v1";
-
 function browserLoad(): LoadedWorkspace {
-  const raw = localStorage.getItem(browserKey);
-  if (raw) {
-    try {
-      return {
-        workspace: JSON.parse(raw) as StudioWorkspace,
-        path: "Browser localStorage",
-        recoveredFromBackup: false,
-      };
-    } catch {
-      localStorage.removeItem(browserKey);
-    }
-  }
   const locale: UiLocale = navigator.language.startsWith("zh") ? "zh-CN" : "en";
-  return {
-    workspace: createDemoWorkspace(locale),
-    path: "Browser localStorage",
-    recoveredFromBackup: false,
-  };
+  return loadBrowserWorkspace(localStorage, locale);
 }
 
 function browserMcpConfig(): McpClientConfig {
@@ -95,7 +78,7 @@ export const browserFallback: StudioBridge = {
     return browserLoad();
   },
   async save(workspace) {
-    localStorage.setItem(browserKey, JSON.stringify(workspace));
+    saveBrowserWorkspace(localStorage, workspace);
     return { savedAt: new Date().toISOString() };
   },
   onFlushRequest() {
@@ -143,7 +126,7 @@ export const browserFallback: StudioBridge = {
   },
   async resetDemo(locale) {
     const workspace = createDemoWorkspace(locale);
-    localStorage.setItem(browserKey, JSON.stringify(workspace));
+    saveBrowserWorkspace(localStorage, workspace);
     return { workspace, path: "Browser localStorage", recoveredFromBackup: false };
   },
 };
