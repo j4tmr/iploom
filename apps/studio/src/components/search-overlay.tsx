@@ -11,8 +11,10 @@ const kindLabels: Record<UiLocale, Record<SearchHit["kind"], string>> = {
     chapter: "章节",
     character: "人物",
     location: "地点",
+  object: "物件",
     faction: "势力",
     lore: "设定",
+  timeline: "时间线",
   },
   en: {
     universe: "IP world",
@@ -20,8 +22,10 @@ const kindLabels: Record<UiLocale, Record<SearchHit["kind"], string>> = {
     chapter: "Chapter",
     character: "Character",
     location: "Location",
+  object: "Prop",
     faction: "Faction",
     lore: "Lore",
+  timeline: "Timeline",
   },
 };
 

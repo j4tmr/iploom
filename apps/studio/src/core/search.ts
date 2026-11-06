@@ -1,4 +1,5 @@
 import { countWords, displayText } from "./factory.ts";
+import { timelineAnchorLabel } from "./timeline.ts";
 import type {
   SearchHit,
   StudioWorkspace,
@@ -264,6 +265,58 @@ export function searchWorkspace(
         title,
         subtitle: `${universeNames.get(lore.universeId) ?? ""} · ${lore.category}`,
         excerpt: excerpt(lore.body, needle),
+        score: rank,
+      });
+  }
+
+  for (const object of workspace.storyObjects) {
+    const title = displayText(object.name, locale);
+    const rank = score(
+      [
+        { value: bilingual(object.name), weight: 6 },
+        { value: bilingual(object.summary), weight: 3 },
+        { value: `${object.visualPrompt} ${object.sourceNotes}`, weight: 2 },
+      ],
+      needle,
+    );
+    if (rank)
+      hits.push({
+        kind: "object",
+        id: object.id,
+        universeId: object.universeId,
+        title,
+        subtitle: `${universeNames.get(object.universeId) ?? ""} · ${displayText(object.category, locale)}`,
+        excerpt: excerpt(
+          `${displayText(object.summary, locale)} ${object.sourceNotes}`,
+          needle,
+        ),
+        score: rank,
+      });
+  }
+
+  for (const event of workspace.timelineEvents) {
+    const title = displayText(event.title, locale);
+    const rank = score(
+      [
+        { value: bilingual(event.title), weight: 6 },
+        { value: `${event.storyTime} ${event.stateBefore} ${event.stateAfter}`, weight: 3 },
+        { value: `${event.evidence} ${event.productionPrompt}`, weight: 2 },
+      ],
+      needle,
+    );
+    if (rank)
+      hits.push({
+        kind: "timeline",
+        id: event.id,
+        universeId: event.universeId,
+        workId: event.workId,
+        chapterId: event.chapterId,
+        title,
+        subtitle: `${universeNames.get(event.universeId) ?? ""} · ${timelineAnchorLabel(workspace, event, locale)}`,
+        excerpt: excerpt(
+          `${event.stateBefore} → ${event.stateAfter} ${event.evidence}`,
+          needle,
+        ),
         score: rank,
       });
   }

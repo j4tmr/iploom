@@ -1,4 +1,5 @@
 import { displayText } from "./factory.ts";
+import { relevantTimelineEvents, timelineAnchorLabel, timelineSubjectLabel } from "./timeline.ts";
 import type {
   StudioWorkspace,
   UiLocale,
@@ -182,6 +183,12 @@ export function buildWorkflowBrief(
       (task.characterIds.includes(relationship.sourceId) ||
         task.characterIds.includes(relationship.targetId)),
   );
+  const timeline = relevantTimelineEvents(workspace, {
+    universeId: task.universeId,
+    workId: task.workId,
+    chapterId: task.chapterId,
+    characterIds: task.characterIds,
+  });
   const readiness = workflowTaskReadiness(workspace, task);
   const lines = [
     `# ${zh ? "AI 任务简报" : "AI task brief"}: ${displayText(task.title, locale)}`,
@@ -240,6 +247,12 @@ export function buildWorkflowBrief(
           .map(
             (item) =>
               `- **${displayText(item.name, locale)}**: ${displayText(item.summary, locale)}`,
+          ),
+        ...workspace.storyObjects
+          .filter((item) => item.universeId === world.id)
+          .map(
+            (item) =>
+              `- **${displayText(item.name, locale)}** (${displayText(item.category, locale)}): ${displayText(item.summary, locale)}`,
           ),
         ...workspace.factions
           .filter((item) => item.universeId === world.id)
@@ -312,6 +325,22 @@ export function buildWorkflowBrief(
             (item) => item.id === relationship.targetId,
           );
           return `- ${source ? displayText(source.name, locale) : relationship.sourceId} → ${target ? displayText(target.name, locale) : relationship.targetId}: ${displayText(relationship.label, locale)} [${relationship.type}, ${relationship.status}, ${relationship.strength}/5]`;
+        }),
+      ]),
+    );
+  }
+
+  if (timeline.canon.length || timeline.proposed.length) {
+    lines.push(
+      ...section(zh ? "时间线与状态约束" : "Timeline and state constraints", [
+        ...(zh
+          ? ["以下按章节或故事内时间排序。标为“提出”的内容只是制作提案，不能改写已定稿正文。"]
+          : ["Events are ordered by chapter or in-world time. Items marked proposed are production hypotheses and cannot rewrite approved prose."]),
+        ...timeline.canon.map((event) => {
+          return `- **${timelineAnchorLabel(workspace, event, locale)} · ${displayText(event.title, locale)}** (${timelineSubjectLabel(workspace, event, locale)}): ${event.stateBefore || "—"} → ${event.stateAfter || "—"}${event.productionPrompt ? `\n  - ${zh ? "制作约束" : "Production constraint"}: ${event.productionPrompt}` : ""}${event.evidence ? `\n  - ${zh ? "证据" : "Evidence"}: ${event.evidence}` : ""}`;
+        }),
+        ...timeline.proposed.map((event) => {
+          return `- [${zh ? "提出" : "PROPOSED"}] **${timelineAnchorLabel(workspace, event, locale)} · ${displayText(event.title, locale)}** (${timelineSubjectLabel(workspace, event, locale)}): ${event.stateBefore || "—"} → ${event.stateAfter || "—"}${event.productionPrompt ? `\n  - ${zh ? "提案约束" : "Proposed constraint"}: ${event.productionPrompt}` : ""}`;
         }),
       ]),
     );

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildRelationshipGraph } from "./core/graph.ts";
 import { taskDescendantIds } from "./core/workflow.ts";
+import { removeSceneReferences } from "./core/timeline.ts";
 import {
   createId,
   displayText,
@@ -18,8 +19,10 @@ import type {
   SearchHit,
   StoryFaction,
   StoryLocation,
+  StoryObject,
   StoryUniverse,
   StoryWork,
+  TimelineEvent,
   ThemeMode,
   UiLocale,
   WorkflowTask,
@@ -67,6 +70,8 @@ import { WorkflowView } from "./views/workflow-view.tsx";
 import { ProductionPanel } from "./components/production-panel.tsx";
 import { ManuscriptImport } from "./components/manuscript-import.tsx";
 import { mergeManuscriptImport } from "./core/manuscript.ts";
+import { StoryObjectModal, TimelineEventModal } from "./components/timeline-forms.tsx";
+import { TimelineView } from "./views/timeline-view.tsx";
 
 type ModalState =
   | { kind: "import" }
@@ -74,6 +79,14 @@ type ModalState =
   | { kind: "novel"; universeId?: string; initial?: StoryWork }
   | { kind: "character"; initial?: Character; universeId?: string }
   | { kind: "relationship"; universeId: string; initial?: Relationship }
+  | {
+      kind: "timeline";
+      universeId?: string;
+      workId?: string;
+      chapterId?: string;
+      initial?: TimelineEvent;
+    }
+  | { kind: "object"; universeId?: string; initial?: StoryObject }
   | {
       kind: "atlas";
       atlasKind: "location" | "faction" | "lore";
@@ -190,6 +203,8 @@ export function App() {
       return { eyebrow: "LIBRARY / 小说书架", title: t("library") };
     if (route.name === "graph")
       return { eyebrow: "RELATION MAP / 关系图", title: t("relationships") };
+    if (route.name === "timeline")
+      return { eyebrow: "STORY STATE / 故事状态", title: t("timeline") };
     if (route.name === "workflow")
       return { eyebrow: "AI WORKFLOW / 创作流水线", title: t("workflow") };
     if (route.name === "exports")
@@ -237,11 +252,17 @@ export function App() {
       draft.locations = draft.locations.filter(
         (item) => item.universeId !== target.id,
       );
+      draft.storyObjects = draft.storyObjects.filter(
+        (item) => item.universeId !== target.id,
+      );
       draft.factions = draft.factions.filter(
         (item) => item.universeId !== target.id,
       );
       draft.lore = draft.lore.filter((item) => item.universeId !== target.id);
       draft.relationships = draft.relationships.filter(
+        (item) => item.universeId !== target.id,
+      );
+      draft.timelineEvents = draft.timelineEvents.filter(
         (item) => item.universeId !== target.id,
       );
       draft.characters = draft.characters
@@ -291,6 +312,9 @@ export function App() {
           .map((task) => task.id),
       );
       draft.works = draft.works.filter((item) => item.id !== target.id);
+      draft.timelineEvents = draft.timelineEvents.filter(
+        (event) => event.workId !== target.id,
+      );
       draft.workflowTasks = draft.workflowTasks
         .filter((task) => !removedTasks.has(task.id))
         .map((task) => ({
@@ -329,6 +353,18 @@ export function App() {
         (item) =>
           item.sourceId !== character.id && item.targetId !== character.id,
       );
+      draft.timelineEvents = draft.timelineEvents
+        .filter(
+          (event) =>
+            event.subjectKind !== "character" ||
+            event.subjectId !== character.id,
+        )
+        .map((event) => ({
+          ...event,
+          relatedCharacterIds: event.relatedCharacterIds.filter(
+            (id) => id !== character.id,
+          ),
+        }));
       for (const item of draft.works) {
         for (const chapter of item.chapters) {
           chapter.characterIds = chapter.characterIds.filter(
@@ -352,6 +388,53 @@ export function App() {
       const index = draft.relationships.findIndex((item) => item.id === relationship.id);
       if (index < 0) draft.relationships.push(relationship);
       else draft.relationships[index] = relationship;
+    });
+  };
+
+  const saveTimelineEvent = (event: TimelineEvent) => {
+    mutate((draft) => {
+      const index = draft.timelineEvents.findIndex((item) => item.id === event.id);
+      if (index >= 0) draft.timelineEvents[index] = event;
+      else draft.timelineEvents.push(event);
+    });
+    notify(t("saved"));
+  };
+
+  const deleteTimelineEvent = (event: TimelineEvent) => {
+    if (!window.confirm(t("confirmDelete"))) return;
+    mutate((draft) => {
+      draft.timelineEvents = draft.timelineEvents.filter(
+        (item) => item.id !== event.id,
+      );
+    });
+  };
+
+  const saveObject = (object: StoryObject) => {
+    mutate((draft) => {
+      const index = draft.storyObjects.findIndex((item) => item.id === object.id);
+      if (index >= 0) draft.storyObjects[index] = object;
+      else draft.storyObjects.push(object);
+    });
+    notify(t("saved"));
+  };
+
+  const deleteObject = (object: StoryObject) => {
+    if (!window.confirm(t("confirmDelete"))) return;
+    mutate((draft) => {
+      draft.storyObjects = draft.storyObjects.filter(
+        (item) => item.id !== object.id,
+      );
+      draft.timelineEvents = draft.timelineEvents
+        .filter(
+          (event) =>
+            event.subjectKind !== "object" || event.subjectId !== object.id,
+        )
+        .map((event) => ({
+          ...event,
+          relatedObjectIds: event.relatedObjectIds.filter(
+            (id) => id !== object.id,
+          ),
+        }));
     });
   };
 
@@ -451,6 +534,17 @@ export function App() {
     mutate((draft) => {
       if (kind === "location") {
         draft.locations = draft.locations.filter((item) => item.id !== id);
+        draft.timelineEvents = draft.timelineEvents
+          .filter(
+            (event) =>
+              event.subjectKind !== "location" || event.subjectId !== id,
+          )
+          .map((event) => ({
+            ...event,
+            relatedLocationIds: event.relatedLocationIds.filter(
+              (locationId) => locationId !== id,
+            ),
+          }));
         for (const item of draft.works) {
           for (const chapter of item.chapters) {
             if (chapter.locationId === id) chapter.locationId = undefined;
@@ -481,6 +575,9 @@ export function App() {
       const target = draft.works.find((item) => item.id === workId);
       if (!target) return;
       target.chapters = target.chapters.filter((item) => item.id !== chapter.id);
+      draft.timelineEvents = draft.timelineEvents.filter(
+        (event) => event.chapterId !== chapter.id,
+      );
       target.updatedAt = new Date().toISOString();
       const removedTasks = new Set(
         draft.workflowTasks
@@ -514,7 +611,20 @@ export function App() {
       const target = draft.works.find((item) => item.id === workId);
       const chapter = target?.chapters.find((item) => item.id === chapterId);
       if (!target || !chapter) return;
+      const sceneIdsBefore = new Set(chapter.scenes.map((scene) => scene.id));
       change(chapter);
+      const removedSceneIds = new Set(
+        [...sceneIdsBefore].filter(
+          (id) => !chapter.scenes.some((scene) => scene.id === id),
+        ),
+      );
+      if (removedSceneIds.size > 0) {
+        draft.timelineEvents = removeSceneReferences(
+          draft.timelineEvents,
+          chapterId,
+          removedSceneIds,
+        );
+      }
       chapter.revision += 1;
       chapter.updatedAt = new Date().toISOString();
       target.updatedAt = chapter.updatedAt;
@@ -596,12 +706,22 @@ export function App() {
           universeId: hit.universeId,
           initial: entry,
         });
+    } else if (hit.kind === "object") {
+      const object = workspace.storyObjects.find((item) => item.id === hit.id);
+      navigate({ name: "timeline", universeId: hit.universeId });
+      if (object) setModal({ kind: "object", initial: object });
+    } else if (hit.kind === "timeline") {
+      const event = workspace.timelineEvents.find((item) => item.id === hit.id);
+      navigate({ name: "timeline", universeId: hit.universeId });
+      if (event) setModal({ kind: "timeline", initial: event });
     }
   };
 
   const defaultUniverseId =
     route.name === "universe"
       ? route.id
+      : route.name === "timeline"
+        ? route.universeId
       : work?.universeId;
   const chapterModalWork =
     modal?.kind === "chapter"
@@ -719,6 +839,20 @@ export function App() {
               onEditWork={() => setModal({ kind: "novel", initial: work })}
               onDeleteWork={() => deleteNovel(work)}
               onAddChapter={() => setModal({ kind: "chapter", workId: work.id })}
+              onOpenTimeline={(chapterId) =>
+                {
+                  navigate({
+                    name: "timeline",
+                    universeId: work.universeId,
+                  });
+                  setModal({
+                    kind: "timeline",
+                    universeId: work.universeId,
+                    workId: work.id,
+                    chapterId,
+                  });
+                }
+              }
               onDeleteChapter={(chapter) => deleteChapter(work.id, chapter)}
               onChangeChapter={(chapterId, change) => changeChapter(work.id, chapterId, change)}
               onRecordExport={recordExport}
@@ -751,6 +885,30 @@ export function App() {
                   });
               }}
               onEditCharacter={(character) => setModal({ kind: "character", initial: character })}
+            />
+          ) : null}
+
+          {route.name === "timeline" ? (
+            <TimelineView
+              workspace={workspace}
+              locale={locale}
+              t={t}
+              initialUniverseId={route.universeId ?? defaultUniverseId}
+              onNewEvent={(universeId, workId) =>
+                setModal({ kind: "timeline", universeId, workId })
+              }
+              onEditEvent={(initial) =>
+                setModal({ kind: "timeline", initial })
+              }
+              onDeleteEvent={deleteTimelineEvent}
+              onNewObject={(universeId) =>
+                setModal({ kind: "object", universeId })
+              }
+              onEditObject={(initial) =>
+                setModal({ kind: "object", initial })
+              }
+              onDeleteObject={deleteObject}
+              onOpenWork={(workId) => navigate({ name: "work", workId })}
             />
           ) : null}
 
@@ -882,6 +1040,32 @@ export function App() {
           workspace={workspace}
           universeId={modal.universeId}
           onSave={saveRelationship}
+        />
+      ) : null}
+      {modal?.kind === "object" ? (
+        <StoryObjectModal
+          key={`object-${modal.initial?.id ?? modal.universeId ?? "new"}`}
+          open
+          onClose={() => setModal(null)}
+          locale={locale}
+          workspace={workspace}
+          initial={modal.initial}
+          defaultUniverseId={modal.universeId}
+          onSave={saveObject}
+        />
+      ) : null}
+      {modal?.kind === "timeline" ? (
+        <TimelineEventModal
+          key={`timeline-${modal.initial?.id ?? `${modal.universeId ?? "new"}-${modal.chapterId ?? ""}`}`}
+          open
+          onClose={() => setModal(null)}
+          locale={locale}
+          workspace={workspace}
+          initial={modal.initial}
+          defaultUniverseId={modal.universeId}
+          defaultWorkId={modal.workId}
+          defaultChapterId={modal.chapterId}
+          onSave={saveTimelineEvent}
         />
       ) : null}
       {modal?.kind === "atlas" ? (

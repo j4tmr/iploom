@@ -116,10 +116,29 @@ describe("studio domain", () => {
     legacy.schema_version = 1;
     legacy.revision = 40;
     delete legacy.workflowTasks;
+    delete legacy.storyObjects;
+    delete legacy.timelineEvents;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(2);
-    expect(migrated.revision).toBe(41);
+    expect(migrated.schema_version).toBe(3);
+    expect(migrated.revision).toBe(42);
     expect(migrated.workflowTasks).toEqual([]);
+    expect(migrated.storyObjects).toEqual([]);
+    expect(migrated.timelineEvents).toEqual([]);
+  });
+
+  test("migrates schema v2 workspaces by adding timeline collections", () => {
+    const legacy = structuredClone(
+      createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"),
+    ) as unknown as Record<string, unknown>;
+    legacy.schema_version = 2;
+    legacy.revision = 10;
+    delete legacy.storyObjects;
+    delete legacy.timelineEvents;
+    const migrated = validateWorkspace(legacy);
+    expect(migrated.schema_version).toBe(3);
+    expect(migrated.revision).toBe(11);
+    expect(migrated.storyObjects).toEqual([]);
+    expect(migrated.timelineEvents).toEqual([]);
   });
 
   test("keeps package, UI and generated manifests on one version", async () => {
@@ -451,15 +470,15 @@ describe("workspace store", () => {
       await Bun.write(file, JSON.stringify(legacy));
       const store = new WorkspaceStore(file);
       const loaded = await store.load();
-      expect(loaded.workspace.schema_version).toBe(2);
+      expect(loaded.workspace.schema_version).toBe(3);
       expect(loaded.workspace.workflowTasks).toEqual([]);
-      expect(loaded.workspace.revision).toBe(4);
+      expect(loaded.workspace.revision).toBe(5);
       await store.save(loaded.workspace);
       const persisted = JSON.parse(readFileSync(file, "utf8")) as {
         schema_version: number;
         workflowTasks: unknown[];
       };
-      expect(persisted.schema_version).toBe(2);
+      expect(persisted.schema_version).toBe(3);
       expect(persisted.workflowTasks).toEqual([]);
     } finally {
       rmSync(root, { recursive: true, force: true });

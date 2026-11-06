@@ -564,7 +564,7 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     {
       title: "检索 IP / Search IP",
       description:
-        "跨故事世界、小说、章节、角色、地点、势力与传说做中英子串检索。Search the whole IP library with Chinese/English substring matching.",
+        "跨故事世界、小说、章节、角色、地点、物件、势力、传说与故事时间线做中英子串检索。Search the whole IP library, including props and story timeline events, with Chinese/English substring matching.",
       inputSchema: z.object({
         query: z
           .string()
@@ -580,8 +580,10 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
             "chapter",
             "character",
             "location",
+            "object",
             "faction",
             "lore",
+            "timeline",
           ])
           .optional()
           .describe("限定结果类型 / Optional result kind."),

@@ -34,6 +34,7 @@ export function Sidebar({
     { route: "library", label: t("library"), icon: "book" },
     { route: "cast", label: t("cast"), icon: "users" },
     { route: "graph", label: t("relationships"), icon: "graph" },
+    { route: "timeline", label: t("timeline"), icon: "timeline" },
     { route: "workflow", label: t("workflow"), icon: "sparkles" },
     { route: "exports", label: t("exports"), icon: "package" },
   ];

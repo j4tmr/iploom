@@ -5,6 +5,7 @@ export type StudioRoute =
   | { name: "work"; workId: string }
   | { name: "cast"; universeId?: string }
   | { name: "graph"; universeId?: string }
+  | { name: "timeline"; universeId?: string }
   | { name: "workflow" }
   | { name: "exports" }
   | { name: "settings" };
@@ -19,6 +20,8 @@ export function routeKey(route: StudioRoute): string {
       return `cast:${route.universeId ?? "all"}`;
     case "graph":
       return `graph:${route.universeId ?? "all"}`;
+    case "timeline":
+      return `timeline:${route.universeId ?? "all"}`;
     default:
       return route.name;
   }

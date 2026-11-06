@@ -6,6 +6,7 @@ export type IconName =
   | "book"
   | "users"
   | "graph"
+  | "timeline"
   | "package"
   | "settings"
   | "search"
@@ -65,6 +66,14 @@ const paths: Record<IconName, React.ReactNode> = {
       <circle cx="19" cy="5" r="2.5" />
       <circle cx="19" cy="19" r="2.5" />
       <path d="m7.4 11 9.2-4.8M7.4 13l9.2 4.8" />
+    </>
+  ),
+  timeline: (
+    <>
+      <path d="M5 4v16M5 8h6M5 12h10M5 16h7" />
+      <circle cx="5" cy="8" r="1.5" />
+      <circle cx="5" cy="12" r="1.5" />
+      <circle cx="5" cy="16" r="1.5" />
     </>
   ),
   package: (

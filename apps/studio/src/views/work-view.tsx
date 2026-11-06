@@ -48,6 +48,7 @@ export function WorkView({
   onEditWork,
   onDeleteWork,
   onAddChapter,
+  onOpenTimeline,
   onDeleteChapter,
   onChangeChapter,
   onRecordExport,
@@ -61,6 +62,7 @@ export function WorkView({
   onEditWork: () => void;
   onDeleteWork: () => void;
   onAddChapter: () => void;
+  onOpenTimeline: (chapterId?: string) => void;
   onDeleteChapter: (chapter: Chapter) => void;
   onChangeChapter: (chapterId: string, change: (chapter: Chapter) => void) => void;
   onRecordExport: (
@@ -212,6 +214,11 @@ export function WorkView({
                   />
                 </div>
                 <div className="chapter-editor-tools">
+                  <IconButton
+                    label={t("timeline")}
+                    icon="timeline"
+                    onClick={() => onOpenTimeline(selected.id)}
+                  />
                   <Select
                     value={selected.status}
                     aria-label={t("chapterStatus")}
