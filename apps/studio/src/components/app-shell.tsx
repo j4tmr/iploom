@@ -1,4 +1,5 @@
 import { displayText, workWords } from "../core/factory.ts";
+import type { AiConfigInfo } from "../core/ai.ts";
 import type {
   StudioWorkspace,
   ThemeMode,
@@ -126,9 +127,11 @@ export function Topbar({
   theme,
   t,
   saveState,
+  aiInfo,
   onSearch,
   onSetLocale,
   onToggleTheme,
+  onModelSettings,
   onMcp,
 }: {
   eyebrow: string;
@@ -137,9 +140,11 @@ export function Topbar({
   theme: ThemeMode;
   t: Translate;
   saveState: SaveState;
+  aiInfo: AiConfigInfo | null;
   onSearch: () => void;
   onSetLocale: (locale: UiLocale) => void;
   onToggleTheme: () => void;
+  onModelSettings: () => void;
   onMcp: () => void;
 }) {
   return (
@@ -175,6 +180,18 @@ export function Topbar({
           icon={theme === "dark" ? "sun" : "moon"}
           onClick={onToggleTheme}
         />
+        <button
+          className={`model-button ${aiInfo?.configured ? "configured" : "unconfigured"}`}
+          aria-label={t("modelSettings")}
+          title={aiInfo?.configured
+            ? `${t("modelIdentifier")}: ${aiInfo.model} · ${t("modelEndpoint")}: ${aiInfo.endpoint}`
+            : t("modelSetupBody")}
+          onClick={onModelSettings}
+        >
+          <Icon name="sparkles" size={16} />
+          <span>{aiInfo?.configured ? aiInfo.model : t("modelNotConfigured")}</span>
+          <span className={`online-dot ${aiInfo?.configured ? "" : "offline"}`} />
+        </button>
         <button className="mcp-button" onClick={onMcp}>
           <Icon name="terminal" size={16} />
           MCP

@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
+import type { AiConfigInfo } from "../core/ai.ts";
 import type {
   StudioWorkspace,
   ThemeMode,
   UiLocale,
   WorkspaceSettings,
 } from "../core/types.ts";
+import { APP_VERSION } from "../core/version.ts";
 import type { Translate } from "../i18n.ts";
 import { bridge, type AppInfo } from "../platform.ts";
 import { Icon } from "../components/icon.tsx";
 import { AiSettings } from "../components/ai-settings.tsx";
+import { UpdateSettings } from "../components/update-settings.tsx";
 import {
   Button,
   Field,
@@ -34,6 +37,8 @@ export function SettingsView({
   locale,
   t,
   path,
+  aiInfo,
+  onAiConfigured,
   onUpdateSettings,
   onResetDemo,
 }: {
@@ -41,6 +46,8 @@ export function SettingsView({
   locale: UiLocale;
   t: Translate;
   path: string;
+  aiInfo: AiConfigInfo | null;
+  onAiConfigured: (info: AiConfigInfo) => void;
   onUpdateSettings: (change: Partial<WorkspaceSettings>) => void;
   onResetDemo: () => Promise<void>;
 }) {
@@ -80,7 +87,7 @@ export function SettingsView({
         <p>{t("settingsLead")}</p>
       </header>
       <div className="settings-layout">
-        <AiSettings locale={locale} />
+        <AiSettings locale={locale} t={t} info={aiInfo} onConfigured={onAiConfigured} />
         <section className="settings-panel">
           <SectionTitle title={t("interfaceLanguage")} />
           <div className="segmented large">
@@ -220,7 +227,7 @@ export function SettingsView({
             <h2>IPloom Studio</h2>
             <p>{t("aboutBody")}</p>
             <div className="about-meta">
-              <span>{t("appVersion")} <b>{info?.version ?? "0.3.0"}</b></span>
+              <span>{t("appVersion")} <b>{info?.version ?? APP_VERSION}</b></span>
               <span>{t("platform")} <b>{info?.platform ?? navigator.platform}</b></span>
               <span>{workspace.settings.locale}</span>
             </div>
@@ -232,6 +239,8 @@ export function SettingsView({
             </Button>
           </div>
         </section>
+
+        <UpdateSettings locale={locale} t={t} />
       </div>
       {toast ? <Toast message={toast} /> : null}
     </div>

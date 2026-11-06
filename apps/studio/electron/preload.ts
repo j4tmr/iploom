@@ -25,6 +25,7 @@ const api: StudioBridge = {
   exportArcReel: (bundle) =>
     ipcRenderer.invoke("iploom:export-arc-reel", bundle),
   appInfo: () => ipcRenderer.invoke("iploom:app-info"),
+  checkForUpdates: () => ipcRenderer.invoke("iploom:check-update"),
   copyText: (value) => ipcRenderer.invoke("iploom:copy-text", value),
   openFolder: (path) => ipcRenderer.invoke("iploom:open-folder", path),
   openExternal: (url) => ipcRenderer.invoke("iploom:open-external", url),

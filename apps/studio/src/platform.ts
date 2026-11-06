@@ -1,5 +1,9 @@
 import { createDemoWorkspace, createEmptyWorkspace } from "./core/factory.ts";
 import type { ArcReelBundle, StudioWorkspace, UiLocale } from "./core/types.ts";
+import {
+  unavailableUpdateCheck,
+  type UpdateCheckResult,
+} from "./core/updates.ts";
 import { APP_VERSION } from "./core/version.ts";
 import { loadBrowserWorkspace, saveBrowserWorkspace } from "./browser-workspace.ts";
 import type { AiConfig, AiConfigInfo, AiProgress, AiRequest } from "./core/ai.ts";
@@ -48,6 +52,7 @@ export interface StudioBridge {
   flushComplete(requestId: string, error?: string): Promise<void>;
   exportArcReel(bundle: ArcReelBundle): Promise<WrittenBundle>;
   appInfo(): Promise<AppInfo>;
+  checkForUpdates(): Promise<UpdateCheckResult>;
   copyText(value: string): Promise<void>;
   openFolder(path: string): Promise<void>;
   openExternal(url: string): Promise<void>;
@@ -127,6 +132,13 @@ export const browserFallback: StudioBridge = {
       mcp: browserMcpConfig(),
       mcpBinary: "iploom-mcp",
     };
+  },
+  async checkForUpdates() {
+    return unavailableUpdateCheck(
+      APP_VERSION,
+      new Date().toISOString(),
+      "desktop-only",
+    );
   },
   async copyText(value) {
     await navigator.clipboard.writeText(value);

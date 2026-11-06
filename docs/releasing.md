@@ -15,6 +15,38 @@ Before a release:
 
 The release workflow rejects a tag that does not exactly match `studio-v${package.version}`.
 
+## Version semantics
+
+Versions are strict `MAJOR.MINOR.PATCH` numbers. The in-app update check compares them numerically, so `0.10.0` is newer than `0.9.9`.
+
+- **MAJOR** — a workspace schema, MCP contract or workflow change that requires users to migrate data or rewrite integrations.
+- **MINOR** — a backwards-compatible, user-facing capability, including additive schema fields, automatic migrations and new MCP tools.
+- **PATCH** — backwards-compatible fixes, documentation, CI and copy changes.
+
+Tags not matching `studio-v<MAJOR>.<MINOR>.<PATCH>` are ignored by the update check. Publish a release as a prerelease when it should not be offered to users; drafts and prereleases are never offered.
+
+## In-app update check
+
+**Settings → Application update → Check for updates** asks the desktop process to read the GitHub Releases API. The check runs only when the user clicks it:
+
+- no check runs at startup and no background timer exists;
+- the request is bounded to 10 seconds and returns a structured result (`update-available`, `up-to-date`, `unavailable`);
+- only stable releases whose tag matches the strict pattern are considered;
+- the download link is chosen for the current platform (`.dmg` then `.zip` on macOS, `.exe` on Windows) and is opened in the system browser only after another explicit click;
+- IPloom never downloads, installs or executes a release artifact itself.
+
+The renderer only receives release metadata and HTTPS links restricted to `github.com/j4tmr/iploom/releases/`. It never receives credentials.
+
+## Verifying a downloaded release
+
+Users should verify each download against `SHA256SUMS.txt` from the same release before installing:
+
+```sh
+shasum -a 256 IPloom-Studio-<version>-darwin-universal.dmg
+```
+
+A published release, a green workflow or a reachable download URL alone does not prove the local file is intact.
+
 ## Local preflight
 
 ```sh
