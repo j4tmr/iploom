@@ -1,6 +1,10 @@
 import { createDemoWorkspace } from "./core/factory.ts";
 import { validateWorkspace } from "./core/validate.ts";
-import type { StudioWorkspace, UiLocale } from "./core/types.ts";
+import {
+  WORKSPACE_SCHEMA_VERSION,
+  type StudioWorkspace,
+  type UiLocale,
+} from "./core/types.ts";
 
 export const browserWorkspaceKey = "iploom-studio:workspace:v1";
 export const browserSnapshotKey = "iploom-studio:workspace-snapshot:v1";
@@ -36,6 +40,34 @@ export class StaleBrowserWorkspaceError extends Error {
   }
 }
 
+/**
+ * A newer build wrote a schema this build cannot read. Unlike corrupt data,
+ * that workspace is healthy and must survive the downgrade untouched, so the
+ * save is refused and marked non-retryable (retrying cannot help).
+ */
+export class NewerBrowserWorkspaceVersionError extends Error {
+  readonly retryable = false;
+  readonly foundVersion: number;
+
+  constructor(foundVersion: number) {
+    super(
+      `This browser workspace was created by a newer IPloom Studio (schema ${foundVersion}; ` +
+        `this build supports ${WORKSPACE_SCHEMA_VERSION}). Update the app to open it. ` +
+        `The stored workspace was left untouched.`,
+    );
+    this.name = "NewerBrowserWorkspaceVersionError";
+    this.foundVersion = foundVersion;
+  }
+}
+
+function storedSchemaVersion(value: unknown): number | null {
+  if (!value || typeof value !== "object") return null;
+  const version = (value as { schema_version?: unknown }).schema_version;
+  return typeof version === "number" && Number.isFinite(version)
+    ? version
+    : null;
+}
+
 export interface BrowserSaveOptions {
   /** Snapshot restore and demo reset intentionally move the workspace backwards. */
   allowRollback?: boolean;
@@ -48,16 +80,31 @@ export function saveBrowserWorkspace(
 ): void {
   const valid = validateWorkspace(workspace);
   const raw = storage.getItem(browserWorkspaceKey);
-  if (raw !== null && !options.allowRollback) {
-    let storedRevision: number | null = null;
+  if (raw !== null) {
+    let stored: unknown = null;
     try {
-      storedRevision = validateWorkspace(JSON.parse(raw)).revision;
+      stored = JSON.parse(raw);
     } catch {
       // Unreadable stored data must stay replaceable by a healthy workspace.
-      storedRevision = null;
     }
-    if (storedRevision !== null && storedRevision > valid.revision) {
-      throw new StaleBrowserWorkspaceError(storedRevision, valid.revision);
+    // Check the schema before validation: this build's validator rejects the
+    // newer version, and treating that rejection as corruption would let an
+    // old build silently replace a workspace written by a newer one.
+    const storedVersion = storedSchemaVersion(stored);
+    if (storedVersion !== null && storedVersion > WORKSPACE_SCHEMA_VERSION) {
+      throw new NewerBrowserWorkspaceVersionError(storedVersion);
+    }
+    if (!options.allowRollback && stored !== null) {
+      let storedRevision: number | null = null;
+      try {
+        storedRevision = validateWorkspace(stored).revision;
+      } catch {
+        // Unreadable stored data must stay replaceable by a healthy workspace.
+        storedRevision = null;
+      }
+      if (storedRevision !== null && storedRevision > valid.revision) {
+        throw new StaleBrowserWorkspaceError(storedRevision, valid.revision);
+      }
     }
   }
   storage.setItem(browserWorkspaceKey, JSON.stringify(valid));

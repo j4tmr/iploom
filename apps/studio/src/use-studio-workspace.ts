@@ -53,6 +53,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
   const savedRevision = useRef(-1);
   const pendingSave = useRef<Promise<void> | null>(null);
   const saveSequence = useRef(0);
+  const retryWake = useRef<(() => void) | null>(null);
   const workspaceRef = useRef<StudioWorkspace | null>(null);
 
   useEffect(() => {
@@ -87,7 +88,19 @@ export function useStudioWorkspace(): StudioWorkspaceState {
       await retrySave(() => bridge.save(next), {
         isCurrent: () => sequence === saveSequence.current,
         sleep: (milliseconds) =>
-          new Promise((resolve) => window.setTimeout(resolve, milliseconds)),
+          new Promise<void>((resolve) => {
+            let timer: number | null = null;
+            const wake = () => {
+              if (timer !== null) {
+                window.clearTimeout(timer);
+                timer = null;
+              }
+              if (retryWake.current === wake) retryWake.current = null;
+              resolve();
+            };
+            timer = window.setTimeout(wake, milliseconds);
+            retryWake.current = wake;
+          }),
       });
       if (sequence === saveSequence.current) {
         savedRevision.current = next.revision;
@@ -107,14 +120,15 @@ export function useStudioWorkspace(): StudioWorkspaceState {
     if (!workspace || workspace.revision === savedRevision.current) return;
     const snapshot = workspace;
     const timer = window.setTimeout(() => {
-      pendingSave.current = persist(snapshot)
+      const task = persist(snapshot)
         .then(
           () => undefined,
           () => undefined,
         )
         .finally(() => {
-          pendingSave.current = null;
+          if (pendingSave.current === task) pendingSave.current = null;
         });
+      pendingSave.current = task;
     }, 450);
     return () => window.clearTimeout(timer);
   }, [persist, workspace]);
@@ -151,11 +165,17 @@ export function useStudioWorkspace(): StudioWorkspaceState {
   );
 
   const replaceWorkspace = useCallback((next: StudioWorkspace) => {
+    // Callers only replace the workspace after it has been written to disk
+    // (demo reset, snapshot restore). Invalidate every save still in flight:
+    // a retry sleeping in backoff for the pre-replacement revision considers
+    // itself current otherwise and overwrites the restored workspace later.
+    saveSequence.current += 1;
+    pendingSave.current = null;
+    retryWake.current?.();
     workspaceRef.current = next;
     setWorkspace(next);
-    // Callers only replace the workspace after it has been written to disk
-    // (demo reset, snapshot restore). Marking it saved avoids a redundant
-    // autosave ~450ms later that would rotate the user's only `.bak` away.
+    // Marking it saved avoids a redundant autosave ~450ms later that would
+    // rotate the user's only `.bak` away.
     savedRevision.current = next.revision;
     setSaveState("saved");
     setError(null);
