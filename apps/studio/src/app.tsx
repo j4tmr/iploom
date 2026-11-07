@@ -811,11 +811,11 @@ export function App() {
             onStatus={changeWorkflowStatus} onResult={saveWorkflowResult}
           />
           {state.recovered ? (
-            <div className="recovery-banner">
+            <div className="recovery-banner" title={state.rejectedReason ?? undefined}>
               <Icon name="check" size={16} />
-              {locale === "en"
-                ? "Recovered the workspace from its previous backup."
-                : "工作区已从上一份备份中恢复。"}
+              {state.rejectedPath
+                ? t("recoveredFromBackup", { path: state.rejectedPath })
+                : t("recoveredFromBackupNoQuarantine")}
             </div>
           ) : null}
           {state.error && state.saveState === "error" ? (

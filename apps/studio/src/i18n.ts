@@ -309,6 +309,9 @@ const zh = {
   snapshotReasonDeleteChapter: "删除章节前",
   snapshotReasonImport: "导入小说前",
   snapshotReasonRestore: "恢复快照前",
+  recoveredFromBackup:
+    "工作区已从上一份备份恢复。无法读取的原文件已保留为 {path}。",
+  recoveredFromBackupNoQuarantine: "工作区已从上一份备份恢复。",
   appVersion: "版本",
   platform: "平台",
   projectHome: "开源项目",
@@ -775,6 +778,10 @@ const en: Record<MessageKey, string> = {
   snapshotReasonDeleteChapter: "Before chapter delete",
   snapshotReasonImport: "Before manuscript import",
   snapshotReasonRestore: "Before snapshot restore",
+  recoveredFromBackup:
+    "Recovered the workspace from its previous backup. The unreadable file was kept as {path}.",
+  recoveredFromBackupNoQuarantine:
+    "Recovered the workspace from its previous backup.",
   appVersion: "Version",
   platform: "Platform",
   projectHome: "Open-source project",

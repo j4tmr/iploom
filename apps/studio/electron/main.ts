@@ -68,6 +68,9 @@ let flushWaiter:
       timer: NodeJS.Timeout;
     }
   | undefined;
+// The most recent workspace the renderer handed to the main process. It backs
+// the "save a copy" escape hatch when the normal save keeps failing.
+let recoveryWorkspace: StudioWorkspace | null = null;
 
 app.setName("IPloom Studio");
 
@@ -221,36 +224,126 @@ function requestRendererFlush(window: BrowserWindow): Promise<void> {
   });
 }
 
-function closeAfterFlush(window: BrowserWindow, quit: boolean): void {
+function showMessage(
+  window: BrowserWindow,
+  options: Electron.MessageBoxOptions,
+): Promise<Electron.MessageBoxReturnValue> {
+  return window.isDestroyed()
+    ? dialog.showMessageBox(options)
+    : dialog.showMessageBox(window, options);
+}
+
+async function chooseCloseFailureAction(
+  window: BrowserWindow,
+  message: string,
+): Promise<"retry" | "copy" | "exit" | "edit"> {
+  const { response } = await showMessage(window, {
+    type: "error",
+    title: "IPloom Studio could not finish saving",
+    message,
+    detail:
+      "Retry the save, save a copy of the in-memory workspace, or exit without saving. " +
+      "Exiting without saving discards edits made since the last successful save.",
+    buttons: [
+      "Retry",
+      "Save a Copy and Exit",
+      "Exit Without Saving",
+      "Keep Editing",
+    ],
+    defaultId: 0,
+    cancelId: 3,
+    noLink: true,
+  });
+  if (response === 1) return "copy";
+  if (response === 2) return "exit";
+  if (response === 3) return "edit";
+  return "retry";
+}
+
+async function closeAfterFlush(
+  window: BrowserWindow,
+  quit: boolean,
+): Promise<void> {
   if (quit ? quitInFlight : closeInFlight) return;
   if (quit) quitInFlight = true;
   else closeInFlight = true;
-  void requestRendererFlush(window)
-    .then(() => {
-      closeApproved = true;
-      if (quit) {
-        quitApproved = true;
-        app.quit();
-      } else {
-        window.close();
-      }
-    })
-    .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error("[IPloom Studio] close flush failed", error);
-      if (smokeMode) {
-        app.exit(1);
+  try {
+    for (;;) {
+      try {
+        await requestRendererFlush(window);
+        closeApproved = true;
+        if (quit) {
+          quitApproved = true;
+          app.quit();
+        } else {
+          window.close();
+        }
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error("[IPloom Studio] close flush failed", error);
+        if (smokeMode) {
+          app.exit(1);
+          return;
+        }
+        const choice = await chooseCloseFailureAction(window, message);
+        if (choice === "retry") continue;
+        if (choice === "edit") return;
+        if (choice === "copy") {
+          if (!recoveryWorkspace) {
+            await showMessage(window, {
+              type: "error",
+              title: "No workspace copy is available",
+              message:
+                "The editor has not handed the workspace to the main process yet. " +
+                "Choose Retry, or keep editing and try again.",
+              buttons: ["Retry", "Keep Editing"],
+              defaultId: 0,
+              cancelId: 1,
+              noLink: true,
+            });
+            continue;
+          }
+          try {
+            const path = await requireStore().saveRecoveryCopy(recoveryWorkspace);
+            await showMessage(window, {
+              type: "info",
+              title: "Recovery copy saved",
+              message: `Your in-memory workspace was saved to ${path}.`,
+              buttons: ["Exit"],
+              defaultId: 0,
+              noLink: true,
+            });
+          } catch (copyError) {
+            await showMessage(window, {
+              type: "error",
+              title: "Could not save a recovery copy",
+              message:
+                copyError instanceof Error
+                  ? copyError.message
+                  : String(copyError),
+              buttons: ["Retry", "Keep Editing"],
+              defaultId: 0,
+              cancelId: 1,
+              noLink: true,
+            });
+            continue;
+          }
+        }
+        closeApproved = true;
+        if (quit) {
+          quitApproved = true;
+          app.quit();
+        } else {
+          window.close();
+        }
         return;
       }
-      dialog.showErrorBox(
-        "IPloom Studio could not finish saving",
-        `${message}\n\nThe window remains open so you can retry or copy your work.`,
-      );
-    })
-    .finally(() => {
-      if (quit) quitInFlight = false;
-      else closeInFlight = false;
-    });
+    }
+  } finally {
+    if (quit) quitInFlight = false;
+    else closeInFlight = false;
+  }
 }
 
 function defaultLocale(): UiLocale {
@@ -435,14 +528,23 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("iploom:save", async (event, workspace: StudioWorkspace) => {
     assertTrustedSender(event);
+    if (workspace && typeof workspace === "object") recoveryWorkspace = workspace;
     await requireStore().save(workspace);
     return { savedAt: new Date().toISOString() };
   });
 
   ipcMain.handle(
     "iploom:flush-complete",
-    async (event, requestId: string, error?: string) => {
+    async (
+      event,
+      requestId: string,
+      error?: string,
+      workspace?: StudioWorkspace,
+    ) => {
       assertTrustedSender(event);
+      if (workspace && typeof workspace === "object") {
+        recoveryWorkspace = workspace;
+      }
       if (typeof requestId !== "string") {
         throw new Error("Flush request id must be a string");
       }

@@ -19,6 +19,10 @@ export interface LoadedWorkspace {
   recoveredFromBackup: boolean;
   /** Present when the operation stored a recoverable pre-change snapshot. */
   snapshotPath?: string | null;
+  /** Present when an unreadable primary file was moved aside during recovery. */
+  rejectedPath?: string | null;
+  /** Validation detail for the quarantined primary file. */
+  rejectedReason?: string | null;
 }
 
 export interface WorkspaceSnapshotInfo {
@@ -68,7 +72,11 @@ export interface StudioBridge {
   listSnapshots(): Promise<WorkspaceSnapshotInfo[]>;
   restoreSnapshot(path: string): Promise<LoadedWorkspace>;
   onFlushRequest(listener: (requestId: string) => void): () => void;
-  flushComplete(requestId: string, error?: string): Promise<void>;
+  flushComplete(
+    requestId: string,
+    error?: string,
+    workspace?: StudioWorkspace,
+  ): Promise<void>;
   exportArcReel(bundle: ArcReelBundle): Promise<WrittenBundle>;
   appInfo(): Promise<AppInfo>;
   checkForUpdates(): Promise<UpdateCheckResult>;

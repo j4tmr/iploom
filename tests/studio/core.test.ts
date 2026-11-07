@@ -596,7 +596,9 @@ describe("workspace store", () => {
       // Recovery followed by another failure must still have a validated backup.
       await Bun.write(file, "{broken again");
       expect((await store.load()).workspace.name).toBe("Previous");
-      rmSync(file);
+      // The second recovery quarantined the corrupt primary, so removing it is
+      // best-effort; `ensure()` must still fall back to the validated backup.
+      rmSync(file, { force: true });
       const afterMissingPrimary = await store.ensure();
       expect(afterMissingPrimary.recoveredFromBackup).toBe(true);
       expect(afterMissingPrimary.workspace.name).toBe("Previous");

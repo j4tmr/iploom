@@ -12,6 +12,7 @@ import {
   type WorkspaceChangeResult,
 } from "./core/integrity.ts";
 import type { StudioWorkspace, UiLocale } from "./core/types.ts";
+import { retrySave } from "./save-retry.ts";
 
 export type SaveState = "loading" | "saved" | "saving" | "error";
 
@@ -31,6 +32,8 @@ export interface StudioWorkspaceState {
   error: string | null;
   path: string;
   recovered: boolean;
+  rejectedPath: string | null;
+  rejectedReason: string | null;
   saveNow: () => Promise<void>;
   setLocale: (locale: UiLocale) => void;
 }
@@ -45,6 +48,8 @@ export function useStudioWorkspace(): StudioWorkspaceState {
   const [error, setError] = useState<string | null>(null);
   const [path, setPath] = useState("");
   const [recovered, setRecovered] = useState(false);
+  const [rejectedPath, setRejectedPath] = useState<string | null>(null);
+  const [rejectedReason, setRejectedReason] = useState<string | null>(null);
   const savedRevision = useRef(-1);
   const pendingSave = useRef<Promise<void> | null>(null);
   const saveSequence = useRef(0);
@@ -60,6 +65,8 @@ export function useStudioWorkspace(): StudioWorkspaceState {
         setWorkspace(loaded.workspace);
         setPath(loaded.path);
         setRecovered(loaded.recoveredFromBackup);
+        setRejectedPath(loaded.rejectedPath ?? null);
+        setRejectedReason(loaded.rejectedReason ?? null);
         savedRevision.current = loaded.workspace.revision;
         setSaveState("saved");
       })
@@ -77,7 +84,11 @@ export function useStudioWorkspace(): StudioWorkspaceState {
     const sequence = ++saveSequence.current;
     setSaveState("saving");
     try {
-      await bridge.save(next);
+      await retrySave(() => bridge.save(next), {
+        isCurrent: () => sequence === saveSequence.current,
+        sleep: (milliseconds) =>
+          new Promise((resolve) => window.setTimeout(resolve, milliseconds)),
+      });
       if (sequence === saveSequence.current) {
         savedRevision.current = next.revision;
         setSaveState("saved");
@@ -168,6 +179,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
           .flushComplete(
             requestId,
             reason instanceof Error ? reason.message : String(reason),
+            workspaceRef.current ?? undefined,
           )
           .catch(() => undefined);
       }
@@ -193,6 +205,8 @@ export function useStudioWorkspace(): StudioWorkspaceState {
     error,
     path,
     recovered,
+    rejectedPath,
+    rejectedReason,
     saveNow,
     setLocale,
   };
