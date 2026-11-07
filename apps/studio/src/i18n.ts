@@ -352,6 +352,9 @@ const zh = {
   custom: "自定义",
   resetDemoConfirm:
     "载入演示工作区会替换当前界面中的工作区，并在 snapshots 目录保留一份可恢复快照。继续吗？",
+  resetDemoFailed: "无法载入演示工作区：{reason}",
+  resetDemoNewerSchema:
+    "无法载入演示工作区：浏览器中的工作区由更新版本的 IPloom Studio 写入（数据结构 v{version}），请先升级应用。",
   errorTitle: "出了点问题",
   retry: "重试",
   emptySelection: "尚未选择",
@@ -1071,6 +1074,9 @@ const en: Record<MessageKey, string> = {
   custom: "Custom",
   resetDemoConfirm:
     "Loading the demo replaces the workspace shown here and keeps a restorable snapshot in the snapshots folder. Continue?",
+  resetDemoFailed: "Could not load the demo workspace: {reason}",
+  resetDemoNewerSchema:
+    "Could not load the demo workspace: the browser workspace was written by a newer IPloom Studio (schema v{version}). Update the app first.",
   errorTitle: "Something went wrong",
   retry: "Retry",
   emptySelection: "Nothing selected",

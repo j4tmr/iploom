@@ -62,6 +62,7 @@ import {
 } from "./use-studio-workspace.ts";
 import type { StudioRoute } from "./routes.ts";
 import { describeWorkspaceProblem } from "./validation-message.ts";
+import { describeResetFailure } from "./workspace-errors.ts";
 import { Sidebar, Topbar } from "./components/app-shell.tsx";
 import {
   AtlasModal,
@@ -699,18 +700,31 @@ export function App() {
   };
 
   const resetDemo = async () => {
-    const loaded = await bridge.resetDemo(locale);
-    state.replaceWorkspace(loaded.workspace);
-    setRoute({ name: "dashboard" });
-    setHistory([]);
-    notify(
-      loaded.snapshotPath
-        ? t("snapshotSaved", { path: loaded.snapshotPath })
-        : t("saved"),
-    );
+    // Invalidate before dispatch: while the reset is in flight, a retry that
+    // wakes up would otherwise save the pre-reset workspace after the reset
+    // has already been written.
+    state.invalidatePendingSaves();
+    try {
+      const loaded = await bridge.resetDemo(locale);
+      state.replaceWorkspace(loaded.workspace);
+      setRoute({ name: "dashboard" });
+      setHistory([]);
+      notify(
+        loaded.snapshotPath
+          ? t("snapshotSaved", { path: loaded.snapshotPath })
+          : t("saved"),
+      );
+    } catch (reason) {
+      // The settings view notifies with `message`; translate the known browser
+      // refusal here while the workspace locale is available.
+      throw new Error(describeResetFailure(reason, t));
+    }
   };
 
   const restoreSnapshot = async (snapshotPath: string) => {
+    // Same in-flight window as demo reset: stop stale retries before the
+    // restore IPC can be overtaken by a late save of the previous workspace.
+    state.invalidatePendingSaves();
     const loaded = await bridge.restoreSnapshot(snapshotPath);
     state.replaceWorkspace(loaded.workspace);
     setRoute({ name: "dashboard" });

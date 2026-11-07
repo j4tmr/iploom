@@ -145,6 +145,60 @@ test("replacing the workspace drops a retry left in backoff", async () => {
   expect(savedRevisions).toEqual([editedRevision]);
 });
 
+test("invalidating before a restore dispatch drops a retry during the in-flight window", async () => {
+  resetBridge();
+  failNextSave = true;
+  const firstSaveStarted = new Promise<void>((resolve) => {
+    resolveFirstSave = resolve;
+  });
+
+  const { result } = renderHook(() => useStudioWorkspace());
+  await waitFor(() => expect(result.current.saveState).toBe("saved"));
+
+  act(() => {
+    result.current.mutate((draft) => {
+      draft.name = "edited before the restore";
+    });
+  });
+  const editedRevision = result.current.workspace!.revision;
+
+  // Start the save now instead of waiting out the 450 ms autosave debounce.
+  // Its first attempt fails, so retrySave sleeps in its 500 ms backoff.
+  let saveNowResult!: Promise<unknown>;
+  act(() => {
+    saveNowResult = result.current.saveNow().catch((error: unknown) => error);
+  });
+  await firstSaveStarted;
+  expect(savedRevisions).toEqual([editedRevision]);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  // app.tsx invalidates before dispatching the restore IPC. That IPC stays in
+  // flight for a while, so the stale retry wakes up inside the window.
+  act(() => {
+    result.current.invalidatePendingSaves();
+  });
+  expect(await saveNowResult).toBeInstanceOf(Error);
+
+  await new Promise((resolve) => setTimeout(resolve, 650));
+  // Neither the retry nor the debounced autosave may write the pre-restore
+  // workspace after the restore has been dispatched.
+  expect(savedRevisions).toEqual([editedRevision]);
+
+  // The restore resolves and installs its workspace; it needs no save either.
+  const restored = createDemoWorkspace("en");
+  restored.revision = 4;
+  restored.name = "restored snapshot";
+  act(() => {
+    result.current.replaceWorkspace(restored);
+  });
+  await act(async () => {
+    await result.current.saveNow();
+  });
+  expect(savedRevisions).toEqual([editedRevision]);
+  expect(result.current.workspace!.name).toBe("restored snapshot");
+  expect(result.current.saveState).toBe("saved");
+});
+
 test("a non-retryable newer-schema save stays visible without retrying", async () => {
   resetBridge();
   saveError = new NewerBrowserWorkspaceVersionError(

@@ -28,6 +28,14 @@ export interface StudioWorkspaceState {
     change: (draft: StudioWorkspace) => void,
   ) => WorkspaceChangeResult;
   replaceWorkspace: (workspace: StudioWorkspace) => void;
+  /**
+   * Drop every save that has not reached the bridge yet. Call this before
+   * dispatching an operation that replaces the workspace on disk (snapshot
+   * restore, demo reset): the load is still in flight for a while, and a retry
+   * waking up in that window would otherwise save the pre-replacement data
+   * after the replacement has already been written.
+   */
+  invalidatePendingSaves: () => void;
   saveState: SaveState;
   error: string | null;
   path: string;
@@ -54,6 +62,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
   const pendingSave = useRef<Promise<void> | null>(null);
   const saveSequence = useRef(0);
   const retryWake = useRef<(() => void) | null>(null);
+  const autosaveTimer = useRef<number | null>(null);
   const workspaceRef = useRef<StudioWorkspace | null>(null);
 
   useEffect(() => {
@@ -120,6 +129,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
     if (!workspace || workspace.revision === savedRevision.current) return;
     const snapshot = workspace;
     const timer = window.setTimeout(() => {
+      autosaveTimer.current = null;
       const task = persist(snapshot)
         .then(
           () => undefined,
@@ -130,7 +140,11 @@ export function useStudioWorkspace(): StudioWorkspaceState {
         });
       pendingSave.current = task;
     }, 450);
-    return () => window.clearTimeout(timer);
+    autosaveTimer.current = timer;
+    return () => {
+      window.clearTimeout(timer);
+      if (autosaveTimer.current === timer) autosaveTimer.current = null;
+    };
   }, [persist, workspace]);
 
   const mutate = useCallback((change: (draft: StudioWorkspace) => void) => {
@@ -164,14 +178,27 @@ export function useStudioWorkspace(): StudioWorkspaceState {
     [],
   );
 
-  const replaceWorkspace = useCallback((next: StudioWorkspace) => {
-    // Callers only replace the workspace after it has been written to disk
-    // (demo reset, snapshot restore). Invalidate every save still in flight:
-    // a retry sleeping in backoff for the pre-replacement revision considers
-    // itself current otherwise and overwrites the restored workspace later.
+  /**
+   * Invalidate every save still in flight: a retry sleeping in backoff for the
+   * pre-replacement revision considers itself current otherwise and overwrites
+   * the replacement later.
+   */
+  const invalidatePendingSaves = useCallback(() => {
     saveSequence.current += 1;
     pendingSave.current = null;
+    if (autosaveTimer.current !== null) {
+      window.clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = null;
+    }
     retryWake.current?.();
+  }, []);
+
+  const replaceWorkspace = useCallback((next: StudioWorkspace) => {
+    // Callers only replace the workspace after it has been written to disk
+    // (demo reset, snapshot restore). They invalidate before dispatching that
+    // write as well; this post-load bump covers replacements that arrive
+    // without one.
+    invalidatePendingSaves();
     workspaceRef.current = next;
     setWorkspace(next);
     // Marking it saved avoids a redundant autosave ~450ms later that would
@@ -179,7 +206,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
     savedRevision.current = next.revision;
     setSaveState("saved");
     setError(null);
-  }, []);
+  }, [invalidatePendingSaves]);
 
   const saveNow = useCallback(async () => {
     const current = workspaceRef.current;
@@ -240,6 +267,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
     mutate,
     applyChange,
     replaceWorkspace,
+    invalidatePendingSaves,
     saveState: effectiveSaveState,
     error,
     path,
