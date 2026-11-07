@@ -33,7 +33,7 @@ import {
   type LoadedWorkspace,
 } from "../src/node/workspace-store.ts";
 import { createElectronMcpConfig } from "../src/node/mcp-config.ts";
-import { aiConfigSchema, aiRequestSchema, runCompletion } from "../src/node/ai-client.ts";
+import { AI_CANCELED_MESSAGE, aiConfigSchema, aiRequestSchema, isReportableAiError, runCompletion } from "../src/node/ai-client.ts";
 import type { AiConfig } from "../src/core/ai.ts";
 import type {
   AppInfo,
@@ -412,7 +412,6 @@ function registerIpcHandlers(): void {
     if (!aiInfo().configured) throw new Error("Configure the model API in Settings first.");
     const controller = new AbortController();
     aiRuns.set(request.id, controller);
-    const timeout = setTimeout(() => controller.abort(), 180_000);
     let lastSent = 0;
     try {
       return await runCompletion(aiConfig, request, controller.signal, (text) => {
@@ -422,10 +421,10 @@ function registerIpcHandlers(): void {
         }
       });
     } catch (error) {
-      if (controller.signal.aborted) throw new Error("AI task canceled or timed out; no result was applied.");
+      if (controller.signal.aborted) throw new Error(AI_CANCELED_MESSAGE);
       // Never echo provider payloads or credential-bearing fetch errors into IPC/logs.
-      throw new Error(error instanceof Error && /^(Model |Incomplete |Configure )/.test(error.message) ? error.message : "Model request failed. Check configuration and retry.");
-    } finally { clearTimeout(timeout); aiRuns.delete(request.id); }
+      throw new Error(isReportableAiError(error) ? error.message : "Model request failed. Check configuration and retry.");
+    } finally { aiRuns.delete(request.id); }
   });
   ipcMain.handle("iploom:load", async (event) => {
     assertTrustedSender(event);
