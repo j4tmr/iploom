@@ -62,6 +62,16 @@ let mainWindow: BrowserWindow | null = null;
 let workspaceStore: WorkspaceStore | null = null;
 let devUrl: URL | null = null;
 const smokeMode = process.env.IPLOOM_STUDIO_SMOKE === "1";
+const smokeArch = process.env.IPLOOM_STUDIO_SMOKE_ARCH ?? "";
+// Rosetta translates the whole Electron runtime on the first Intel-slice
+// launch, so every renderer step in that run needs a much larger budget than
+// the native one. The launcher in scripts/studio/smoke.ts keeps the overall
+// hard bound.
+const smokeShellReadyMs = smokeArch ? 120_000 : 20_000;
+const smokeWorkflowReadyMs = smokeArch ? 60_000 : 5_000;
+const smokeScenarioStepMs = smokeArch ? 90_000 : 8_000;
+const smokeSaveReadyMs = smokeArch ? 30_000 : 2_000;
+let smokeExitCode = 0;
 const allowedFolders = new Set<string>();
 let aiConfig: AiConfig = { endpoint: "", model: "", apiKey: "" };
 const aiRuns = new Map<string, AbortController>();
@@ -70,6 +80,17 @@ const aiInfo = () => ({
   model: aiConfig.model,
   configured: Boolean(aiConfig.endpoint && aiConfig.model),
 });
+/**
+ * Every smoke-mode exit funnels through here. `app.exit` tears the windows
+ * down, and the window "closed" handler calls `app.exit(0)` from inside that
+ * teardown, which used to overwrite the failure code of a run that had already
+ * failed. The highest code wins so a broken smoke run can never report success.
+ */
+function exitSmoke(code: number): void {
+  smokeExitCode = Math.max(smokeExitCode, code);
+  app.exit(smokeExitCode);
+}
+
 let closeApproved = false;
 let closeInFlight = false;
 let quitApproved = false;
@@ -214,7 +235,7 @@ async function reloadAfterFlush(window: BrowserWindow): Promise<void> {
   } catch (error) {
     console.error("[IPloom Studio] reload flush failed", error);
     if (smokeMode) {
-      app.exit(1);
+      exitSmoke(1);
       return;
     }
     await showMessage(window, {
@@ -291,7 +312,7 @@ async function closeAfterFlush(
         const message = error instanceof Error ? error.message : String(error);
         console.error("[IPloom Studio] close flush failed", error);
         if (smokeMode) {
-          app.exit(1);
+          exitSmoke(1);
           return;
         }
         const choice = await chooseCloseFailureAction(window, message);
@@ -759,7 +780,7 @@ function createWindow(): BrowserWindow {
     if (window.isDestroyed()) return;
     if (closeApproved || closeInFlight || quitApproved || quitInFlight) return;
     if (smokeMode) {
-      app.exit(1);
+      exitSmoke(1);
       return;
     }
     void (async () => {
@@ -793,7 +814,7 @@ function createWindow(): BrowserWindow {
   });
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
-    if (smokeMode) app.exit(0);
+    if (smokeMode) exitSmoke(0);
   });
 
   const load = devUrl
@@ -805,7 +826,7 @@ function createWindow(): BrowserWindow {
     });
     window.webContents.once("did-fail-load", (_event, code, description) => {
       console.error(`[smoke] renderer failed: ${code} ${description}`);
-      app.exit(1);
+      exitSmoke(1);
     });
   }
   void load.catch((error: unknown) => {
@@ -819,7 +840,7 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
   try {
     const result = (await window.webContents.executeJavaScript(
       `new Promise((resolve, reject) => {
-        const deadline = Date.now() + 20_000;
+        const deadline = Date.now() + ${smokeShellReadyMs};
         const check = async () => {
           const shell = document.querySelector(".studio-shell");
           const text = document.body.innerText.trim();
@@ -831,10 +852,10 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
             }
             workflowNav.click();
             await new Promise((resolveWorkflow, rejectWorkflow) => {
-              const workflowDeadline = Date.now() + 5_000;
+              const workflowDeadline = Date.now() + ${smokeWorkflowReadyMs};
               const timeout = setTimeout(() => {
                 rejectWorkflow(new Error("workflow view timed out"));
-              }, 5_000);
+              }, ${smokeWorkflowReadyMs});
               const poll = () => {
                 if (
                   document.querySelector(".workflow-view") &&
@@ -905,7 +926,7 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
       await window.webContents.executeJavaScript(
         `(async () => {
         const waitFor = async (test) => {
-          const deadline = Date.now() + 8000;
+          const deadline = Date.now() + ${smokeScenarioStepMs};
           while (!test()) { if (Date.now() > deadline) throw new Error("Production UI smoke timed out"); await new Promise(r => setTimeout(r, 30)); }
         };
         const setValue = (selector, value) => {
@@ -973,7 +994,7 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
           ).set;
           setValue.call(textarea, ${JSON.stringify(saveMarker)});
           textarea.dispatchEvent(new Event("input", { bubbles: true }));
-          const deadline = Date.now() + 2_000;
+          const deadline = Date.now() + ${smokeSaveReadyMs};
           const save = () => {
             const button = document.querySelector(
               '[data-testid="workflow-save-result"]',
@@ -997,7 +1018,7 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
     window.close();
   } catch (error) {
     console.error("[smoke] failed", error);
-    app.exit(1);
+    exitSmoke(1);
   }
 }
 

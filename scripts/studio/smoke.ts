@@ -84,6 +84,8 @@ async function main(): Promise<void> {
     IPLOOM_STUDIO_WORKSPACE: join(temporary, "workspace.json"),
     IPLOOM_STUDIO_SMOKE_SAVE_MARKER: saveMarker,
     IPLOOM_STUDIO_SMOKE_AI_ENDPOINT: `http://127.0.0.1:${modelAddress.port}/v1`,
+    // The app scales its in-renderer deadlines up for the Rosetta run.
+    ...(options.arch ? { IPLOOM_STUDIO_SMOKE_ARCH: options.arch } : {}),
     ...(screenshot ? { IPLOOM_STUDIO_SMOKE_SCREENSHOT: screenshot } : {}),
   };
   delete environment.ELECTRON_RUN_AS_NODE;
@@ -120,14 +122,19 @@ async function main(): Promise<void> {
         stdio: "inherit",
       });
       // Rosetta translates the whole Electron runtime on the first Intel-slice
-      // launch, and the close-time flush is slower under translation, so that
-      // run needs a much larger budget than the native one.
+      // launch, and every step is slower under translation, so that run needs
+      // a much larger budget. This is a backstop, not a step deadline: it has
+      // to stay above the worst-case sum of the app's own deadlines (see
+      // IPLOOM_STUDIO_SMOKE_ARCH in the Electron main process: 120 s shell +
+      // 60 s workflow + 7 x 90 s scenario steps + 30 s save + 8 s flush =
+      // 848 s) plus the cold translation, so a slow run reports its real
+      // failing step instead of being killed here. Native budgets sum to 91 s.
       const timer = setTimeout(
         () => {
           child.kill("SIGKILL");
           reject(new Error("Desktop smoke test timed out"));
         },
-        options.arch ? 300_000 : 60_000,
+        options.arch ? 1_100_000 : 120_000,
       );
       child.once("error", (error) => {
         clearTimeout(timer);

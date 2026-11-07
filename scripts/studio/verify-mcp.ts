@@ -51,25 +51,33 @@ try {
     stderr: "pipe",
   });
   // The first Intel launch is translated by Rosetta before the server can
-  // answer the handshake, so the arch run needs a larger connect budget.
-  await client.connect(transport, arch ? { timeout: 300_000 } : undefined);
-  const tools = await client.listTools();
+  // answer, so every request in the arch run needs a larger budget than the
+  // SDK's default 60 s.
+  const requestOptions = arch ? { timeout: 300_000 } : undefined;
+  await client.connect(transport, requestOptions);
+  const tools = await client.listTools(undefined, requestOptions);
   if (tools.tools.length !== 14)
     throw new Error(`Expected 14 MCP tools, received ${tools.tools.length}`);
-  const listed = await client.callTool({
-    name: "list_novels",
-    arguments: {},
-  });
+  const listed = await client.callTool(
+    {
+      name: "list_novels",
+      arguments: {},
+    },
+    requestOptions,
+  );
   const text = listed.content.find(
     (item): item is { type: "text"; text: string } => item.type === "text",
   )?.text;
   const body = JSON.parse(text ?? "{}") as { count?: number };
   if (body.count !== 2)
     throw new Error(`Expected 2 demo novels, received ${body.count}`);
-  const workflow = await client.callTool({
-    name: "list_workflow_tasks",
-    arguments: {},
-  });
+  const workflow = await client.callTool(
+    {
+      name: "list_workflow_tasks",
+      arguments: {},
+    },
+    requestOptions,
+  );
   const workflowText = workflow.content.find(
     (item): item is { type: "text"; text: string } => item.type === "text",
   )?.text;
@@ -79,26 +87,32 @@ try {
       `Expected 4 demo workflow tasks, received ${workflowBody.count}`,
     );
   }
-  const brief = await client.callTool({
-    name: "get_workflow_brief",
-    arguments: {
-      task_id: "task_chapter_three",
-      locale: "en",
+  const brief = await client.callTool(
+    {
+      name: "get_workflow_brief",
+      arguments: {
+        task_id: "task_chapter_three",
+        locale: "en",
+      },
     },
-  });
+    requestOptions,
+  );
   const briefText = brief.content.find(
     (item): item is { type: "text"; text: string } => item.type === "text",
   )?.text;
   if (!briefText?.includes("task_chapter_three")) {
     throw new Error("Bundled MCP workflow brief did not include the task");
   }
-  const exported = await client.callTool({
-    name: "export_arcreel_bundle",
-    arguments: {
-      novel_id: "work_tide_clock",
-      output_dir: "exports/bundle-export",
+  const exported = await client.callTool(
+    {
+      name: "export_arcreel_bundle",
+      arguments: {
+        novel_id: "work_tide_clock",
+        output_dir: "exports/bundle-export",
+      },
     },
-  });
+    requestOptions,
+  );
   if (exported.isError) throw new Error("Bundled MCP export failed");
   console.log(
     `[mcp] bundled Electron runtime ok: ${tools.tools.length} tools, ${binary}${
