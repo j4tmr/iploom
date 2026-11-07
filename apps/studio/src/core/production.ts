@@ -3,6 +3,7 @@ import { standardsPromptSection, standardRefsFor } from "./standards.ts";
 import { timelinePromptContext } from "./timeline.ts";
 import { buildWorkflowBrief } from "./workflow.ts";
 import {
+  MAX_AI_PROMPT_LENGTH,
   WORKFLOW_TASK_TEMPLATES,
   type LocalizedText,
   type StudioWorkspace,
@@ -195,6 +196,28 @@ export function createProductionTasks(workspace: StudioWorkspace, scope: Product
   });
 }
 
+const TRUNCATED_RESULT_MARKER = "\n\n[…truncated]";
+
+/**
+ * Cuts one approved output to fit its share of the prompt budget. A cut never
+ * splits a surrogate pair, and a share too small to hold the marker becomes
+ * empty so the brief prints its "—" placeholder instead of a bare marker.
+ */
+function clipApprovedResult(result: string, limit: number): string {
+  if (result.length <= limit) return result;
+  if (limit <= TRUNCATED_RESULT_MARKER.length) return "";
+  let cut = limit - TRUNCATED_RESULT_MARKER.length;
+  if (/[\uD800-\uDBFF]/.test(result.charAt(cut - 1))) cut -= 1;
+  return `${result.slice(0, cut)}${TRUNCATED_RESULT_MARKER}`;
+}
+
+/**
+ * Builds the prompt for a production task. Approved upstream outputs can each
+ * be large, so when the assembled prompt would exceed the IPC schema's limit
+ * every output is cut to an equal share of the remaining budget instead of
+ * letting one stage push the whole prompt past a hard rejection (issue #21).
+ * Stage order, headings and the production instructions are never dropped.
+ */
 export function taskProductionPrompt(workspace: StudioWorkspace, task: WorkflowTask, locale: UiLocale): string {
   const template = effectiveProductionTemplate(task);
   const approvedOutputs = approvedAncestorTasks(workspace, task).map((item) => ({
@@ -202,5 +225,17 @@ export function taskProductionPrompt(workspace: StudioWorkspace, task: WorkflowT
     title: displayText(item.title, locale),
     result: displayText(item.result, locale) || "—",
   }));
-  return `${buildWorkflowBrief(workspace, task.id, locale, { approvedOutputs })}\n${buildProductionPrompt(workspace, template, { universeId: task.universeId, workId: task.workId, chapterId: task.chapterId, characterIds: task.characterIds }, locale, { includeStandards: false, includeContext: false })}`;
+  const render = (outputs: typeof approvedOutputs) =>
+    `${buildWorkflowBrief(workspace, task.id, locale, { approvedOutputs: outputs })}\n${buildProductionPrompt(workspace, template, { universeId: task.universeId, workId: task.workId, chapterId: task.chapterId, characterIds: task.characterIds }, locale, { includeStandards: false, includeContext: false })}`;
+  const prompt = render(approvedOutputs);
+  if (prompt.length <= MAX_AI_PROMPT_LENGTH || !approvedOutputs.length) return prompt;
+  const base = render(approvedOutputs.map((item) => ({ ...item, result: "" })));
+  const available = Math.max(0, MAX_AI_PROMPT_LENGTH - base.length);
+  const share = Math.floor(available / approvedOutputs.length);
+  return render(
+    approvedOutputs.map((item) => ({
+      ...item,
+      result: clipApprovedResult(item.result, share),
+    })),
+  );
 }

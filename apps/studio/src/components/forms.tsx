@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createId, displayText } from "../core/factory.ts";
+import { inferProductionTemplate } from "../core/production.ts";
 import { STANDARD_KINDS, standardKindLabel, standardRefsFor } from "../core/standards.ts";
 import { CHAPTER_LIMITS, MAX_LOCALIZED_LENGTH } from "../core/types.ts";
 import type {
@@ -617,10 +618,19 @@ export function WorkflowTaskModal({
             disabled={!canSave}
             onClick={() => {
               const now = new Date().toISOString();
+              const title = { zh: titleZh.trim(), en: titleEn.trim() };
+              const brief = { zh: briefZh.trim(), en: briefEn.trim() };
+              // Pin the stage once, from the task as it was opened. Renaming a
+              // production task later must not silently change its template
+              // instructions; legacy rows recover their stage the first time
+              // they are saved.
+              const template =
+                initial?.template ??
+                inferProductionTemplate(initial ?? { title, brief, kind });
               const saved = onSave({
                 id: initial?.id ?? createId("task"),
-                title: { zh: titleZh.trim(), en: titleEn.trim() },
-                brief: { zh: briefZh.trim(), en: briefEn.trim() },
+                title,
+                brief,
                 deliverable: {
                   zh: deliverableZh.trim(),
                   en: deliverableEn.trim(),
@@ -630,7 +640,7 @@ export function WorkflowTaskModal({
                 lastRun: initial?.lastRun,
                 resultSuperseded: initial?.resultSuperseded,
                 kind,
-                template: initial?.template,
+                template,
                 status,
                 universeId: universeId || undefined,
                 workId: workId || undefined,

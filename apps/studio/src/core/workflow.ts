@@ -1,8 +1,9 @@
 import { displayText } from "./factory.ts";
 import { standardsPromptSection } from "./standards.ts";
-import { relevantTimelineEvents, timelineAnchorLabel, timelineSubjectLabel } from "./timeline.ts";
+import { relevantTimelineEvents, timelineAnchorLabel } from "./timeline.ts";
 import type {
   StudioWorkspace,
+  TimelineEvent,
   UiLocale,
   WorkflowTask,
   WorkflowTaskRunMeta,
@@ -240,6 +241,15 @@ function section(title: string, body: string[]): string[] {
 }
 
 /**
+ * Timeline rows point at entities by ID. The world, cast and chapter sections
+ * already name every setting, location and character once; repeating the name
+ * here made a production prompt list the same entity twice (issue #21).
+ */
+function timelineSubjectReference(event: TimelineEvent): string {
+  return `${event.subjectKind} ${event.subjectId}`;
+}
+
+/**
  * Produces deterministic task context an AI client can consume without
  * receiving unrelated novels or private worlds from the rest of the library.
  */
@@ -356,21 +366,28 @@ export function buildWorkflowBrief(
           ),
         ...workspace.locations
           .filter((item) => item.universeId === world.id)
-          .map(
-            (item) =>
-              `- **${displayText(item.name, locale)}**: ${displayText(item.summary, locale)}`,
-          ),
+          .map((item) => {
+            const details = [
+              item.atmosphere
+                ? `${zh ? "氛围" : "Atmosphere"}: ${item.atmosphere}`
+                : "",
+              item.visualPrompt
+                ? `${zh ? "视觉锚点" : "Visual anchor"}: ${item.visualPrompt}`
+                : "",
+            ].filter(Boolean);
+            return `- **${displayText(item.name, locale)}** (\`${item.id}\`): ${displayText(item.summary, locale)}${details.map((detail) => `\n  - ${detail}`).join("")}`;
+          }),
         ...workspace.storyObjects
           .filter((item) => item.universeId === world.id)
           .map(
             (item) =>
-              `- **${displayText(item.name, locale)}** (${displayText(item.category, locale)}): ${displayText(item.summary, locale)}`,
+              `- **${displayText(item.name, locale)}** (\`${item.id}\`, ${displayText(item.category, locale)}): ${displayText(item.summary, locale)}${item.visualPrompt ? `\n  - ${zh ? "视觉锚点" : "Visual anchor"}: ${item.visualPrompt}` : ""}`,
           ),
         ...workspace.factions
           .filter((item) => item.universeId === world.id)
           .map(
             (item) =>
-              `- **${displayText(item.name, locale)}**: ${displayText(item.summary, locale)} — ${item.goal}`,
+              `- **${displayText(item.name, locale)}** (\`${item.id}\`): ${displayText(item.summary, locale)} — ${item.goal}${item.visualMotif ? `\n  - ${zh ? "视觉母题" : "Visual motif"}: ${item.visualMotif}` : ""}`,
           ),
       ]),
     );
@@ -401,12 +418,49 @@ export function buildWorkflowBrief(
       ...section(zh ? "章节上下文" : "Chapter context", [
         `### ${chapter.number}. ${chapter.title}${chapter.titleEn ? ` / ${chapter.titleEn}` : ""}`,
         "",
+        `- ${zh ? "视角" : "POV"}: ${chapter.pov || "—"}`,
+        ...(chapter.locationId
+          ? [`- ${zh ? "地点" : "Location"}: \`${chapter.locationId}\``]
+          : []),
+        `- ${zh ? "出场人物" : "Cast"}: ${
+          chapter.characterIds.length
+            ? chapter.characterIds.map((id) => `\`${id}\``).join(", ")
+            : "—"
+        }`,
+        "",
         `**${zh ? "摘要" : "Summary"}**: ${paragraph(chapter.summary, "—")}`,
         "",
         `**${zh ? "大纲" : "Outline"}**: ${paragraph(chapter.outline, "—")}`,
         "",
         `**${zh ? "节拍" : "Beats"}**:`,
         ...chapter.beats.map((beat) => `- ${beat}`),
+        ...(chapter.scenes.length
+          ? [
+              "",
+              `**${zh ? "场景" : "Scenes"}**:`,
+              ...chapter.scenes.map((scene, index) => {
+                const details = [
+                  scene.locationId
+                    ? `${zh ? "地点" : "Location"}: \`${scene.locationId}\``
+                    : "",
+                  `${zh ? "出场人物" : "Cast"}: ${
+                    scene.characterIds.length
+                      ? scene.characterIds.map((id) => `\`${id}\``).join(", ")
+                      : "—"
+                  }`,
+                  ...scene.shots.map((shot, shotIndex) => {
+                    const framing = [shot.shotType, shot.camera]
+                      .filter(Boolean)
+                      .join(" · ");
+                    return `${zh ? "镜头" : "Shot"} ${shotIndex + 1}${framing ? ` (${framing})` : ""}: ${shot.description || "—"}${shot.dialogue ? ` / ${shot.dialogue}` : ""}`;
+                  }),
+                ].filter(Boolean);
+                return `- ${index + 1}. ${scene.title || "—"} (\`${scene.id}\`): ${scene.summary || "—"}${details.map((detail) => `\n  - ${detail}`).join("")}`;
+              }),
+            ]
+          : []),
+        "",
+        `**${zh ? "改编备注" : "Adaptation notes"}**: ${chapter.adaptationNotes || "—"}`,
         "",
         `**${zh ? "正文片段" : "Prose excerpt"}**:`,
         "",
@@ -418,10 +472,23 @@ export function buildWorkflowBrief(
   if (cast.length) {
     lines.push(
       ...section(zh ? "人物锚点" : "Cast anchors", [
-        ...cast.map(
-          (character) =>
-            `- **${displayText(character.name, locale)}** (${displayText(character.role, locale)}): ${displayText(character.summary, locale)}\n  - ${zh ? "外形" : "Look"}: ${character.appearance || "—"}\n  - ${zh ? "视觉锚点" : "Visual anchor"}: ${character.visualPrompt || "—"}\n  - ${zh ? "动机/缺陷" : "Motivation / flaw"}: ${character.motivation || "—"} / ${character.flaw || "—"}`,
-        ),
+        ...cast.map((character) => {
+          const anchors = [
+            `${zh ? "外形" : "Look"}: ${character.appearance || "—"}`,
+            `${zh ? "视觉锚点" : "Visual anchor"}: ${character.visualPrompt || "—"}`,
+            character.personality
+              ? `${zh ? "性格" : "Personality"}: ${character.personality}`
+              : "",
+            character.voice
+              ? `${zh ? "语言风格" : "Voice"}: ${character.voice}`
+              : "",
+            `${zh ? "动机/缺陷" : "Motivation / flaw"}: ${character.motivation || "—"} / ${character.flaw || "—"}`,
+            character.secret
+              ? `${zh ? "秘密（仅用于连续性，不得在正文中直说）" : "Secret (continuity only; never state it outright)"}: ${character.secret}`
+              : "",
+          ].filter(Boolean);
+          return `- **${displayText(character.name, locale)}** (${displayText(character.role, locale)}; \`${character.id}\`): ${displayText(character.summary, locale)}${anchors.map((anchor) => `\n  - ${anchor}`).join("")}`;
+        }),
       ]),
     );
   }
@@ -436,7 +503,7 @@ export function buildWorkflowBrief(
           const target = workspace.characters.find(
             (item) => item.id === relationship.targetId,
           );
-          return `- ${source ? displayText(source.name, locale) : relationship.sourceId} → ${target ? displayText(target.name, locale) : relationship.targetId}: ${displayText(relationship.label, locale)} [${relationship.type}, ${relationship.status}, ${relationship.strength}/5]`;
+          return `- ${source ? displayText(source.name, locale) : relationship.sourceId} → ${target ? displayText(target.name, locale) : relationship.targetId}: ${displayText(relationship.label, locale)} [${relationship.type}, ${relationship.status}, ${relationship.strength}/5, ${relationship.mutual ? (zh ? "双向" : "mutual") : zh ? "单向" : "one-way"}]${relationship.notes ? ` — ${relationship.notes}` : ""}`;
         }),
       ]),
     );
@@ -449,10 +516,10 @@ export function buildWorkflowBrief(
           ? ["以下按章节或故事内时间排序。标为“提出”的内容只是制作提案，不能改写已定稿正文。"]
           : ["Events are ordered by chapter or in-world time. Items marked proposed are production hypotheses and cannot rewrite approved prose."]),
         ...timeline.canon.map((event) => {
-          return `- **${timelineAnchorLabel(workspace, event, locale)} · ${displayText(event.title, locale)}** (${timelineSubjectLabel(workspace, event, locale)}): ${event.stateBefore || "—"} → ${event.stateAfter || "—"}${event.productionPrompt ? `\n  - ${zh ? "制作约束" : "Production constraint"}: ${event.productionPrompt}` : ""}${event.evidence ? `\n  - ${zh ? "证据" : "Evidence"}: ${event.evidence}` : ""}`;
+          return `- **${timelineAnchorLabel(workspace, event, locale)} · ${displayText(event.title, locale)}** (${timelineSubjectReference(event)}): ${event.stateBefore || "—"} → ${event.stateAfter || "—"}${event.productionPrompt ? `\n  - ${zh ? "制作约束" : "Production constraint"}: ${event.productionPrompt}` : ""}${event.evidence ? `\n  - ${zh ? "证据" : "Evidence"}: ${event.evidence}` : ""}`;
         }),
         ...timeline.proposed.map((event) => {
-          return `- [${zh ? "提出" : "PROPOSED"}] **${timelineAnchorLabel(workspace, event, locale)} · ${displayText(event.title, locale)}** (${timelineSubjectLabel(workspace, event, locale)}): ${event.stateBefore || "—"} → ${event.stateAfter || "—"}${event.productionPrompt ? `\n  - ${zh ? "提案约束" : "Proposed constraint"}: ${event.productionPrompt}` : ""}`;
+          return `- [${zh ? "提出" : "PROPOSED"}] **${timelineAnchorLabel(workspace, event, locale)} · ${displayText(event.title, locale)}** (${timelineSubjectReference(event)}): ${event.stateBefore || "—"} → ${event.stateAfter || "—"}${event.productionPrompt ? `\n  - ${zh ? "提案约束" : "Proposed constraint"}: ${event.productionPrompt}` : ""}`;
         }),
       ]),
     );

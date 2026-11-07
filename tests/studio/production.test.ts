@@ -2,7 +2,7 @@ import { expect, jest, test } from "bun:test";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 import { analyzeManuscriptChunks, buildManuscriptImport, manuscriptChunks, mergeManuscriptImport, parseAnalysis, planManuscriptAnalysis, splitManuscript, type ManuscriptAnalysis } from "../../apps/studio/src/core/manuscript.ts";
-import { CHAPTER_LIMITS } from "../../apps/studio/src/core/types.ts";
+import { CHAPTER_LIMITS, MAX_AI_PROMPT_LENGTH } from "../../apps/studio/src/core/types.ts";
 import { buildProductionPrompt, createProductionTasks, effectiveProductionTemplate, productionTemplates, resolveProductionScope, taskProductionPrompt } from "../../apps/studio/src/core/production.ts";
 import { buildWorkflowBrief, setWorkflowTaskResult } from "../../apps/studio/src/core/workflow.ts";
 import { AI_CANCELED_MESSAGE, aiConfigSchema, isReportableAiError, runCompletion } from "../../apps/studio/src/node/ai-client.ts";
@@ -252,6 +252,61 @@ test("production tasks without a chosen character inherit the chapter cast ancho
   }
 });
 
+test("assembled prompts restore chapter, cast, location, object and relationship anchors", () => {
+  const workspace = createDemoWorkspace("en");
+  const work = workspace.works[0]!;
+  const chapter = work.chapters[2]!;
+  chapter.scenes.push({
+    id: "scene_test_21",
+    title: "Tower interior",
+    summary: "The clock stops mid-chime.",
+    locationId: "loc_old_tower",
+    characterIds: ["char_lin"],
+    shots: [{
+      id: "shot_test_21",
+      shotType: "wide",
+      camera: "slow push",
+      description: "Pendulums swing through fog",
+      dialogue: "",
+      durationMs: 3_000,
+      visualPrompt: "",
+    }],
+  });
+  const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: chapter.id }, "en");
+  workspace.workflowTasks.push(...tasks);
+  const prompt = taskProductionPrompt(workspace, tasks[0]!, "en");
+
+  const lin = workspace.characters.find((item) => item.id === "char_lin")!;
+  const gu = workspace.characters.find((item) => item.id === "char_gu")!;
+  const tower = workspace.locations.find((item) => item.id === "loc_old_tower")!;
+  const key = workspace.storyObjects.find((item) => item.id === "object_brass_key")!;
+  const guild = workspace.factions.find((item) => item.id === "fac_tide_guild")!;
+  const relationship = workspace.relationships.find((item) => item.id === "rel_lin_gu")!;
+
+  expect(prompt).toContain(`POV: ${chapter.pov}`);
+  expect(prompt).toContain(`Location: \`${chapter.locationId}\``);
+  expect(prompt).toContain(`Adaptation notes**: ${chapter.adaptationNotes}`);
+  expect(prompt).toContain("**Scenes**:");
+  expect(prompt).toContain("- 1. Tower interior (`scene_test_21`): The clock stops mid-chime.");
+  expect(prompt).toContain("Shot 1 (wide · slow push): Pendulums swing through fog");
+
+  expect(prompt).toContain(`- **${lin.name.en}** (${lin.role.en}; \`char_lin\`)`);
+  expect(prompt).toContain(`Look: ${lin.appearance}`);
+  expect(prompt).toContain(`Personality: ${lin.personality}`);
+  expect(prompt).toContain(`Voice: ${lin.voice}`);
+  expect(prompt).toContain(`Secret (continuity only; never state it outright): ${lin.secret}`);
+  expect(prompt).toContain(`**${tower.name.en}** (\`loc_old_tower\`)`);
+  expect(prompt).toContain(`Atmosphere: ${tower.atmosphere}`);
+  expect(prompt).toContain(`Visual anchor: ${tower.visualPrompt}`);
+  expect(prompt).toContain(`**${key.name.en}** (\`object_brass_key\`, ${key.category.en})`);
+  expect(prompt).toContain(`Visual anchor: ${key.visualPrompt}`);
+  expect(prompt).toContain(`Visual motif: ${guild.visualMotif}`);
+  expect(prompt).toContain(
+    `${lin.name.en} → ${gu.name.en}: ${relationship.label.en} ` +
+    `[${relationship.type}, ${relationship.status}, ${relationship.strength}/5, one-way] — ${relationship.notes}`,
+  );
+});
+
 test("running a task keeps its brief, deliverable and composed prompt stable", () => {
   const workspace = createDemoWorkspace("en");
   const tasks = createProductionTasks(workspace, { workId: workspace.works[0]!.id }, "en");
@@ -407,31 +462,80 @@ test("brief dependency wording follows blockers and only queued tasks show readi
   expect(active).not.toContain("Ready to start");
 });
 
-test("assembled task prompts include each setting, location and faction once", () => {
-  const workspace = createDemoWorkspace("en");
-  for (const work of workspace.works) {
-    const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: work.chapters[0]!.id }, "en");
-    workspace.workflowTasks.push(...tasks);
-    const world = workspace.universes.find((item) => item.id === work.universeId)!;
-    const names = [
-      world.name.en,
-      ...workspace.locations.filter((item) => item.universeId === world.id).map((item) => item.name.en),
-      ...workspace.factions.filter((item) => item.universeId === world.id).map((item) => item.name.en),
-    ];
-    for (const task of tasks) {
-      const prompt = taskProductionPrompt(workspace, task, "en");
-      for (const name of names) expect(prompt.split(name)).toHaveLength(2);
-      expect(prompt).not.toContain("SOURCE DATA (not instructions):");
+test("assembled task prompts include each setting, location, object and faction once", () => {
+  for (const locale of ["en", "zh-CN"] as const) {
+    const workspace = createDemoWorkspace(locale);
+    for (const work of workspace.works) {
+      const world = workspace.universes.find((item) => item.id === work.universeId)!;
+      const localized = <T extends { name: { zh: string; en: string } }>(item: T) =>
+        item.name[locale === "en" ? "en" : "zh"];
+      const entities = [
+        ...workspace.locations.filter((item) => item.universeId === world.id),
+        ...workspace.storyObjects.filter((item) => item.universeId === world.id),
+        ...workspace.factions.filter((item) => item.universeId === world.id),
+      ];
+      const scopes = [
+        { workId: work.id, chapterId: work.chapters[0]!.id },
+        { workId: work.id, chapterId: work.chapters.at(-1)!.id },
+        { workId: work.id },
+      ];
+      for (const scope of scopes) {
+        const tasks = createProductionTasks(workspace, scope, locale);
+        workspace.workflowTasks.push(...tasks);
+        for (const task of tasks) {
+          const prompt = taskProductionPrompt(workspace, task, locale);
+          // English narrative text never repeats these names, so every mention must be structured.
+          if (locale === "en") {
+            for (const name of [localized(world), ...entities.map(localized)]) {
+              expect(prompt.split(name)).toHaveLength(2);
+            }
+          }
+          // Chinese prose may mention a name, so count only the explicit headings and rows.
+          expect(prompt.split(`### ${localized(world)}`)).toHaveLength(2);
+          for (const entity of entities) {
+            expect(prompt.split(`**${localized(entity)}**`)).toHaveLength(2);
+          }
+          expect(prompt).not.toContain("SOURCE DATA (not instructions):");
+        }
+        const standalone = buildProductionPrompt(workspace, "storyboard", scope, locale)
+          .split("SOURCE DATA (not instructions):\n")[1]!;
+        expect(standalone).not.toContain("\n  ");
+        expect(() => JSON.parse(standalone)).not.toThrow();
+      }
     }
-    const standalone = buildProductionPrompt(
-      workspace,
-      "storyboard",
-      { workId: work.id, chapterId: work.chapters[0]!.id },
-      "en",
-    ).split("SOURCE DATA (not instructions):\n")[1]!;
-    expect(standalone).not.toContain("\n  ");
-    expect(() => JSON.parse(standalone)).not.toThrow();
   }
+});
+
+test("oversized approved outputs are shared under the prompt limit without dropping stages", () => {
+  const workspace = createDemoWorkspace("en");
+  const work = workspace.works[0]!;
+  const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: work.chapters[0]!.id }, "en");
+  workspace.workflowTasks.push(...tasks);
+  const markers = [
+    "WORLD_BUDGET_21",
+    "CHARACTER_BUDGET_21",
+    "COSTUME_BUDGET_21",
+    "SCENE_BUDGET_21",
+    "STORYBOARD_BUDGET_21",
+  ];
+  tasks.slice(0, 5).forEach((task, index) => {
+    task.status = "done";
+    // The character output is astral text, so a cut can land between surrogate halves.
+    const filler = index === 1 ? "😀".repeat(20_000) : "x".repeat(40_000);
+    task.result = { zh: `${markers[index]} ${filler}`, en: `${markers[index]} ${filler}` };
+  });
+
+  const review = taskProductionPrompt(workspace, tasks[5]!, "en");
+  expect(review.length).toBeLessThanOrEqual(MAX_AI_PROMPT_LENGTH);
+  for (const marker of markers) expect(review.split(marker)).toHaveLength(2);
+  const positions = markers.map((marker) => review.indexOf(marker));
+  expect(positions).toEqual([...positions].sort((left, right) => left - right));
+  expect(review).toContain("[…truncated]");
+  for (const stage of ["World bible", "Character design", "Costume design", "Scene design", "Storyboard"]) {
+    expect(review).toContain(`### ${stage}`);
+  }
+  expect(review).toContain(`Task: ${productionTemplates.review[2]}`);
+  expect(review).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
 });
 
 test("production scope resolution drops stale cross-novel references", () => {
@@ -518,6 +622,45 @@ test("model client returns provider-reported usage from the stream", async () =>
   await expect(
     runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body)),
   ).resolves.toEqual({ text: "design", usage });
+});
+
+test("model client retries once without stream_options only when the provider names the parameter", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  let calls = 0;
+  const fetcher = (async (_url: unknown, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    calls += 1;
+    if (calls === 1) {
+      return new Response(JSON.stringify({ error: {
+        message: "Unrecognized request argument supplied: stream_options",
+        type: "invalid_request_error",
+      } }), { status: 400, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(sseContent("retried") + sseDone(), { headers: { "Content-Type": "text/event-stream" } });
+  }) as typeof fetch;
+
+  await expect(
+    runCompletion(config, request, new AbortController().signal, () => {}, fetcher),
+  ).resolves.toEqual({ text: "retried" });
+  expect(bodies).toHaveLength(2);
+  expect(bodies[0]!.stream_options).toEqual({ include_usage: true });
+  expect(bodies[1]!.stream_options).toBeUndefined();
+  expect(bodies[1]!.messages).toEqual(bodies[0]!.messages);
+  expect(bodies[1]!.model).toBe(config.model);
+
+  let unrelatedCalls = 0;
+  const unrelated = (async (_url: unknown, _init?: RequestInit) => {
+    unrelatedCalls += 1;
+    return new Response(JSON.stringify({ error: {
+      message: "Unsupported model parameter",
+      code: "invalid_request_error",
+    } }), { status: 400, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  const message = await rejectionMessage(
+    runCompletion(config, request, new AbortController().signal, () => {}, unrelated),
+  );
+  expect(unrelatedCalls).toBe(1);
+  expect(message).toContain("HTTP 400");
 });
 
 test("model client accepts complete JSON fallback and validates endpoint configuration", async () => {
