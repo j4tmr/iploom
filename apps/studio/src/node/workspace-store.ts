@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import { constants } from "node:fs";
 import { basename, dirname, join, normalize, resolve, sep } from "node:path";
+import { arcReelSlug } from "../core/arcreel.ts";
 import { createEmptyWorkspace } from "../core/factory.ts";
 import { validateWorkspace, WorkspaceValidationError } from "../core/validate.ts";
 import { migrateWorkspace } from "../core/migrations.ts";
@@ -186,19 +187,6 @@ function safeBundlePath(value: string): string {
   )
     throw new Error(`Unsafe export path: ${value}`);
   return normalized;
-}
-
-function slug(value: string): string {
-  return (
-    value
-      .normalize("NFKD")
-      .replace(/\p{M}+/gu, "")
-      .normalize("NFC")
-      .toLocaleLowerCase()
-      .replace(/[^\p{L}\p{N}]+/gu, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "iploom"
-  );
 }
 
 export class WorkspaceStore {
@@ -533,7 +521,7 @@ export class WorkspaceStore {
       .replace("T", "-");
     const baseDirectory = join(
       destinationRoot,
-      `${slug(bundle.workTitle)}-${timestamp}-${bundle.manifestSha256.slice(0, 8)}-arcreel`,
+      `${arcReelSlug(bundle.workTitle)}-${timestamp}-${bundle.manifestSha256.slice(0, 8)}-arcreel`,
     );
     let directory = baseDirectory;
     for (let suffix = 2; await exists(directory); suffix += 1) {

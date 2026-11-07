@@ -16,7 +16,10 @@ import {
   layoutRelationshipGraph,
 } from "../../apps/studio/src/core/graph.ts";
 import { searchWorkspace } from "../../apps/studio/src/core/search.ts";
-import { storyboardWriteSchema } from "../../apps/studio/src/core/storyboard-contract.ts";
+import {
+  STORYBOARD_LIMITS,
+  storyboardWriteSchema,
+} from "../../apps/studio/src/core/storyboard-contract.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 import {
   buildWorkflowBrief,
@@ -423,6 +426,274 @@ describe("ArcReel export", () => {
     expect(
       storyboard.scenes.map((scene: { location: string }) => scene.location),
     ).toEqual(["Tide Market", "The Old Clock Tower"]);
+    expect(
+      storyboard.scenes.map(
+        (scene: { data: { source_scene_id: string } }) =>
+          scene.data.source_scene_id,
+      ),
+    ).toEqual(["scene_market_alpha", "scene_tower_bravo"]);
+    expect(
+      storyboard.scenes.map(
+        (scene: { shots: { data: { source_shot_id: string } }[] }) =>
+          scene.shots[0]!.data.source_shot_id,
+      ),
+    ).toEqual(["shot_market_alpha", "shot_tower_bravo"]);
+    expect(
+      storyboard.scenes.every(
+        (scene: { story_time: string; data: { pov?: string } }) =>
+          scene.story_time === "" && scene.data.pov === chapter.pov,
+      ),
+    ).toBe(true);
+  });
+
+  test("keeps source scene IDs attached to content after reordering", async () => {
+    const workspace = createDemoWorkspace(
+      "en",
+      "2026-11-06T00:00:00.000Z",
+    );
+    const chapter = workspace.works[0]!.chapters[0]!;
+    const scene = (id: string, summary: string, shotId: string) => ({
+      id,
+      title: summary,
+      summary,
+      characterIds: ["char_lin"],
+      shots: [
+        {
+          id: shotId,
+          shotType: "wide",
+          description: `${summary} shot`,
+          dialogue: "",
+          camera: "wide",
+          durationMs: 2_500,
+          visualPrompt: "",
+        },
+      ],
+    });
+    const market = scene("scene_market_alpha", "Market", "shot_market_alpha");
+    const tower = scene("scene_tower_bravo", "Tower", "shot_tower_bravo");
+    chapter.scenes = [market, tower];
+    const first = await buildArcReelBundle(workspace, {
+      workId: "work_tide_clock",
+      chapterIds: [chapter.id],
+      generatedAt: "2026-11-06T03:00:00.000Z",
+    });
+    chapter.scenes = [tower, market];
+    const second = await buildArcReelBundle(workspace, {
+      workId: "work_tide_clock",
+      chapterIds: [chapter.id],
+      generatedAt: "2026-11-06T04:00:00.000Z",
+    });
+    const readBoards = (content: string) => {
+      const storyboard = JSON.parse(content) as {
+        scenes: {
+          description: string;
+          data: { source_scene_id: string };
+          shots: { data: { source_shot_id: string } }[];
+        }[];
+      };
+      return storyboard.scenes.map((item) => [
+        item.description,
+        item.data.source_scene_id,
+        item.shots[0]!.data.source_shot_id,
+      ]);
+    };
+    const firstBoard = first.files.find((file) =>
+      file.path.startsWith("storyboards/"),
+    )!.content;
+    const secondBoard = second.files.find((file) =>
+      file.path.startsWith("storyboards/"),
+    )!.content;
+    expect(readBoards(firstBoard)).toEqual([
+      ["Market", "scene_market_alpha", "shot_market_alpha"],
+      ["Tower", "scene_tower_bravo", "shot_tower_bravo"],
+    ]);
+    expect(readBoards(secondBoard)).toEqual([
+      ["Tower", "scene_tower_bravo", "shot_tower_bravo"],
+      ["Market", "scene_market_alpha", "shot_market_alpha"],
+    ]);
+  });
+
+  test("exports a 30k-character Chinese chapter with single-newline paragraphs", async () => {
+    const workspace = createDemoWorkspace(
+      "zh-CN",
+      "2026-11-06T00:00:00.000Z",
+    );
+    const chapter = workspace.works[0]!.chapters[0]!;
+    const paragraph = "潮声沿着石阶一层层退下去，林舟把铜钥匙贴在掌心，确认缺口仍对着旧钟塔的门。".repeat(4);
+    chapter.content = Array.from(
+      { length: 200 },
+      (_, index) => `${paragraph}第${index + 1}段。`,
+    ).join("\n");
+    chapter.scenes = [];
+    expect(chapter.content.length).toBeGreaterThan(30_000);
+    const bundle = await buildArcReelBundle(workspace, {
+      workId: "work_tide_clock",
+      chapterIds: [chapter.id],
+      locale: "zh-CN",
+      generatedAt: "2026-11-06T03:00:00.000Z",
+    });
+    const storyboard = JSON.parse(
+      bundle.files.find((file) => file.path.startsWith("storyboards/"))!
+        .content,
+    ) as {
+      scenes: {
+        heading: string;
+        description: string;
+        shots: { description: string; prompt: string }[];
+      }[];
+    };
+    expect(storyboardWriteSchema.safeParse(storyboard).success).toBe(true);
+    expect(storyboard.scenes.length).toBeGreaterThan(1);
+    const shots = storyboard.scenes.flatMap((scene) => scene.shots);
+    expect(shots.length).toBeLessThanOrEqual(STORYBOARD_LIMITS.shots);
+    expect(
+      storyboard.scenes.every(
+        (scene) =>
+          scene.shots.length >= 1 &&
+          scene.shots.length <= STORYBOARD_LIMITS.shotsPerScene,
+      ),
+    ).toBe(true);
+    expect(
+      shots.every(
+        (shot) =>
+          shot.description.length <= STORYBOARD_LIMITS.shotDescription &&
+          shot.prompt.length <= STORYBOARD_LIMITS.prompt,
+      ),
+    ).toBe(true);
+    expect(bundle.warnings.join(" ")).toContain(
+      "Chapter 1: 140 paragraph segment(s) were dropped",
+    );
+  });
+
+  test("warns when author scenes exceed the scene limit", async () => {
+    const workspace = createDemoWorkspace(
+      "en",
+      "2026-11-06T00:00:00.000Z",
+    );
+    const chapter = workspace.works[0]!.chapters[0]!;
+    chapter.scenes = Array.from({ length: 15 }, (_, index) => ({
+      id: `scene_author_${index + 1}`,
+      title: `Scene ${index + 1}`,
+      summary: `Summary ${index + 1}`,
+      characterIds: ["char_lin"],
+      shots: [
+        {
+          id: `shot_author_${index + 1}`,
+          shotType: "wide",
+          description: `Shot ${index + 1}`,
+          dialogue: "",
+          camera: "wide",
+          durationMs: 2_500,
+          visualPrompt: "",
+        },
+      ],
+    }));
+    const bundle = await buildArcReelBundle(workspace, {
+      workId: "work_tide_clock",
+      chapterIds: [chapter.id],
+      generatedAt: "2026-11-06T03:00:00.000Z",
+    });
+    expect(bundle.warnings.join(" ")).toContain(
+      "Chapter 1: 3 scene(s) were dropped",
+    );
+    const storyboard = JSON.parse(
+      bundle.files.find((file) => file.path.startsWith("storyboards/"))!
+        .content,
+    ) as { scenes: { shots: unknown[] }[] };
+    expect(storyboard.scenes.length).toBe(STORYBOARD_LIMITS.scenes);
+    expect(storyboard.scenes.every((scene) => scene.shots.length >= 1)).toBe(
+      true,
+    );
+  });
+
+  test("splits an oversized author scene and warns", async () => {
+    const workspace = createDemoWorkspace(
+      "en",
+      "2026-11-06T00:00:00.000Z",
+    );
+    const chapter = workspace.works[0]!.chapters[0]!;
+    chapter.scenes = [
+      {
+        id: "scene_author_long",
+        title: "Long scene",
+        summary: "A long scene.",
+        characterIds: ["char_lin"],
+        shots: Array.from({ length: 25 }, (_, index) => ({
+          id: `shot_author_long_${index + 1}`,
+          shotType: "wide",
+          description: `Shot ${index + 1}`,
+          dialogue: "",
+          camera: "wide",
+          durationMs: 2_500,
+          visualPrompt: "",
+        })),
+      },
+    ];
+    const bundle = await buildArcReelBundle(workspace, {
+      workId: "work_tide_clock",
+      chapterIds: [chapter.id],
+      generatedAt: "2026-11-06T03:00:00.000Z",
+    });
+    const storyboard = JSON.parse(
+      bundle.files.find((file) => file.path.startsWith("storyboards/"))!
+        .content,
+    ) as { scenes: { shots: { data: { source_shot_id: string } }[] }[] };
+    expect(storyboard.scenes.length).toBe(2);
+    expect(storyboard.scenes.map((scene) => scene.shots.length)).toEqual([
+      20, 5,
+    ]);
+    expect(bundle.warnings.join(" ")).toContain(
+      "Chapter 1: split 1 scene(s) with more than 20 shots.",
+    );
+    expect(
+      storyboard.scenes[1]!.shots[0]!.data.source_shot_id,
+    ).toBe("shot_author_long_21");
+  });
+
+  test("handoff lists every package path including approved designs", async () => {
+    const workspace = createDemoWorkspace(
+      "zh-CN",
+      "2026-11-06T00:00:00.000Z",
+    );
+    const bundle = await buildArcReelBundle(workspace, {
+      workId: "work_tide_clock",
+      generatedAt: "2026-11-06T03:00:00.000Z",
+    });
+    const handoff = bundle.files.find((file) => file.path === "handoff.md")!
+      .content;
+    for (const file of bundle.files) {
+      expect(handoff).toContain(`\`${file.path}\``);
+    }
+    expect(handoff).toContain("`production/approved-designs.json`");
+  });
+
+  test("content hash is stable while in-limit chapter output is byte-identical", async () => {
+    const workspace = createDemoWorkspace(
+      "en",
+      "2026-11-06T00:00:00.000Z",
+    );
+    const first = await buildArcReelBundle(structuredClone(workspace), {
+      workId: "work_tide_clock",
+      generatedAt: "2026-11-06T03:00:00.000Z",
+    });
+    const second = await buildArcReelBundle(structuredClone(workspace), {
+      workId: "work_tide_clock",
+      generatedAt: "2026-11-07T09:30:00.000Z",
+    });
+    const manifestOf = (bundle: typeof first) =>
+      JSON.parse(
+        bundle.files.find((file) => file.path === "manifest.json")!.content,
+      );
+    const firstManifest = manifestOf(first);
+    const secondManifest = manifestOf(second);
+    expect(firstManifest.generated_at).not.toBe(secondManifest.generated_at);
+    expect(firstManifest.content_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(firstManifest.content_sha256).toBe(secondManifest.content_sha256);
+    const contentOf = (bundle: typeof first) =>
+      bundle.files
+        .filter((file) => file.path !== "manifest.json")
+        .map((file) => [file.path, file.content]);
+    expect(contentOf(first)).toEqual(contentOf(second));
   });
 });
 
@@ -530,6 +801,25 @@ describe("workspace store", () => {
           readFileSync(join(written.directory, "manifest.json"), "utf8"),
         ).schema,
       ).toBe("iploom.arcreel.manifest/v1");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps Chinese characters in the export directory slug", async () => {
+    const root = mkdtempSync(join(tmpdir(), "iploom-studio-zh-"));
+    try {
+      const store = new WorkspaceStore(join(root, "workspace.json"));
+      const workspace = createDemoWorkspace(
+        "zh-CN",
+        "2026-11-06T00:00:00.000Z",
+      );
+      const bundle = await buildArcReelBundle(workspace, {
+        workId: "work_tide_clock",
+        generatedAt: "2026-11-06T03:00:00.000Z",
+      });
+      const written = await store.exportArcReel(bundle, join(root, "exports"));
+      expect(written.directory).toContain("潮汐钟-");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

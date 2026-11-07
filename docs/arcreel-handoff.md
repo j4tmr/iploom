@@ -16,9 +16,11 @@ the-tide-clock-20261106-030000-a1b2c3d4-arcreel/
   storyboards/
     0001-the-tide-clock.storyboard.json
     0002-...
+  production/
+    approved-designs.json
 ```
 
-The directory name includes the manifest hash prefix. Repeated exports of the same content receive a numeric suffix instead of overwriting an earlier package.
+The directory name keeps the work title's Chinese characters and appends the manifest hash prefix; a Chinese-titled work therefore yields a Chinese slug such as `潮汐钟-...`. Repeated exports of the same content receive a numeric suffix instead of overwriting an earlier package. `handoff.md` lists every file path in the package.
 
 ## Manifest
 
@@ -28,6 +30,7 @@ The directory name includes the manifest hash prefix. Repeated exports of the sa
 {
   "schema": "iploom.arcreel.manifest/v1",
   "generated_at": "2026-11-06T03:00:00.000Z",
+  "content_sha256": "<64 hex characters>",
   "generator": {
     "name": "IPloom Studio",
     "version": "0.3.0",
@@ -53,7 +56,7 @@ The directory name includes the manifest hash prefix. Repeated exports of the sa
 }
 ```
 
-The `files` array records every non-manifest file with byte length and SHA-256. `manifestSha256` is computed from the serialized manifest and exposed in the app and MCP response.
+The `files` array records every non-manifest file with byte length and SHA-256. `content_sha256` hashes the same manifest body without `generated_at` and `content_sha256` itself, so two exports of identical content share one content hash even though their timestamps differ. `manifestSha256` is computed from the serialized manifest (timestamp included) and exposed in the app and MCP response; only that value is used in the export directory suffix.
 
 ## Episode files
 
@@ -89,7 +92,15 @@ The storyboard payload follows the included `iploom.production.storyboard` contr
 }
 ```
 
-Every scene and shot carries a 1-based sequence generated from its position in the exported array. This avoids corrupt sequence numbers when a scene's editable ID does not end in digits.
+Every scene and shot carries a positional `id` and a 1-based `sequence` generated from its position in the exported array. This avoids corrupt sequence numbers when a scene's editable ID does not end in digits. Each scene's `data.source_scene_id` and each shot's `data.source_shot_id` preserve the author's workspace IDs, so reordering or re-exporting can still match a storyboard entry back to its source. Scenes also carry `data.source_chapter_id` and `data.pov`; `story_time` is exported empty because the workspace does not model story time, and POV is never copied into it.
+
+### Export limits and warnings
+
+Storyboard limits are defined once in `apps/studio/src/core/storyboard-contract.ts` and shared by the writer, editor and exporter: at most 12 scenes, 20 shots per scene and 60 shots per chapter, with the same per-field character and duration ceilings used by the schemas.
+
+Long prose is split into paragraphs before scene planning. A single newline counts as a paragraph break when a chapter has no blank-line breaks (typical Chinese manuscripts) or when paragraphs use full-width `　　` indentation; blank-line separated English prose keeps its existing layout. Paragraphs longer than 600 characters are split at `。！？` sentence endings without exceeding the per-shot limit.
+
+Chapters whose content exceeds the limits are sampled evenly across scenes and paragraphs, and the export warns with the chapter number and the number of dropped scenes, paragraph segments or shots. Scenes are never exported with zero shots: a scene without author shots receives one draft shot. In-limit chapters are not sampled and their package content stays stable across exports.
 
 Every shot prompt includes:
 
