@@ -87,7 +87,7 @@ export function timelineSubjectLabel(
 }
 
 function intersects(values: string[], expected: string[]): boolean {
-  return expected.length === 0 || values.some((value) => expected.includes(value));
+  return expected.length > 0 && values.some((value) => expected.includes(value));
 }
 
 export function relevantTimelineEvents(
@@ -131,6 +131,8 @@ export function relevantTimelineEvents(
       );
     }
     if (!chapter) return true;
+    // A chapter with no cast, location or scene scope is unfiltered by design.
+    if (!castIds.length && !locationIds.length && !sceneIds.length) return true;
     return (
       (event.subjectKind === "character" && castIds.includes(event.subjectId)) ||
       (event.subjectKind === "location" &&

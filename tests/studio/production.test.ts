@@ -6,7 +6,7 @@ import { CHAPTER_LIMITS, MAX_AI_PROMPT_LENGTH } from "../../apps/studio/src/core
 import { buildProductionPrompt, createProductionTasks, effectiveProductionTemplate, productionTemplates, resolveProductionScope, taskProductionPrompt } from "../../apps/studio/src/core/production.ts";
 import { buildWorkflowBrief, setWorkflowTaskResult } from "../../apps/studio/src/core/workflow.ts";
 import { AI_CANCELED_MESSAGE, aiConfigSchema, isReportableAiError, runCompletion } from "../../apps/studio/src/node/ai-client.ts";
-import { buildArcReelBundle } from "../../apps/studio/src/core/arcreel.ts";
+import { arcReelSlug, buildArcReelBundle } from "../../apps/studio/src/core/arcreel.ts";
 
 const source = "前言\r\n第1章 灯塔\r\n阿青在灯塔遇到导师白舟。\r\n第2章 归途\r\n阿青离开灯塔。\r\n";
 const analysis: ManuscriptAnalysis = { world: null, characters: [
@@ -74,6 +74,42 @@ test("chunks never split surrogate pairs or start or end with a lone surrogate",
     expect(first >= 0xdc00 && first <= 0xdfff).toBe(false);
     expect(last >= 0xd800 && last <= 0xdbff).toBe(false);
   }
+});
+
+// TS 7 targets ES2023 here, whose lib omits the ES2024 String.prototype.isWellFormed typing.
+const isWellFormed = (value: string): boolean =>
+  (value as string & { isWellFormed: () => boolean }).isWellFormed();
+
+test("slug truncation never splits a surrogate pair at the 48-unit boundary", () => {
+  const astralLetters = [0x20000, 0x2a6d6, 0x10400];
+  for (const codePoint of astralLetters) {
+    const title = "字".repeat(47) + String.fromCodePoint(codePoint);
+    const result = arcReelSlug(title);
+    expect(result).toBe("字".repeat(47));
+    expect(result).toHaveLength(47);
+    expect(isWellFormed(result)).toBe(true);
+    expect(result).not.toMatch(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/,
+    );
+  }
+  // A pair ending exactly on the boundary stays intact; a pair starting there is dropped.
+  expect(
+    arcReelSlug("字".repeat(46) + String.fromCodePoint(0x20000) + "字".repeat(8)),
+  ).toBe("字".repeat(46) + String.fromCodePoint(0x20000));
+  expect(
+    arcReelSlug("ab" + "字".repeat(45) + String.fromCodePoint(0x20000)),
+  ).toBe("ab" + "字".repeat(45));
+  expect(arcReelSlug("字".repeat(48) + String.fromCodePoint(0x20000))).toBe(
+    "字".repeat(48),
+  );
+});
+
+test("slug normalization output is unchanged for ordinary titles", () => {
+  expect(arcReelSlug("A Handover in the Rain")).toBe("a-handover-in-the-rain");
+  expect(arcReelSlug("  潮汐钟  ")).toBe("潮汐钟");
+  expect(arcReelSlug("x".repeat(60))).toBe("x".repeat(48));
+  expect(arcReelSlug("")).toBe("untitled");
+  expect(arcReelSlug("---")).toBe("untitled");
 });
 
 test("analysis preflight blocks over-limit runs before any request and warns about long chapters", () => {
