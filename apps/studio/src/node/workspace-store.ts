@@ -1,6 +1,7 @@
 import {
   access,
   mkdir,
+  open,
   readdir,
   readFile,
   rename,
@@ -13,7 +14,11 @@ import { basename, dirname, join, normalize, resolve, sep } from "node:path";
 import { createEmptyWorkspace } from "../core/factory.ts";
 import { validateWorkspace, WorkspaceValidationError } from "../core/validate.ts";
 import { migrateWorkspace } from "../core/migrations.ts";
-import type { ArcReelBundle, StudioWorkspace } from "../core/types.ts";
+import {
+  WORKSPACE_SCHEMA_VERSION,
+  type ArcReelBundle,
+  type StudioWorkspace,
+} from "../core/types.ts";
 
 export interface LoadedWorkspace {
   workspace: StudioWorkspace;
@@ -21,6 +26,114 @@ export interface LoadedWorkspace {
   recoveredFromBackup: boolean;
   /** Present when the operation stored a recoverable pre-change snapshot. */
   snapshotPath?: string | null;
+  /** Present when an unreadable primary file was moved aside during recovery. */
+  rejectedPath?: string | null;
+  /** Validation detail for the quarantined primary file. */
+  rejectedReason?: string | null;
+}
+
+export class NewerWorkspaceVersionError extends Error {
+  readonly path: string;
+  readonly foundVersion: number;
+
+  constructor(path: string, foundVersion: number) {
+    super(
+      `This workspace was created by a newer IPloom Studio (schema ${foundVersion}; ` +
+        `this build supports ${WORKSPACE_SCHEMA_VERSION}). Update the app to open ${path}. ` +
+        `The file was left untouched.`,
+    );
+    this.name = "NewerWorkspaceVersionError";
+    this.path = path;
+    this.foundVersion = foundVersion;
+  }
+}
+
+const RETRYABLE_RENAME_CODES = new Set(["EPERM", "EBUSY", "EACCES"]);
+
+export interface RenameRetryOptions {
+  attempts?: number;
+  delayMs?: number;
+  platform?: NodeJS.Platform;
+  renameImpl?: (from: string, to: string) => Promise<void>;
+}
+
+/**
+ * Windows can transiently fail a rename while Defender, the indexer or OneDrive
+ * holds the file. Retry the transient codes a bounded number of times.
+ */
+export async function renameWithRetry(
+  from: string,
+  to: string,
+  options: RenameRetryOptions = {},
+): Promise<void> {
+  const platform = options.platform ?? process.platform;
+  const attempts = options.attempts ?? (platform === "win32" ? 10 : 3);
+  const delayMs = options.delayMs ?? 100;
+  const renameImpl = options.renameImpl ?? rename;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await renameImpl(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (
+        !code ||
+        !RETRYABLE_RENAME_CODES.has(code) ||
+        attempt >= attempts
+      ) {
+        throw error;
+      }
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, delayMs));
+    }
+  }
+}
+
+async function writeFileDurable(path: string, content: string): Promise<void> {
+  const handle = await open(path, "wx", 0o600);
+  try {
+    await handle.writeFile(content, { encoding: "utf8" });
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+async function syncDirectory(path: string): Promise<void> {
+  if (process.platform === "win32") return;
+  try {
+    const handle = await open(path, "r");
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    // Directory fsync is best-effort; some filesystems reject it.
+  }
+}
+
+function schemaVersionOf(value: unknown): number | null {
+  if (!value || typeof value !== "object") return null;
+  const version = (value as { schema_version?: unknown }).schema_version;
+  return typeof version === "number" && Number.isFinite(version)
+    ? version
+    : null;
+}
+
+const STALE_TEMP_MS = 5 * 60 * 1000;
+
+function formatReadError(path: string, error: unknown): string {
+  return `${path}: ${error instanceof Error ? error.message : String(error)}`;
+}
+
+function formatValidationError(path: string, error: unknown): string {
+  return `${path}: ${
+    error instanceof WorkspaceValidationError
+      ? error.issues.slice(0, 5).join("; ")
+      : error instanceof Error
+        ? error.message
+        : String(error)
+  }`;
 }
 
 export interface WrittenBundle {
@@ -110,33 +223,105 @@ export class WorkspaceStore {
   }
 
   async load(): Promise<LoadedWorkspace> {
+    await this.cleanupStaleTemps();
     const errors: string[] = [];
+    let primaryError: string | null = null;
     for (const [candidate, fromBackup] of [
       [this.filePath, false],
       [backupPath(this.filePath), true],
     ] as const) {
       if (!(await exists(candidate))) continue;
+      let parsed: unknown;
       try {
         const raw = await readFile(candidate, "utf8");
+        parsed = JSON.parse(raw);
+      } catch (error) {
+        const detail = formatReadError(candidate, error);
+        errors.push(detail);
+        if (!fromBackup) primaryError = detail;
+        continue;
+      }
+      const version = schemaVersionOf(parsed);
+      if (version !== null && version > WORKSPACE_SCHEMA_VERSION)
+        throw new NewerWorkspaceVersionError(candidate, version);
+      try {
+        const workspace = validateWorkspace(migrateWorkspace(parsed));
+        if (fromBackup && primaryError !== null) {
+          const rejectedPath = await this.quarantinePrimary(primaryError);
+          return {
+            workspace,
+            path: this.filePath,
+            recoveredFromBackup: true,
+            rejectedPath,
+            rejectedReason: primaryError,
+          };
+        }
         return {
-          workspace: validateWorkspace(JSON.parse(raw)),
+          workspace,
           path: this.filePath,
           recoveredFromBackup: fromBackup,
         };
       } catch (error) {
-        errors.push(
-          `${candidate}: ${
-            error instanceof WorkspaceValidationError
-              ? error.issues.slice(0, 5).join("; ")
-              : error instanceof Error
-                ? error.message
-                : String(error)
-          }`,
-        );
+        const detail = formatValidationError(candidate, error);
+        errors.push(detail);
+        if (!fromBackup) primaryError = detail;
       }
     }
     throw new Error(
       `Workspace is missing or invalid. ${errors.join(" | ") || this.filePath}`,
+    );
+  }
+
+  /**
+   * Move an unreadable primary file out of the way before handing the `.bak`
+   * back to the editor. Without this, the first autosave would silently
+   * overwrite the newer file that this build could not read.
+   */
+  private async quarantinePrimary(reason: string): Promise<string> {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const target = `${this.filePath}.rejected-${stamp}${
+        attempt === 0 ? "" : `-${attempt}`
+      }`;
+      if (await exists(target)) continue;
+      try {
+        await renameWithRetry(this.filePath, target);
+      } catch (error) {
+        throw new Error(
+          `Recovered from ${backupPath(this.filePath)}, but could not isolate the ` +
+            `unreadable file ${this.filePath}: ${
+              error instanceof Error ? error.message : String(error)
+            }. ${reason}`,
+        );
+      }
+      return target;
+    }
+    throw new Error(`Could not find a free name to isolate ${this.filePath}`);
+  }
+
+  private async cleanupStaleTemps(): Promise<void> {
+    const directory = dirname(this.filePath);
+    if (!(await exists(directory))) return;
+    const prefix = `${basename(this.filePath)}.tmp-`;
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    const cutoff = Date.now() - STALE_TEMP_MS;
+    await Promise.all(
+      entries
+        .filter((entry) => entry.isFile() && entry.name.startsWith(prefix))
+        .map(async (entry) => {
+          const path = join(directory, entry.name);
+          try {
+            const info = await stat(path);
+            if (info.mtimeMs < cutoff) await rm(path, { force: true });
+          } catch {
+            // A file that vanished mid-cleanup needs no further work.
+          }
+        }),
     );
   }
 
@@ -172,11 +357,13 @@ export class WorkspaceStore {
 
   private async writeWorkspace(workspace: StudioWorkspace): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
-    const temp = `${this.filePath}.tmp-${process.pid}-${Date.now()}`;
-    const backupTemp = `${temp}.bak`;
+    const temp = `${this.filePath}.tmp-${process.pid}-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
     const content = `${JSON.stringify(workspace, null, 2)}\n`;
     try {
-      await writeFile(temp, content, { encoding: "utf8", mode: 0o600 });
+      // Sync the new contents before it replaces the file a reader may open.
+      await writeFileDurable(temp, content);
       if (await exists(this.filePath)) {
         const previous = await readFile(this.filePath, "utf8");
         let healthy = false;
@@ -184,17 +371,50 @@ export class WorkspaceStore {
           validateWorkspace(migrateWorkspace(JSON.parse(previous)));
           healthy = true;
         } catch {
-          // A recovered workspace must not replace its good backup with corruption.
+          // Saving over an unreadable primary file would destroy data that a
+          // later build (or a manual repair) could still recover. `load()`
+          // quarantines such files before returning the backup; reaching this
+          // branch means the file changed after that check.
         }
-        if (healthy) {
-          await writeFile(backupTemp, previous, { encoding: "utf8", mode: 0o600 });
-          await rename(backupTemp, backupPath(this.filePath));
+        if (!healthy) {
+          throw new Error(
+            `Refusing to overwrite unreadable workspace file ${this.filePath}. ` +
+              `Reload the workspace so the file can be quarantined first.`,
+          );
         }
+        // Renaming the previous primary keeps the `.bak` byte-identical to the
+        // last good save without rewriting (and re-syncing) it.
+        await renameWithRetry(this.filePath, backupPath(this.filePath));
       }
-      await rename(temp, this.filePath);
+      await renameWithRetry(temp, this.filePath);
+      await syncDirectory(dirname(this.filePath));
     } finally {
-      await Promise.all([temp, backupTemp].map((path) => rm(path, { force: true })));
+      await rm(temp, { force: true });
     }
+  }
+
+  /**
+   * Write the in-memory workspace exactly as it is, without validation, so a
+   * user whose saves keep failing can still leave the app with their data.
+   */
+  async saveRecoveryCopy(workspace: unknown): Promise<string> {
+    await mkdir(dirname(this.filePath), { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const target = `${this.filePath}.unsaved-${stamp}${
+        attempt === 0 ? "" : `-${attempt}`
+      }`;
+      try {
+        await writeFileDurable(
+          target,
+          `${JSON.stringify(workspace, null, 2)}\n`,
+        );
+        return target;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      }
+    }
+    throw new Error(`Could not find a free recovery-copy name for ${this.filePath}`);
   }
 
   /**

@@ -25,8 +25,8 @@ const api: StudioBridge = {
     ipcRenderer.on("iploom:flush-request", handler);
     return () => ipcRenderer.removeListener("iploom:flush-request", handler);
   },
-  flushComplete: (requestId, error) =>
-    ipcRenderer.invoke("iploom:flush-complete", requestId, error),
+  flushComplete: (requestId, error, workspace) =>
+    ipcRenderer.invoke("iploom:flush-complete", requestId, error, workspace),
   exportArcReel: (bundle) =>
     ipcRenderer.invoke("iploom:export-arc-reel", bundle),
   appInfo: () => ipcRenderer.invoke("iploom:app-info"),

@@ -94,3 +94,5 @@ bun run studio:verify-mcp
 ## Safety
 
 The server reads the workspace on every call. It only changes local state through `create_standard`, `update_standard` and `export_arcreel_bundle`. It does not call a model, network service or cloud API. MCP clients can still read all text in the active workspace, so only connect clients you trust.
+
+Every response that carries workspace metadata includes `workspace.recovered_from_backup`. When it is `true`, the primary `workspace.json` was unreadable and the server loaded the `.bak` copy instead; the response also carries `workspace.rejected_primary_file` and `workspace.rejected_primary_reason` naming the quarantined file. Treat such a response as recovery data rather than the newest state, and inspect the quarantined file before relying on the reported revision.

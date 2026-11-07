@@ -35,7 +35,10 @@ import type {
   WorkflowTask,
 } from "../src/core/types.ts";
 import { APP_VERSION } from "../src/core/version.ts";
-import { WorkspaceStore } from "../src/node/workspace-store.ts";
+import {
+  WorkspaceStore,
+  type LoadedWorkspace,
+} from "../src/node/workspace-store.ts";
 
 const MCP_SCHEMA = "iploom.studio.mcp/v1";
 const READ_ONLY_ANNOTATIONS: ToolAnnotations = {
@@ -134,12 +137,22 @@ const standardBodySchema = z
   .strict()
   .describe("双语规则正文 / Localized standard body.");
 
-function workspaceMeta(workspace: StudioWorkspace) {
+export function workspaceMeta(loaded: LoadedWorkspace) {
+  const { workspace } = loaded;
   return {
     id: workspace.id,
     name: workspace.name,
     revision: workspace.revision,
     locale: workspace.settings.locale,
+    // Surfaced so an MCP client can tell that the file it just read is the
+    // `.bak` fallback rather than the primary workspace.
+    recovered_from_backup: loaded.recoveredFromBackup,
+    ...(loaded.rejectedPath
+      ? {
+          rejected_primary_file: loaded.rejectedPath,
+          rejected_primary_reason: loaded.rejectedReason ?? null,
+        }
+      : {}),
   };
 }
 
@@ -547,10 +560,11 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     },
     () =>
       run(async () => {
-        const { workspace } = await store.load();
+        const loaded = await store.load();
+        const { workspace } = loaded;
         return {
           schema: MCP_SCHEMA,
-          workspace: workspaceMeta(workspace),
+          workspace: workspaceMeta(loaded),
           count: workspace.universes.length,
           worlds: workspace.universes.map((world) =>
             worldView(workspace, world),
@@ -570,11 +584,12 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     },
     (args) =>
       run(async () => {
-        const { workspace } = await store.load();
+        const loaded = await store.load();
+        const { workspace } = loaded;
         const world = findWorld(workspace, args.world_id);
         return {
           schema: MCP_SCHEMA,
-          workspace: workspaceMeta(workspace),
+          workspace: workspaceMeta(loaded),
           world: worldView(workspace, world),
           novels: workspace.works
             .filter((novel) => novel.universeId === world.id)
@@ -609,14 +624,15 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     },
     (args) =>
       run(async () => {
-        const { workspace } = await store.load();
+        const loaded = await store.load();
+        const { workspace } = loaded;
         if (args.world_id) findWorld(workspace, args.world_id);
         const novels = workspace.works.filter(
           (novel) => !args.world_id || novel.universeId === args.world_id,
         );
         return {
           schema: MCP_SCHEMA,
-          workspace: workspaceMeta(workspace),
+          workspace: workspaceMeta(loaded),
           world_id: args.world_id ?? null,
           count: novels.length,
           novels: novels.map((novel) => novelView(novel)),
@@ -635,12 +651,13 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     },
     (args) =>
       run(async () => {
-        const { workspace } = await store.load();
+        const loaded = await store.load();
+        const { workspace } = loaded;
         const novel = findNovel(workspace, args.novel_id);
         const world = findWorld(workspace, novel.universeId);
         return {
           schema: MCP_SCHEMA,
-          workspace: workspaceMeta(workspace),
+          workspace: workspaceMeta(loaded),
           novel: {
             ...novelView(novel),
             synopsis: novel.synopsis,
@@ -673,7 +690,8 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     },
     (args) =>
       run(async () => {
-        const { workspace } = await store.load();
+        const loaded = await store.load();
+        const { workspace } = loaded;
         let novel: StoryWork | undefined;
         let chapter: Chapter | undefined;
         if (args.novel_id) {
@@ -695,7 +713,7 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
           throw new Error(`Chapter not found: ${args.chapter_id}`);
         return {
           schema: MCP_SCHEMA,
-          workspace: workspaceMeta(workspace),
+          workspace: workspaceMeta(loaded),
           novel: {
             id: novel.id,
             world_id: novel.universeId,
@@ -748,7 +766,8 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     },
     (args) =>
       run(async () => {
-        const { workspace } = await store.load();
+        const loaded = await store.load();
+        const { workspace } = loaded;
         if (args.world_id) findWorld(workspace, args.world_id);
         const locale: UiLocale = args.locale ?? workspace.settings.locale;
         let hits = searchWorkspace(workspace, args.query, locale, 50);
@@ -769,7 +788,7 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
         hits = hits.slice(0, args.limit);
         return {
           schema: MCP_SCHEMA,
-          workspace: workspaceMeta(workspace),
+          workspace: workspaceMeta(loaded),
           query: args.query,
           locale,
           world_id: args.world_id ?? null,
@@ -803,13 +822,14 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     },
     (args) =>
       run(async () => {
-        const { workspace } = await store.load();
+        const loaded = await store.load();
+        const { workspace } = loaded;
         const world = findWorld(workspace, args.world_id);
         const locale: UiLocale = args.locale ?? workspace.settings.locale;
         const graph = buildRelationshipGraph(workspace, world.id, locale);
         return {
           schema: MCP_SCHEMA,
-          workspace: workspaceMeta(workspace),
+          workspace: workspaceMeta(loaded),
           world_id: world.id,
           locale,
           nodes: graph.nodes,
@@ -837,7 +857,8 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     },
     (args) =>
       run(async () => {
-        const { workspace } = await store.load();
+        const loaded = await store.load();
+        const { workspace } = loaded;
         if (args.world_id) findWorld(workspace, args.world_id);
         if (args.novel_id) findNovel(workspace, args.novel_id);
         const tasks = workspace.workflowTasks.filter(
@@ -848,7 +869,7 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
         );
         return {
           schema: MCP_SCHEMA,
-          workspace: workspaceMeta(workspace),
+          workspace: workspaceMeta(loaded),
           filters: {
             world_id: args.world_id ?? null,
             novel_id: args.novel_id ?? null,
@@ -875,7 +896,8 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     },
     (args) =>
       run(async () => {
-        const { workspace } = await store.load();
+        const loaded = await store.load();
+        const { workspace } = loaded;
         const task = workspace.workflowTasks.find(
           (item) => item.id === args.task_id,
         );
@@ -884,7 +906,7 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
         const readiness = workflowTaskReadiness(workspace, task);
         return {
           schema: MCP_SCHEMA,
-          workspace: workspaceMeta(workspace),
+          workspace: workspaceMeta(loaded),
           task: workflowTaskView(workspace, task),
           ready: readiness.ready,
           markdown: buildWorkflowBrief(workspace, task.id, locale),
@@ -915,7 +937,8 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     },
     (args) =>
       run(async () => {
-        const { workspace } = await store.load();
+        const loaded = await store.load();
+        const { workspace } = loaded;
         const standards = workspace.standards
           .filter(
             (standard) =>
@@ -946,11 +969,12 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     },
     (args) =>
       run(async () => {
-        const { workspace } = await store.load();
+        const loaded = await store.load();
+        const { workspace } = loaded;
         const standard = findStandard(workspace, args.standard_id);
         return {
           schema: MCP_SCHEMA,
-          workspace: workspaceMeta(workspace),
+          workspace: workspaceMeta(loaded),
           standard: standardView(standard),
           applies_to: standard.universeId ?? "project",
           pinned_by_task_ids: workspace.workflowTasks
@@ -1133,7 +1157,8 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     },
     (args) =>
       run(async () => {
-        const { workspace } = await store.load();
+        const loaded = await store.load();
+        const { workspace } = loaded;
         const novel = findNovel(workspace, args.novel_id);
         const outputRoot = args.output_dir
           ? resolve(workspaceDirectory, args.output_dir)
@@ -1149,7 +1174,7 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
         const written = await store.exportArcReel(bundle, outputRoot);
         return {
           schema: MCP_SCHEMA,
-          workspace: workspaceMeta(workspace),
+          workspace: workspaceMeta(loaded),
           directory: written.directory,
           output_root: outputRoot,
           files_written: written.files,
