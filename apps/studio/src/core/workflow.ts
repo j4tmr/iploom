@@ -268,14 +268,27 @@ export function buildWorkflowBrief(
     .map((id) => workspace.workflowTasks.find((item) => item.id === id))
     .filter((item): item is WorkflowTask => Boolean(item));
   const children = taskChildren(workspace, task);
+  // A task without explicit character ids still needs the cast it works on:
+  // the chapter's cast first, then the whole universe, mirroring the scope the
+  // production prompt uses for the same task.
+  const universeId = task.universeId;
+  const focusCharacterIds = task.characterIds.length
+    ? task.characterIds
+    : chapter?.characterIds.length
+      ? chapter.characterIds
+      : universeId
+        ? workspace.characters
+            .filter((character) => character.universeIds.includes(universeId))
+            .map((character) => character.id)
+        : [];
   const cast = workspace.characters.filter((character) =>
-    task.characterIds.includes(character.id),
+    focusCharacterIds.includes(character.id),
   );
   const relationships = workspace.relationships.filter(
     (relationship) =>
-      (!task.universeId || relationship.universeId === task.universeId) &&
-      (task.characterIds.includes(relationship.sourceId) ||
-        task.characterIds.includes(relationship.targetId)),
+      (!universeId || relationship.universeId === universeId) &&
+      (focusCharacterIds.includes(relationship.sourceId) ||
+        focusCharacterIds.includes(relationship.targetId)),
   );
   const timeline = relevantTimelineEvents(workspace, {
     universeId: task.universeId,

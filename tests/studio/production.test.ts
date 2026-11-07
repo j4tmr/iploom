@@ -227,6 +227,31 @@ test("production workflow carries scope, dependencies, long results and costume 
   expect(context.chapter.content).toBe(work.chapters[0]!.content);
 });
 
+test("production tasks without a chosen character inherit the chapter cast anchors", () => {
+  const workspace = createDemoWorkspace("en");
+  const work = workspace.works[0]!;
+  const chapter = work.chapters[0]!;
+  const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: chapter.id }, "en");
+  workspace.workflowTasks.push(...tasks);
+  expect(tasks.every((task) => task.characterIds.length === 0)).toBe(true);
+  const chapterCast = workspace.characters.filter((item) => chapter.characterIds.includes(item.id));
+  expect(chapterCast.length).toBeGreaterThan(0);
+  for (const task of tasks) {
+    const prompt = taskProductionPrompt(workspace, task, "en");
+    for (const character of chapterCast) {
+      expect(prompt).toContain(`**${character.name.en}**`);
+    }
+  }
+
+  const universeTasks = createProductionTasks(workspace, { workId: work.id }, "en");
+  workspace.workflowTasks.push(...universeTasks);
+  const universeCast = workspace.characters.filter((item) => item.universeIds.includes(work.universeId));
+  expect(universeCast.length).toBeGreaterThan(chapterCast.length);
+  for (const character of universeCast) {
+    expect(taskProductionPrompt(workspace, universeTasks[0]!, "en")).toContain(`**${character.name.en}**`);
+  }
+});
+
 test("running a task keeps its brief, deliverable and composed prompt stable", () => {
   const workspace = createDemoWorkspace("en");
   const tasks = createProductionTasks(workspace, { workId: workspace.works[0]!.id }, "en");
