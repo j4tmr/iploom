@@ -1,7 +1,8 @@
 import { expect, jest, test } from "bun:test";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
-import { buildManuscriptImport, manuscriptChunks, mergeManuscriptImport, parseAnalysis, splitManuscript, type ManuscriptAnalysis } from "../../apps/studio/src/core/manuscript.ts";
+import { analyzeManuscriptChunks, buildManuscriptImport, manuscriptChunks, mergeManuscriptImport, parseAnalysis, planManuscriptAnalysis, splitManuscript, type ManuscriptAnalysis } from "../../apps/studio/src/core/manuscript.ts";
+import { CHAPTER_LIMITS } from "../../apps/studio/src/core/types.ts";
 import { buildProductionPrompt, createProductionTasks, resolveProductionScope, taskProductionPrompt } from "../../apps/studio/src/core/production.ts";
 import { setWorkflowTaskResult } from "../../apps/studio/src/core/workflow.ts";
 import { AI_CANCELED_MESSAGE, aiConfigSchema, isReportableAiError, runCompletion } from "../../apps/studio/src/node/ai-client.ts";
@@ -13,6 +14,8 @@ const analysis: ManuscriptAnalysis = { world: null, characters: [
   { name: "白舟", summary: "导师", appearance: "", evidence: "导师白舟" },
 ], locations: [{ name: "灯塔", summary: "会面地点", evidence: "灯塔" }], factions: [], lore: [], relationships: [{ source: "白舟", target: "阿青", type: "mentor", mutual: false, summary: "导师", evidence: "阿青在灯塔遇到导师白舟" }], scenes: [{ title: "灯塔会面", summary: "师徒见面", location: "灯塔", characters: ["阿青", "白舟"], evidence: "阿青在灯塔遇到导师白舟" }] };
 
+const minimalAnalysis: ManuscriptAnalysis = { world: null, characters: [{ name: "阿青", summary: "", appearance: "", evidence: "阿青" }], locations: [], factions: [], lore: [], relationships: [], scenes: [] };
+
 test("chapter splitting preserves every source character including headings, preface and CRLF", () => {
   const chapters = splitManuscript(source);
   expect(chapters).toHaveLength(3);
@@ -21,6 +24,138 @@ test("chapter splitting preserves every source character including headings, pre
   expect(splitManuscript("# Start\nOne\n## Scene two\nTwo")).toHaveLength(2);
   expect(splitManuscript("Chapter I\nOne\nChapter 2\nTwo")).toHaveLength(2);
   expect(() => splitManuscript("\0binary")).toThrow();
+});
+
+test("heading recognition normalizes markdown, full-width digits and spaces without inventing prefaces", () => {
+  const cases: Array<[string, string[]]> = [
+    ["# 第一章 灯塔\n正文", ["第一章 灯塔"]],
+    ["## Scene two\nTwo", ["Scene two"]],
+    ["第１章　灯塔\n正文", ["第1章 灯塔"]],
+    ["第 1 章 灯塔\n正文", ["第1章 灯塔"]],
+    ["\n \n第1章 灯塔\n正文", ["第1章 灯塔"]],
+    ["﻿第1章 灯塔\r\n正文", ["第1章 灯塔"]],
+    ["第1章\n正文\n第二节课我们去了灯塔。", ["第1章"]],
+    ["第一章 他走了。\n正文", ["正文 / Manuscript"]],
+    ["序章 雪夜\n...\n楔子\n...\n尾声\n...", ["序章 雪夜", "楔子", "尾声"]],
+    ["Prologue\n...\nChapter One\n...\nEpilogue\n...", ["Prologue", "Chapter One", "Epilogue"]],
+    ["Chapter I\nOne\nChapter 2\nTwo", ["Chapter I", "Chapter 2"]],
+  ];
+  for (const [text, titles] of cases) expect(splitManuscript(text).map((chapter) => chapter.title)).toEqual(titles);
+});
+
+test("chunks never split surrogate pairs or start or end with a lone surrogate", () => {
+  const text = "a".repeat(7) + "😀".repeat(100) + "尾";
+  const chunks = manuscriptChunks(splitManuscript(text), 8);
+  expect(chunks.map((chunk) => chunk.text).join("")).toBe(text);
+  for (const chunk of chunks) {
+    const first = chunk.text.charCodeAt(0);
+    const last = chunk.text.charCodeAt(chunk.text.length - 1);
+    expect(first >= 0xdc00 && first <= 0xdfff).toBe(false);
+    expect(last >= 0xd800 && last <= 0xdbff).toBe(false);
+  }
+  const tight = "😀😀尾";
+  const oneCharacterChunks = manuscriptChunks(splitManuscript(tight), 1);
+  expect(oneCharacterChunks.map((chunk) => chunk.text).join("")).toBe(tight);
+  for (const chunk of oneCharacterChunks) {
+    const first = chunk.text.charCodeAt(0);
+    const last = chunk.text.charCodeAt(chunk.text.length - 1);
+    expect(first >= 0xdc00 && first <= 0xdfff).toBe(false);
+    expect(last >= 0xd800 && last <= 0xdbff).toBe(false);
+  }
+});
+
+test("analysis preflight blocks over-limit runs before any request and warns about long chapters", () => {
+  const blocked = planManuscriptAnalysis(splitManuscript("字".repeat(400_000)));
+  expect(blocked.requestCount).toBeGreaterThan(40);
+  expect(blocked.block).toContain("40");
+  const warned = planManuscriptAnalysis(splitManuscript("字".repeat(100_000)));
+  expect(warned.requestCount).toBeLessThanOrEqual(40);
+  expect(warned.warnings).toHaveLength(1);
+});
+
+test("a 300k-character manuscript imports within schema limits", () => {
+  const text = "阿青。".repeat(100_000);
+  const chapters = splitManuscript(text);
+  const plan = planManuscriptAnalysis(chapters);
+  expect(plan.block).toBe("");
+  expect(plan.requestCount).toBeLessThanOrEqual(40);
+  const analyzed = plan.chunks.map((chunk) => ({ chapter: chunk.chapter, part: chunk.part, analysis: minimalAnalysis }));
+  const workspace = buildManuscriptImport("长夜", chapters, analyzed, "zh-CN");
+  expect(() => validateWorkspace(workspace)).not.toThrow();
+  const chapter = workspace.works[0]!.chapters[0]!;
+  expect(chapter.content).toBe(text);
+  expect(chapter.adaptationNotes.length).toBeLessThanOrEqual(CHAPTER_LIMITS.adaptationNotes);
+  expect(chapter.characterIds.length).toBeLessThanOrEqual(100);
+  expect(chapter.scenes.length).toBeLessThanOrEqual(100);
+});
+
+test("import caps cast links and scenes with review notices instead of failing validation", () => {
+  const chapter = splitManuscript("第1章 长\n" + "阿青。".repeat(3_000))[0]!;
+  const parts = manuscriptChunks([chapter]);
+  expect(parts).toHaveLength(2);
+  const analysisFor = (prefix: string): ManuscriptAnalysis => ({
+    world: null,
+    characters: Array.from({ length: 80 }, (_, index) => ({ name: `${prefix}${index}`, summary: "", appearance: "", evidence: "阿青" })),
+    locations: [], factions: [], lore: [], relationships: [],
+    scenes: Array.from({ length: 60 }, (_, index) => ({ title: `${prefix}场景${index}`, summary: "", location: "", characters: [], evidence: "阿青" })),
+  });
+  const workspace = buildManuscriptImport("长章", [chapter], parts.map((part) => ({ chapter: 1, part: part.part, analysis: analysisFor(`P${part.part}_`) })), "zh-CN");
+  const imported = workspace.works[0]!.chapters[0]!;
+  expect(imported.characterIds).toHaveLength(100);
+  expect(imported.scenes).toHaveLength(100);
+  expect(imported.adaptationNotes.length).toBeLessThanOrEqual(CHAPTER_LIMITS.adaptationNotes);
+  expect(imported.adaptationNotes).toContain("100");
+  expect(workspace.characters).toHaveLength(160);
+});
+
+test("failed analysis chunk keeps completed results and retry resumes at the failed chunk", async () => {
+  const chapters = splitManuscript("第1章 测试\n" + "阿青。".repeat(12_000));
+  const chunks = manuscriptChunks(chapters);
+  expect(chunks).toHaveLength(5);
+  const calls: string[] = [];
+  let failed = false;
+  const analyze = async (chunk: { chapter: number; part: number }) => {
+    calls.push(`${chunk.chapter}:${chunk.part}`);
+    if (chunk.part === 3 && !failed) { failed = true; throw new Error("quota exceeded"); }
+    return JSON.stringify(minimalAnalysis);
+  };
+  const first = await analyzeManuscriptChunks(chapters, analyze);
+  expect(first.results.map((item) => item.part)).toEqual([1, 2]);
+  expect(first.failures).toEqual([{ chapter: 1, part: 3, message: "quota exceeded" }]);
+  expect(calls).toEqual(["1:1", "1:2", "1:3"]);
+  const resumed = await analyzeManuscriptChunks(chapters, analyze, { previous: first.results });
+  expect(resumed.results.map((item) => item.part)).toEqual([1, 2, 3, 4, 5]);
+  expect(resumed.failures).toEqual([]);
+  expect(calls.slice(3)).toEqual(["1:3", "1:4", "1:5"]);
+  let sent = 0;
+  const canceled = await analyzeManuscriptChunks(chapters, async () => { sent += 1; return JSON.stringify(minimalAnalysis); }, { shouldStop: () => sent >= 2 });
+  expect(canceled.results).toHaveLength(2);
+  expect(canceled.failures).toHaveLength(0);
+});
+
+test("analysis parsing accepts prose-wrapped JSON, rejects one-character evidence and clips overlong fields", () => {
+  const chapters = splitManuscript(source);
+  const chunk = manuscriptChunks(chapters)[1]!;
+  expect(parseAnalysis("Here is the JSON:\n```json\n" + JSON.stringify(analysis) + "\n```\nDone.", chunk)).toEqual(analysis);
+  const tiny = structuredClone(analysis);
+  tiny.characters[0]!.evidence = "阿";
+  expect(() => parseAnalysis(JSON.stringify(tiny), chunk)).toThrow(/evidence/);
+  const long = structuredClone(analysis);
+  long.characters[0]!.summary = "长".repeat(700);
+  long.characters[0]!.name = "名".repeat(150);
+  const clipped = parseAnalysis(JSON.stringify(long), chunk);
+  expect([...clipped.characters[0]!.summary]).toHaveLength(500);
+  expect(clipped.characters[0]!.summary.endsWith("…")).toBe(true);
+  expect([...clipped.characters[0]!.name]).toHaveLength(100);
+});
+
+test("unlisted relationship endpoints fail with a readable message while the reviewed JSON remains available", () => {
+  const chapters = splitManuscript(source);
+  const broken = structuredClone(analysis);
+  broken.characters = broken.characters.filter((character) => character.name !== "白舟");
+  const reviewed = JSON.stringify([{ chapter: 2, part: 1, analysis: broken }], null, 2);
+  expect(reviewed).toContain("白舟");
+  expect(() => buildManuscriptImport("灯塔", chapters, JSON.parse(reviewed), "zh-CN")).toThrow(/unlisted character/);
 });
 
 test("analysis validates exact evidence and linked assets, keeps manuscript and existing workspace intact", () => {
