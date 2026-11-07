@@ -20,7 +20,8 @@ interface ManuscriptHeading { index: number; title: string }
 const MARKDOWN_HEADING = /^#{1,6}[ \t　]+(\S.*)$/;
 const CHINESE_HEADING = /^第[ \t　]*([零〇一二三四五六七八九十百千万两0-9]+)[ \t　]*([章节回卷])(?:[ \t　]*(?:[:：、.．\-—])?[ \t　]*(\S.*))?$/;
 const SPECIAL_HEADING = /^(序章|楔子|引子|尾声|终章|番外(?:篇)?|Prologue|Epilogue|Interlude)(?:[ \t　]*(?:[:：、.．\-—])?[ \t　]*(\S.*))?$/i;
-const ENGLISH_HEADING = /^(chapter)[ \t　]+((?:\d+)|(?=[ivxlcdm]+$)(?=m{0,4}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$)[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:[ \t　]*(?:[:：、.．\-—])?[ \t　]*(\S.*))?$/i;
+const ENGLISH_HEADING = /^(chapter)[ \t　]+((?:\d+)|[ivxlcdm]+\b|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:[ \t　]*(?:[:：、.．\-—])?[ \t　]*(\S.*))?$/i;
+const ROMAN_NUMERAL = /^m{0,4}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$/i;
 const SENTENCE_PUNCTUATION = /[，。！？,.!?]/;
 const ENGLISH_SENTENCE = /[.!?;]/;
 const CHINESE_TITLE_MAX = 30;
@@ -32,7 +33,7 @@ function headingTitle(rawLine: string): string | null {
   const markdown = MARKDOWN_HEADING.exec(line);
   if (markdown) {
     const title = markdown[1]!.trim();
-    return title && [...title].length <= CHAPTER_LIMITS.title ? title : null;
+    return title && title.length <= CHAPTER_LIMITS.title ? title : null;
   }
   const chinese = CHINESE_HEADING.exec(line);
   if (chinese) {
@@ -51,7 +52,9 @@ function headingTitle(rawLine: string): string | null {
   if (english) {
     const suffix = (english[3] ?? "").trim();
     if ([...suffix].length > ENGLISH_TITLE_MAX || ENGLISH_SENTENCE.test(suffix)) return null;
-    return `${english[1]} ${english[2]}${suffix ? ` ${suffix}` : ""}`;
+    const numeral = english[2]!;
+    if (/^[ivxlcdm]+$/i.test(numeral) && !ROMAN_NUMERAL.test(numeral)) return null;
+    return `${english[1]} ${numeral}${suffix ? ` ${suffix}` : ""}`;
   }
   return null;
 }
@@ -244,11 +247,19 @@ function firstJsonObject(text: string): string {
   throw new Error("unterminated JSON object");
 }
 
+/** Back a cut off one unit when it would split a surrogate pair. */
+function safeTextEnd(value: string, end: number): number {
+  if (end <= 0 || end >= value.length) return end;
+  const before = value.charCodeAt(end - 1);
+  const after = value.charCodeAt(end);
+  return before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff ? end - 1 : end;
+}
+
+// Limits are UTF-16 units because Zod's `.max()` counts `String#length`, not code points.
 function clipText(value: unknown, max: number, marked: boolean): unknown {
-  if (typeof value !== "string") return value;
-  const characters = [...value];
-  if (characters.length <= max) return value;
-  return characters.slice(0, marked ? Math.max(0, max - 1) : max).join("") + (marked ? "…" : "");
+  if (typeof value !== "string" || value.length <= max) return value;
+  const end = safeTextEnd(value, marked ? Math.max(0, max - 1) : max);
+  return value.slice(0, end) + (marked ? "…" : "");
 }
 
 function fitRecord(record: Record<string, unknown>): void {

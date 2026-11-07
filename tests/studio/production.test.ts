@@ -43,6 +43,18 @@ test("heading recognition normalizes markdown, full-width digits and spaces with
   for (const [text, titles] of cases) expect(splitManuscript(text).map((chapter) => chapter.title)).toEqual(titles);
 });
 
+test("titled roman-numeral chapters split while invalid numerals stay prose", () => {
+  const cases: Array<[string, string[]]> = [
+    ["Chapter IV: The Storm\nOne\nChapter 2: The Flood\nTwo", ["Chapter IV The Storm", "Chapter 2 The Flood"]],
+    ["Chapter XII Return Home\nOne", ["Chapter XII Return Home"]],
+    ["Chapter MIX\nOne", ["Chapter MIX"]],
+    ["Chapter Vv\nOne", ["正文 / Manuscript"]],
+  ];
+  for (const [text, titles] of cases) expect(splitManuscript(text).map((chapter) => chapter.title)).toEqual(titles);
+  const text = "Chapter IV: The Storm\nOne\nChapter XII Return Home\nTwo";
+  expect(splitManuscript(text).map((chapter) => chapter.content).join("")).toBe(text);
+});
+
 test("chunks never split surrogate pairs or start or end with a lone surrogate", () => {
   const text = "a".repeat(7) + "😀".repeat(100) + "尾";
   const chunks = manuscriptChunks(splitManuscript(text), 8);
@@ -147,6 +159,27 @@ test("analysis parsing accepts prose-wrapped JSON, rejects one-character evidenc
   expect([...clipped.characters[0]!.summary]).toHaveLength(500);
   expect(clipped.characters[0]!.summary.endsWith("…")).toBe(true);
   expect([...clipped.characters[0]!.name]).toHaveLength(100);
+});
+
+test("title and clipping limits count UTF-16 units so astral text still satisfies the schema", () => {
+  const emoji = "😀";
+  expect(splitManuscript(`# ${emoji.repeat(150)}\nOne`)[0]!.title).toBe(emoji.repeat(150));
+  expect(splitManuscript(`# ${emoji.repeat(151)}\nOne`)[0]!.title).toBe("正文 / Manuscript");
+  const chapters = splitManuscript(source);
+  const chunk = manuscriptChunks(chapters)[1]!;
+  const long = structuredClone(analysis);
+  long.characters[0]!.summary = emoji.repeat(300);
+  long.characters[0]!.name = `a${emoji.repeat(60)}`;
+  const clipped = parseAnalysis(JSON.stringify(long), chunk);
+  const summary = clipped.characters[0]!.summary;
+  expect(summary.length).toBe(499);
+  expect(summary.endsWith("…")).toBe(true);
+  const beforeMark = summary.charCodeAt(summary.length - 2);
+  expect(beforeMark >= 0xd800 && beforeMark <= 0xdbff).toBe(false);
+  const kept = clipped.characters[0]!.name;
+  expect(kept.length).toBe(99);
+  const lastUnit = kept.charCodeAt(kept.length - 1);
+  expect(lastUnit >= 0xd800 && lastUnit <= 0xdbff).toBe(false);
 });
 
 test("unlisted relationship endpoints fail with a readable message while the reviewed JSON remains available", () => {
