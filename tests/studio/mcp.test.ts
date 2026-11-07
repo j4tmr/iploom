@@ -433,7 +433,7 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     expect(invalidKind.isError).toBe(true);
     expect(
       (invalidKind.body.error as { code: string; message: string }).code,
-    ).toBe("invalid_argument");
+    ).toBe("invalid_arguments");
     expect(invalidKind.text).not.toContain("\n    at ");
 
     const emptyTitle = await call(client, "create_standard", {
@@ -444,7 +444,7 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     expect(emptyTitle.isError).toBe(true);
     expect(
       (emptyTitle.body.error as { code: string; message: string }).code,
-    ).toBe("invalid_argument");
+    ).toBe("invalid_arguments");
     expect(emptyTitle.text).not.toContain("\n    at ");
 
     const unknownUpdate = await call(client, "update_standard", {

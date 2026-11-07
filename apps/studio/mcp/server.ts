@@ -66,8 +66,6 @@ const MAX_PAGE_LIMIT = 200;
 /** Chapter prose returned per `get_chapter` call unless the caller asks for more. */
 const CHAPTER_TEXT_CHARS = 6_000;
 const CHAPTER_MAX_TEXT_CHARS = 60_000;
-const BEATS_BUDGET_BYTES = 6_000;
-const SCENES_BUDGET_BYTES = 6_000;
 const NOVEL_CHAPTERS_BUDGET_BYTES = 30_000;
 /** Synopsis window returned by `get_novel` unless the caller asks for more. */
 const NOVEL_SYNOPSIS_CHARS = 2_000;
@@ -85,6 +83,12 @@ const RESULT_EXCERPT_CHARS = 200;
 const COMPACT_STRING_CHARS = 240;
 /** Arrays longer than this are clipped in compact list views. */
 const COMPACT_ARRAY_ITEMS = 20;
+/** Chapter previews and file paths echoed by an export report. */
+const EXPORT_PREVIEW_ITEMS = 50;
+/** Export warnings echoed before the rest are only counted. */
+const EXPORT_WARNING_ITEMS = 20;
+/** Unfinished dependencies listed per workflow task; the rest are counted. */
+const BLOCKER_PREVIEW_ITEMS = 10;
 
 const READ_ONLY_ANNOTATIONS: ToolAnnotations = {
   readOnlyHint: true,
@@ -167,13 +171,38 @@ function pageOf<T>(
   };
 }
 
+/**
+ * Budget left for a paged collection once the fixed fields of a response are
+ * accounted for. It never drops below 1 KB: an unusually large fixed payload
+ * shrinks the page but can never stall paging.
+ */
+function remainingBudget(...fixed: readonly unknown[]): number {
+  const used = fixed.reduce<number>(
+    (total, value) => total + byteSize(value),
+    0,
+  );
+  return Math.max(1_000, ITEM_BUDGET_BYTES - used);
+}
+
+function isHighSurrogate(code: number): boolean {
+  return code >= 0xd800 && code <= 0xdbff;
+}
+
+function isLowSurrogate(code: number): boolean {
+  return code >= 0xdc00 && code <= 0xdfff;
+}
+
 /** Slices without ever splitting a surrogate pair at the end of the window. */
 function clipEnd(value: string, start: number, maxChars: number): string {
   let end = Math.min(value.length, start + Math.max(1, maxChars));
-  if (end < value.length) {
-    const code = value.charCodeAt(end - 1);
-    if (code >= 0xd800 && code <= 0xdbff) end -= 1;
-    if (end <= start) end = start + 1;
+  if (
+    end < value.length &&
+    isHighSurrogate(value.charCodeAt(end - 1)) &&
+    isLowSurrogate(value.charCodeAt(end))
+  ) {
+    // Take the low surrogate too: the window is one code unit longer than
+    // asked rather than returning half a pair that no client can decode.
+    end += 1;
   }
   return value.slice(start, end);
 }
@@ -199,7 +228,17 @@ function previewText(value: string, maxChars: number): string {
  */
 function textWindow(value: string, offset: number, maxChars: number) {
   const total = value.length;
-  const start = Math.min(total, Math.max(0, Math.trunc(offset)));
+  let start = Math.min(total, Math.max(0, Math.trunc(offset)));
+  if (
+    start > 0 &&
+    start < total &&
+    isLowSurrogate(value.charCodeAt(start)) &&
+    isHighSurrogate(value.charCodeAt(start - 1))
+  ) {
+    // A caller-supplied offset can land between the halves of a pair; start
+    // one code unit earlier so the window never opens with a lone surrogate.
+    start -= 1;
+  }
   const text = clipEnd(value, start, maxChars);
   const next = start + text.length;
   return {
@@ -331,6 +370,29 @@ const standardBodySchema = z
   })
   .strict()
   .describe("双语规则正文 / Localized standard body.");
+/**
+ * Update patches have no per-language defaults: an omitted language keeps the
+ * stored text, so revising one language can never erase the other. An explicit
+ * empty string still clears that language.
+ */
+const standardTitlePatchSchema = z
+  .object({
+    zh: z.string().max(500).optional().describe("中文标题 / Chinese title."),
+    en: z.string().max(500).optional().describe("英文标题 / English title."),
+  })
+  .strict()
+  .describe(
+    "双语标题补丁；省略的语言保持原值 / Localized title patch; omitted languages keep their value.",
+  );
+const standardBodyPatchSchema = z
+  .object({
+    zh: z.string().max(20_000).optional().describe("中文规则正文 / Chinese body."),
+    en: z.string().max(20_000).optional().describe("英文规则正文 / English body."),
+  })
+  .strict()
+  .describe(
+    "双语正文补丁；省略的语言保持原值 / Localized body patch; omitted languages keep their value.",
+  );
 
 const pageOffsetSchema = z
   .number()
@@ -479,8 +541,10 @@ function worldView(workspace: StudioWorkspace, world: StoryUniverse) {
     name: world.name,
     tagline: world.tagline,
     summary: world.summary,
-    genres: world.genres,
-    themes: world.themes,
+    genres: world.genres.slice(0, COMPACT_ARRAY_ITEMS),
+    genre_count: world.genres.length,
+    themes: world.themes.slice(0, COMPACT_ARRAY_ITEMS),
+    theme_count: world.themes.length,
     accent: world.accent,
     updated_at: world.updatedAt,
     stats: worldStats(workspace, world.id),
@@ -508,7 +572,8 @@ function novelView(novel: StoryWork) {
     status: novel.status,
     language: novel.language,
     genre: novel.genre,
-    themes: novel.themes,
+    themes: novel.themes.slice(0, COMPACT_ARRAY_ITEMS),
+    theme_count: novel.themes.length,
     target_words: novel.targetWords,
     cover_color: novel.coverColor,
     chapter_count: chapters.length,
@@ -547,7 +612,8 @@ function chapterPlanView(chapter: Chapter) {
     summary: chapter.summary,
     outline: chapter.outline,
     beats: chapter.beats,
-    character_ids: chapter.characterIds,
+    character_ids: chapter.characterIds.slice(0, COMPACT_ARRAY_ITEMS),
+    character_id_count: chapter.characterIds.length,
     location_id: chapter.locationId,
     adaptation_notes: chapter.adaptationNotes,
     revision: chapter.revision,
@@ -569,7 +635,8 @@ function chapterListEntry(chapter: Chapter) {
     summary_chars: chapter.summary.length,
     outline_chars: chapter.outline.length,
     beat_count: chapter.beats.length,
-    character_ids: chapter.characterIds,
+    character_ids: chapter.characterIds.slice(0, COMPACT_ARRAY_ITEMS),
+    character_id_count: chapter.characterIds.length,
     location_id: chapter.locationId ?? null,
     revision: chapter.revision,
     updated_at: chapter.updatedAt,
@@ -636,6 +703,18 @@ function factionView(faction: StoryFaction) {
   };
 }
 
+/** One unfinished dependency, with its title clipped to a readable preview. */
+function workflowBlockerView(task: WorkflowTask) {
+  return {
+    id: task.id,
+    title: {
+      zh: previewText(task.title.zh, COMPACT_STRING_CHARS),
+      en: previewText(task.title.en, COMPACT_STRING_CHARS),
+    },
+    status: task.status,
+  };
+}
+
 function workflowTaskView(
   workspace: StudioWorkspace,
   task: WorkflowTask,
@@ -653,17 +732,18 @@ function workflowTaskView(
     previous_result: task.previousResult ?? null,
     last_run: task.lastRun ?? null,
     ready: readiness.ready,
-    blockers: readiness.blockers.map((item) => ({
-      id: item.id,
-      title: item.title,
-      status: item.status,
-    })),
+    blockers: readiness.blockers
+      .slice(0, BLOCKER_PREVIEW_ITEMS)
+      .map(workflowBlockerView),
+    blocker_count: readiness.blockers.length,
     world_id: task.universeId ?? null,
     novel_id: task.workId ?? null,
     chapter_id: task.chapterId ?? null,
     parent_id: task.parentId ?? null,
-    character_ids: task.characterIds,
-    depends_on_ids: task.dependsOnIds,
+    character_ids: task.characterIds.slice(0, COMPACT_ARRAY_ITEMS),
+    character_id_count: task.characterIds.length,
+    depends_on_ids: task.dependsOnIds.slice(0, COMPACT_ARRAY_ITEMS),
+    depends_on_id_count: task.dependsOnIds.length,
     created_at: task.createdAt,
     updated_at: task.updatedAt,
   };
@@ -701,17 +781,18 @@ function workflowTaskSummaryView(
       : null,
     last_run: task.lastRun ?? null,
     ready: readiness.ready,
-    blockers: readiness.blockers.map((item) => ({
-      id: item.id,
-      title: item.title,
-      status: item.status,
-    })),
+    blockers: readiness.blockers
+      .slice(0, BLOCKER_PREVIEW_ITEMS)
+      .map(workflowBlockerView),
+    blocker_count: readiness.blockers.length,
     world_id: task.universeId ?? null,
     novel_id: task.workId ?? null,
     chapter_id: task.chapterId ?? null,
     parent_id: task.parentId ?? null,
-    character_ids: task.characterIds,
-    depends_on_ids: task.dependsOnIds,
+    character_ids: task.characterIds.slice(0, COMPACT_ARRAY_ITEMS),
+    character_id_count: task.characterIds.length,
+    depends_on_ids: task.dependsOnIds.slice(0, COMPACT_ARRAY_ITEMS),
+    depends_on_id_count: task.dependsOnIds.length,
     created_at: task.createdAt,
     updated_at: task.updatedAt,
   };
@@ -819,11 +900,11 @@ function invalidStandard(error: unknown): ToolError {
       .map((issue) => `${issue.path.join(".") || "standard"}: ${issue.message}`)
       .join("; ");
     return new ToolError(
-      "invalid_argument",
+      "invalid_arguments",
       `Invalid foundation standard: ${issues || "validation failed"}`,
     );
   }
-  return new ToolError("invalid_argument", errorMessage(error));
+  return new ToolError("invalid_arguments", errorMessage(error));
 }
 
 function parseStandard(value: unknown): WorkspaceStandard {
@@ -850,7 +931,7 @@ function findStandard(
 function ensureUniverse(workspace: StudioWorkspace, universeId: string): void {
   if (!workspace.universes.some((universe) => universe.id === universeId))
     throw new ToolError(
-      "invalid_argument",
+      "invalid_arguments",
       `Unknown story world: ${universeId}`,
     );
 }
@@ -1005,12 +1086,17 @@ export function createStudioMcpServer(
     async (args) => {
       const loaded = await store.load();
       const { workspace } = loaded;
+      const meta = workspaceMeta(loaded);
       return {
         schema: MCP_SCHEMA,
-        workspace: workspaceMeta(loaded),
+        workspace: meta,
         worlds: pageOf(
           workspace.universes.map((world) => worldView(workspace, world)),
-          { offset: args.offset, limit: args.limit },
+          {
+            offset: args.offset,
+            limit: args.limit,
+            budget: remainingBudget(meta),
+          },
         ),
       };
     },
@@ -1021,12 +1107,32 @@ export function createStudioMcpServer(
     {
       title: "读取故事世界 / Read story world",
       description:
-        "读取一个故事世界的世界观，并分页返回其通用角色、地点、势力、传说、小说与关系；每一类都带 total 与 next_offset。Read one story world and page through its reusable cast, locations, factions, lore, novels and relationships; every collection reports total and next_offset.",
+        "读取一个故事世界的世界观，并分页返回其通用角色、地点、势力、传说、小说与关系；每一类都带 total 与 next_offset，且各自使用 offsets 中对应的分页起点。Read one story world and page through its reusable cast, locations, factions, lore, novels and relationships; every collection reports total and next_offset and uses its own offset from offsets.",
       annotations: READ_ONLY_ANNOTATIONS,
     },
     z.object({
       world_id: worldIdSchema,
-      offset: pageOffsetSchema,
+      offsets: z
+        .object({
+          novels: pageOffsetSchema,
+          characters: pageOffsetSchema,
+          locations: pageOffsetSchema,
+          factions: pageOffsetSchema,
+          lore: pageOffsetSchema,
+          relationships: pageOffsetSchema,
+        })
+        .strict()
+        .default({
+          novels: 0,
+          characters: 0,
+          locations: 0,
+          factions: 0,
+          lore: 0,
+          relationships: 0,
+        })
+        .describe(
+          "各集合独立的分页起点；把每个集合自己的 next_offset 传回来 / Independent zero-based offset per collection; pass each collection's own next_offset back in.",
+        ),
       limit: pageLimit,
       include_details: detailSchema,
     }),
@@ -1034,18 +1140,21 @@ export function createStudioMcpServer(
       const loaded = await store.load();
       const { workspace } = loaded;
       const world = findWorld(workspace, args.world_id);
+      const meta = workspaceMeta(loaded);
+      const worldPayload = worldView(workspace, world);
       const compact = (value: object): Record<string, unknown> =>
         args.include_details
           ? (value as Record<string, unknown>)
           : compactRecord(value);
-      let remaining = ITEM_BUDGET_BYTES;
+      let remaining = remainingBudget(meta, worldPayload);
       const take = <T>(
         items: readonly T[],
         view: (item: T) => object,
+        offset: number,
         collectionsLeft: number,
       ): Page<Record<string, unknown>> => {
         const page = pageOf(items.map((item) => compact(view(item))), {
-          offset: args.offset,
+          offset,
           limit: args.limit,
           budget: Math.max(
             1_000,
@@ -1057,11 +1166,12 @@ export function createStudioMcpServer(
       };
       return {
         schema: MCP_SCHEMA,
-        workspace: workspaceMeta(loaded),
-        world: worldView(workspace, world),
+        workspace: meta,
+        world: worldPayload,
         novels: take(
           workspace.works.filter((novel) => novel.universeId === world.id),
           novelView,
+          args.offsets.novels,
           6,
         ),
         characters: take(
@@ -1069,6 +1179,7 @@ export function createStudioMcpServer(
             character.universeIds.includes(world.id),
           ),
           characterView,
+          args.offsets.characters,
           5,
         ),
         locations: take(
@@ -1076,6 +1187,7 @@ export function createStudioMcpServer(
             (location) => location.universeId === world.id,
           ),
           locationView,
+          args.offsets.locations,
           4,
         ),
         factions: take(
@@ -1083,11 +1195,13 @@ export function createStudioMcpServer(
             (faction) => faction.universeId === world.id,
           ),
           factionView,
+          args.offsets.factions,
           3,
         ),
         lore: take(
           workspace.lore.filter((entry) => entry.universeId === world.id),
           loreView,
+          args.offsets.lore,
           2,
         ),
         relationships: take(
@@ -1095,6 +1209,7 @@ export function createStudioMcpServer(
             (relationship) => relationship.universeId === world.id,
           ),
           relationshipView,
+          args.offsets.relationships,
           1,
         ),
       };
@@ -1121,13 +1236,16 @@ export function createStudioMcpServer(
       const novels = workspace.works.filter(
         (novel) => !args.world_id || novel.universeId === args.world_id,
       );
+      const meta = workspaceMeta(loaded);
+      const filters = { world_id: args.world_id ?? null };
       return {
         schema: MCP_SCHEMA,
-        workspace: workspaceMeta(loaded),
+        workspace: meta,
         world_id: args.world_id ?? null,
         novels: pageOf(novels.map((novel) => novelView(novel)), {
           offset: args.offset,
           limit: args.limit,
+          budget: remainingBudget(meta, filters),
         }),
       };
     },
@@ -1165,24 +1283,34 @@ export function createStudioMcpServer(
       const chapters = novel.chapters
         .slice()
         .sort((left, right) => left.number - right.number);
+      const meta = workspaceMeta(loaded);
+      const novelPayload = {
+        ...novelView(novel),
+        synopsis_chars: novel.synopsis.length,
+        created_at: novel.createdAt,
+      };
+      const worldHeader = {
+        id: world.id,
+        name: world.name,
+        tagline: world.tagline,
+      };
+      const synopsis = textWindow(
+        novel.synopsis,
+        args.synopsis_offset,
+        args.synopsis_max_chars,
+      );
+      const chapterBudget = remainingBudget(
+        meta,
+        novelPayload,
+        worldHeader,
+        synopsis,
+      );
       return {
         schema: MCP_SCHEMA,
-        workspace: workspaceMeta(loaded),
-        novel: {
-          ...novelView(novel),
-          synopsis_chars: novel.synopsis.length,
-          created_at: novel.createdAt,
-        },
-        world: {
-          id: world.id,
-          name: world.name,
-          tagline: world.tagline,
-        },
-        synopsis: textWindow(
-          novel.synopsis,
-          args.synopsis_offset,
-          args.synopsis_max_chars,
-        ),
+        workspace: meta,
+        novel: novelPayload,
+        world: worldHeader,
+        synopsis,
         chapters: pageOf(
           chapters.map((chapter) =>
             args.include_details
@@ -1193,8 +1321,8 @@ export function createStudioMcpServer(
             offset: args.offset,
             limit: args.limit,
             budget: args.include_details
-              ? ITEM_BUDGET_BYTES
-              : NOVEL_CHAPTERS_BUDGET_BYTES,
+              ? chapterBudget
+              : Math.min(NOVEL_CHAPTERS_BUDGET_BYTES, chapterBudget),
           },
         ),
       };
@@ -1262,57 +1390,64 @@ export function createStudioMcpServer(
           "not_found",
           `Chapter not found: ${args.chapter_id}`,
         );
+      const meta = workspaceMeta(loaded);
+      const novelHeader = {
+        id: novel.id,
+        world_id: novel.universeId,
+        title: novel.title,
+        language: novel.language,
+      };
+      const chapterPayload = {
+        id: chapter.id,
+        number: chapter.number,
+        title: chapter.title,
+        title_en: chapter.titleEn,
+        status: chapter.status,
+        pov: chapter.pov,
+        summary: args.include_details
+          ? chapter.summary
+          : previewText(chapter.summary, SUMMARY_PREVIEW_CHARS),
+        summary_chars: chapter.summary.length,
+        outline: args.include_details
+          ? chapter.outline
+          : previewText(chapter.outline, OUTLINE_PREVIEW_CHARS),
+        outline_chars: chapter.outline.length,
+        adaptation_notes: args.include_details
+          ? chapter.adaptationNotes
+          : previewText(chapter.adaptationNotes, NOTES_PREVIEW_CHARS),
+        adaptation_notes_chars: chapter.adaptationNotes.length,
+        character_ids: chapter.characterIds.slice(0, COMPACT_ARRAY_ITEMS),
+        character_id_count: chapter.characterIds.length,
+        location_id: chapter.locationId ?? null,
+        revision: chapter.revision,
+        created_at: chapter.createdAt,
+        updated_at: chapter.updatedAt,
+        ...chapterCounts(chapter),
+        content: textWindow(chapter.content, args.offset, args.max_chars),
+      };
+      const budget = remainingBudget(meta, novelHeader, chapterPayload);
+      const beats = pageOf(chapter.beats, {
+        offset: args.beats_offset,
+        limit: args.beats_limit,
+        budget: args.include_scenes
+          ? Math.max(1_000, Math.floor(budget / 2))
+          : budget,
+      });
+      const scenes = args.include_scenes
+        ? pageOf(
+            chapter.scenes.map((scene) => compactRecord(sceneView(scene))),
+            {
+              offset: args.scenes_offset,
+              limit: args.scenes_limit,
+              budget: Math.max(1_000, budget - byteSize(beats.items)),
+            },
+          )
+        : null;
       return {
         schema: MCP_SCHEMA,
-        workspace: workspaceMeta(loaded),
-        novel: {
-          id: novel.id,
-          world_id: novel.universeId,
-          title: novel.title,
-          language: novel.language,
-        },
-        chapter: {
-          id: chapter.id,
-          number: chapter.number,
-          title: chapter.title,
-          title_en: chapter.titleEn,
-          status: chapter.status,
-          pov: chapter.pov,
-          summary: args.include_details
-            ? chapter.summary
-            : previewText(chapter.summary, SUMMARY_PREVIEW_CHARS),
-          summary_chars: chapter.summary.length,
-          outline: args.include_details
-            ? chapter.outline
-            : previewText(chapter.outline, OUTLINE_PREVIEW_CHARS),
-          outline_chars: chapter.outline.length,
-          adaptation_notes: args.include_details
-            ? chapter.adaptationNotes
-            : previewText(chapter.adaptationNotes, NOTES_PREVIEW_CHARS),
-          adaptation_notes_chars: chapter.adaptationNotes.length,
-          character_ids: chapter.characterIds,
-          location_id: chapter.locationId ?? null,
-          revision: chapter.revision,
-          created_at: chapter.createdAt,
-          updated_at: chapter.updatedAt,
-          ...chapterCounts(chapter),
-          content: textWindow(chapter.content, args.offset, args.max_chars),
-          beats: pageOf(chapter.beats, {
-            offset: args.beats_offset,
-            limit: args.beats_limit,
-            budget: BEATS_BUDGET_BYTES,
-          }),
-          scenes: args.include_scenes
-            ? pageOf(
-                chapter.scenes.map((scene) => compactRecord(sceneView(scene))),
-                {
-                  offset: args.scenes_offset,
-                  limit: args.scenes_limit,
-                  budget: SCENES_BUDGET_BYTES,
-                },
-              )
-            : null,
-        },
+        workspace: meta,
+        novel: novelHeader,
+        chapter: { ...chapterPayload, beats, scenes },
       };
     },
   );
@@ -1363,17 +1498,21 @@ export function createStudioMcpServer(
         universeId: args.world_id,
         kind: args.kind,
       });
-      return {
-        schema: MCP_SCHEMA,
-        workspace: workspaceMeta(loaded),
+      const meta = workspaceMeta(loaded);
+      const echo = {
         query: args.query,
         locale,
         world_id: args.world_id ?? null,
         kind: args.kind ?? null,
+      };
+      return {
+        schema: MCP_SCHEMA,
+        workspace: meta,
+        ...echo,
         hits: pageOf(results.hits.map((hit) => hitView(hit)), {
           offset: args.offset,
           limit: args.limit,
-          budget: ITEM_BUDGET_BYTES - 2_000,
+          budget: remainingBudget(meta, echo),
         }),
       };
     },
@@ -1384,13 +1523,14 @@ export function createStudioMcpServer(
     {
       title: "关系图 / Relationship graph",
       description:
-        "分页读取故事世界的角色关系图节点、边、角色度数与一致性警告。Read the cast relationship graph with paged nodes and edges, degrees and consistency warnings.",
+        "分页读取故事世界的角色关系图节点、边、角色度数与一致性警告；节点与边各自使用 nodes_offset 与 edges_offset 翻页。Read the cast relationship graph with paged nodes and edges, degrees and consistency warnings; nodes and edges page independently with nodes_offset and edges_offset.",
       annotations: READ_ONLY_ANNOTATIONS,
     },
     z.object({
       world_id: worldIdSchema,
       locale: localeSchema,
-      offset: pageOffsetSchema,
+      nodes_offset: pageOffsetSchema,
+      edges_offset: pageOffsetSchema,
       limit: pageLimit,
     }),
     async (args) => {
@@ -1399,22 +1539,28 @@ export function createStudioMcpServer(
       const world = findWorld(workspace, args.world_id);
       const locale: UiLocale = args.locale ?? workspace.settings.locale;
       const graph = buildRelationshipGraph(workspace, world.id, locale);
+      const meta = workspaceMeta(loaded);
+      const available = remainingBudget(meta);
       const nodes = pageOf(graph.nodes, {
-        offset: args.offset,
+        offset: args.nodes_offset,
         limit: args.limit,
-        budget: Math.floor(ITEM_BUDGET_BYTES * 0.45),
+        budget: Math.floor(available * 0.45),
       });
-      const edges = pageOf(graph.edges, {
-        offset: args.offset,
-        limit: args.limit,
-        budget: Math.max(2_000, ITEM_BUDGET_BYTES - byteSize(nodes.items)),
-      });
+      const edges = pageOf(
+        graph.edges.map((edge) => compactRecord(edge)),
+        {
+          offset: args.edges_offset,
+          limit: args.limit,
+          budget: Math.max(1_000, available - byteSize(nodes.items)),
+        },
+      );
       return {
         schema: MCP_SCHEMA,
-        workspace: workspaceMeta(loaded),
+        workspace: meta,
         world_id: world.id,
         locale,
-        warnings: graph.warnings,
+        warnings: graph.warnings.slice(0, COMPACT_ARRAY_ITEMS),
+        warning_count: graph.warnings.length,
         nodes,
         edges,
       };
@@ -1451,22 +1597,29 @@ export function createStudioMcpServer(
           (!args.novel_id || task.workId === args.novel_id) &&
           (!args.status || task.status === args.status),
       );
+      const meta = workspaceMeta(loaded);
+      const filters = {
+        world_id: args.world_id ?? null,
+        novel_id: args.novel_id ?? null,
+        status: args.status ?? null,
+      };
+      const summary = workflowSummary(workspace);
       return {
         schema: MCP_SCHEMA,
-        workspace: workspaceMeta(loaded),
-        filters: {
-          world_id: args.world_id ?? null,
-          novel_id: args.novel_id ?? null,
-          status: args.status ?? null,
-        },
-        summary: workflowSummary(workspace),
+        workspace: meta,
+        filters,
+        summary,
         tasks: pageOf(
           tasks.map((task) =>
             args.include_details
               ? workflowTaskView(workspace, task)
               : workflowTaskSummaryView(workspace, task),
           ),
-          { offset: args.offset, limit: args.limit },
+          {
+            offset: args.offset,
+            limit: args.limit,
+            budget: remainingBudget(meta, filters, summary),
+          },
         ),
       };
     },
@@ -1553,6 +1706,7 @@ export function createStudioMcpServer(
     async (args) => {
       const loaded = await store.load();
       const { workspace } = loaded;
+      if (args.universe_id) findWorld(workspace, args.universe_id);
       const standards = workspace.standards
         .filter(
           (standard) =>
@@ -1562,17 +1716,26 @@ export function createStudioMcpServer(
         )
         .slice()
         .sort(compareStandards);
+      const meta = workspaceMeta(loaded);
+      const activeApplied = applicableStandards(
+        workspace,
+        args.universe_id,
+      ).length;
       return {
         schema: MCP_SCHEMA,
-        workspace: workspaceMeta(loaded),
-        active_applied: applicableStandards(workspace, args.universe_id).length,
+        workspace: meta,
+        active_applied: activeApplied,
         standards: pageOf(
           standards.map((standard) =>
             args.include_body
               ? standardView(standard)
               : standardListView(standard),
           ),
-          { offset: args.offset, limit: args.limit },
+          {
+            offset: args.offset,
+            limit: args.limit,
+            budget: remainingBudget(meta, activeApplied),
+          },
         ),
       };
     },
@@ -1603,6 +1766,9 @@ export function createStudioMcpServer(
       const loaded = await store.load();
       const { workspace } = loaded;
       const standard = findStandard(workspace, args.standard_id);
+      const pinnedBy = workspace.workflowTasks
+        .filter((task) => task.standardRefs.some((ref) => ref.id === standard.id))
+        .map((task) => task.id);
       return {
         schema: MCP_SCHEMA,
         workspace: workspaceMeta(loaded),
@@ -1614,9 +1780,8 @@ export function createStudioMcpServer(
           },
         },
         applies_to: standard.universeId ?? "project",
-        pinned_by_task_ids: workspace.workflowTasks
-          .filter((task) => task.standardRefs.some((ref) => ref.id === standard.id))
-          .map((task) => task.id),
+        pinned_by_task_ids: pinnedBy.slice(0, COMPACT_ARRAY_ITEMS),
+        pinned_by_task_count: pinnedBy.length,
       };
     },
   );
@@ -1655,7 +1820,7 @@ export function createStudioMcpServer(
       const workspace = await store.update((current) => {
         if (current.standards.length >= 1_000)
           throw new ToolError(
-            "invalid_argument",
+            "invalid_arguments",
             "The workspace already contains the maximum of 1000 foundation standards.",
           );
         if (standard.universeId) ensureUniverse(current, standard.universeId);
@@ -1665,7 +1830,7 @@ export function createStudioMcpServer(
       return {
         schema: MCP_SCHEMA,
         revision: workspace.revision,
-        standard: standardView(standard),
+        standard: standardListView(standard),
       };
     },
   );
@@ -1680,8 +1845,8 @@ export function createStudioMcpServer(
     },
     z.object({
       standard_id: standardIdSchema,
-      title: standardTitleSchema.optional(),
-      body: standardBodySchema.optional(),
+      title: standardTitlePatchSchema.optional(),
+      body: standardBodyPatchSchema.optional(),
       kind: standardWriteKindSchema.optional(),
       status: standardWriteStatusSchema.optional(),
       universe_id: standardScopeSchema,
@@ -1705,8 +1870,14 @@ export function createStudioMcpServer(
           ? args.universe_id || undefined
           : existing.universeId;
         if (universeId) ensureUniverse(current, universeId);
-        const title = args.title ?? existing.title;
-        const body = args.body ?? existing.body;
+        const title = {
+          zh: args.title?.zh ?? existing.title.zh,
+          en: args.title?.en ?? existing.title.en,
+        };
+        const body = {
+          zh: args.body?.zh ?? existing.body.zh,
+          en: args.body?.en ?? existing.body.en,
+        };
         const kind = args.kind ?? existing.kind;
         const contentChanged =
           title.zh !== existing.title.zh ||
@@ -1744,7 +1915,7 @@ export function createStudioMcpServer(
       return {
         schema: MCP_SCHEMA,
         revision: workspace.revision,
-        standard: standardView(updated),
+        standard: standardListView(updated),
         version_bumped: versionBumped,
       };
     },
@@ -1755,7 +1926,7 @@ export function createStudioMcpServer(
     {
       title: "导出 ArcReel 包 / Export ArcReel bundle",
       description:
-        "构建并写入 ArcReel/3D 漫剧交接包。output_dir 必须位于工作区 exports 目录或服务端启动时用 --export-root 显式允许的目录内；省略时写入工作区同目录 exports。返回完整的写入报告。Build and write an ArcReel / stylized 3D comic-drama handoff. output_dir must stay inside the workspace exports directory or a directory enabled with --export-root at server start; the default is exports beside workspace.json. Returns the full write report.",
+        "构建并写入 ArcReel/3D 漫剧交接包。output_dir 必须位于工作区 exports 目录或服务端启动时用 --export-root 显式允许的目录内；省略时写入工作区同目录 exports。返回写入报告：files_written 与 bytes 是真实总数，chapters、paths、warnings 只回显前若干项，完整的清单在目录内的 manifest.json。Build and write an ArcReel / stylized 3D comic-drama handoff. output_dir must stay inside the workspace exports directory or a directory enabled with --export-root at server start; the default is exports beside workspace.json. Returns the write report: files_written and bytes are true totals while chapters, paths and warnings echo only the first few; the complete manifest is manifest.json inside the directory.",
       annotations: EXPORT_ANNOTATIONS,
     },
     z.object({
@@ -1816,14 +1987,19 @@ export function createStudioMcpServer(
         generated_at: bundle.generatedAt,
         language: bundle.workLanguage,
         aspect_ratio: bundle.aspectRatio,
-        chapters: bundle.chapters,
+        chapters: bundle.chapters.slice(0, EXPORT_PREVIEW_ITEMS),
+        chapter_count: bundle.chapters.length,
         totals: {
           words: bundle.totalWords,
           scenes: bundle.totalScenes,
           shots: bundle.totalShots,
         },
-        paths: bundle.files.map((file) => file.path),
-        warnings: bundle.warnings,
+        paths: bundle.files
+          .slice(0, EXPORT_PREVIEW_ITEMS)
+          .map((file) => file.path),
+        path_count: bundle.files.length,
+        warnings: bundle.warnings.slice(0, EXPORT_WARNING_ITEMS),
+        warning_count: bundle.warnings.length,
       };
     },
   );

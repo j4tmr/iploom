@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
@@ -36,6 +36,10 @@ const LONG_CHAPTER_ID = "chapter_bulk_000";
 const BULK_STANDARD_ID = "std_bulk_body";
 const BULK_STANDARD_BODY = "潮".repeat(20_000);
 const BULK_STANDARD_BODY_EN = "a".repeat(20_000);
+const EMOJI_STANDARD_ID = "std_emoji_window";
+const EMOJI_STANDARD_BODY = "😀潮";
+const BLOCKER_TASKS = 24;
+const CHAPTER_CHARACTER_IDS = 25;
 
 const LONG_PROSE = Array.from(
   { length: 500 },
@@ -70,6 +74,13 @@ function buildLargeWorkspace(): StudioWorkspace {
         index === 0
           ? LONG_PROSE
           : `第 ${suffix} 章正文占位。雨落在雾港的水面上。`,
+      characterIds:
+        index === 0
+          ? Array.from(
+              { length: CHAPTER_CHARACTER_IDS },
+              (_, slot) => `char_extra_${slot.toString().padStart(2, "0")}`,
+            )
+          : [],
       beats: [],
       scenes: [],
       revision: 1,
@@ -115,6 +126,32 @@ function buildLargeWorkspace(): StudioWorkspace {
     });
   }
 
+  const extraCharacterIds = Array.from(
+    { length: CHAPTER_CHARACTER_IDS },
+    (_, slot) => `char_extra_${slot.toString().padStart(2, "0")}`,
+  );
+  for (const [slot, id] of extraCharacterIds.entries()) {
+    workspace.characters.push({
+      id,
+      universeIds: ["uni_mist_harbor"],
+      name: { zh: `群像角色 ${slot}`, en: `Extra cast ${slot}` },
+      role: { zh: "配角", en: "Supporting" },
+      summary: { zh: "", en: "" },
+      appearance: "",
+      visualPrompt: "",
+      personality: "",
+      motivation: "",
+      flaw: "",
+      secret: "",
+      voice: "",
+      tags: [],
+      color: "#2f7567",
+      reusable: false,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+  }
+
   workspace.standards.push({
     id: BULK_STANDARD_ID,
     title: { zh: "大体量规则", en: "Bulk standard" },
@@ -122,6 +159,66 @@ function buildLargeWorkspace(): StudioWorkspace {
     body: { zh: BULK_STANDARD_BODY, en: BULK_STANDARD_BODY_EN },
     status: "active",
     version: 1,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+
+  // A body whose first code point is a surrogate pair exercises the text
+  // window at max_chars: 1 and at an offset that lands between the two halves.
+  workspace.standards.push({
+    id: EMOJI_STANDARD_ID,
+    title: { zh: "表情窗口", en: "Emoji window" },
+    kind: "style",
+    body: { zh: EMOJI_STANDARD_BODY, en: "😀" },
+    status: "draft",
+    version: 1,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+
+  // Many unfinished dependencies and pinned references make the preview caps
+  // observable: `task_blocked` waits on 24 queued tasks and carries more
+  // character ids than a page view echoes.
+  const blockedCharacterIds = Array.from(
+    { length: CHAPTER_CHARACTER_IDS },
+    (_, slot) => `char_extra_${slot.toString().padStart(2, "0")}`,
+  );
+  const blockerIds: string[] = [];
+  for (let index = 0; index < BLOCKER_TASKS; index += 1) {
+    const id = `task_block_${index.toString().padStart(2, "0")}`;
+    blockerIds.push(id);
+    workspace.workflowTasks.push({
+      id,
+      title: { zh: `阻塞任务 ${id}`, en: `Blocker ${id}` },
+      brief: { zh: "", en: "" },
+      deliverable: { zh: "", en: "" },
+      result: { zh: "", en: "" },
+      kind: "world",
+      template: "world",
+      status: "queued",
+      universeId: "uni_mist_harbor",
+      workId: "work_tide_clock",
+      characterIds: [],
+      dependsOnIds: [],
+      standardRefs: [{ id: EMOJI_STANDARD_ID, version: 1 }],
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+  }
+  workspace.workflowTasks.push({
+    id: "task_blocked",
+    title: { zh: "等待全部前置", en: "Wait for every prerequisite" },
+    brief: { zh: "", en: "" },
+    deliverable: { zh: "", en: "" },
+    result: { zh: "", en: "" },
+    kind: "review",
+    template: "review",
+    status: "queued",
+    universeId: "uni_mist_harbor",
+    workId: "work_tide_clock",
+    characterIds: blockedCharacterIds,
+    dependsOnIds: blockerIds,
+    standardRefs: [],
     createdAt: NOW,
     updatedAt: NOW,
   });
@@ -341,6 +438,7 @@ describe("MCP paging, scoping and bounded responses", () => {
       ["search_ip", { query: "harbor" }, "hits"],
       ["get_relationship_graph", { world_id: "uni_mist_harbor" }, "nodes"],
       ["list_workflow_tasks", {}, "tasks"],
+      ["get_workflow_brief", { task_id: "task_world_rules" }, "task"],
       ["list_standards", {}, "standards"],
       ["get_standard", { standard_id: BULK_STANDARD_ID }, "standard"],
     ];
@@ -474,7 +572,7 @@ describe("MCP paging, scoping and bounded responses", () => {
       result.body,
       "standards",
     );
-    expect(standards.total).toBe(7);
+    expect(standards.total).toBe(8);
     for (const standard of standards.items) {
       expect(standard.body).toBeUndefined();
       expect(standard.body_chars).toBeDefined();
@@ -485,5 +583,202 @@ describe("MCP paging, scoping and bounded responses", () => {
     expect((bulk?.body_chars as { zh?: number }).zh).toBe(
       BULK_STANDARD_BODY.length,
     );
+  });
+
+  test("pages each story-world collection at its own offset", async () => {
+    const first = await call(inline, "get_story_world", {
+      world_id: "uni_mist_harbor",
+      limit: 1,
+    });
+    expect(first.isError).toBe(false);
+    const firstCharacters = readPage<{ id: string }>(
+      first.body,
+      "characters",
+    );
+    const firstNovels = readPage<{ id: string }>(first.body, "novels");
+    expect(firstCharacters.total).toBeGreaterThan(1);
+    expect(firstCharacters.offset).toBe(0);
+    expect(firstNovels.offset).toBe(0);
+
+    const second = await call(inline, "get_story_world", {
+      world_id: "uni_mist_harbor",
+      limit: 1,
+      offsets: { characters: 1 },
+    });
+    expect(second.isError).toBe(false);
+    const secondCharacters = readPage<{ id: string }>(
+      second.body,
+      "characters",
+    );
+    const secondNovels = readPage<{ id: string }>(second.body, "novels");
+    expect(secondCharacters.offset).toBe(1);
+    expect(secondCharacters.items[0]?.id).not.toBe(
+      firstCharacters.items[0]?.id,
+    );
+    // Untouched collections keep their own first page instead of skipping.
+    expect(secondNovels.offset).toBe(0);
+    expect(secondNovels.items[0]?.id).toBe(firstNovels.items[0]?.id);
+  });
+
+  test("pages graph nodes and edges independently", async () => {
+    const first = await call(inline, "get_relationship_graph", {
+      world_id: "uni_mist_harbor",
+      limit: 1,
+    });
+    expect(first.isError).toBe(false);
+    const firstNodes = readPage<{ id: string }>(first.body, "nodes");
+    const firstEdges = readPage<{ id: string }>(first.body, "edges");
+    expect(firstNodes.total).toBeGreaterThan(1);
+    expect(firstEdges.total).toBeGreaterThan(1);
+
+    const second = await call(inline, "get_relationship_graph", {
+      world_id: "uni_mist_harbor",
+      limit: 1,
+      nodes_offset: 1,
+    });
+    expect(second.isError).toBe(false);
+    const secondNodes = readPage<{ id: string }>(second.body, "nodes");
+    const secondEdges = readPage<{ id: string }>(second.body, "edges");
+    expect(secondNodes.offset).toBe(1);
+    expect(secondNodes.items[0]?.id).not.toBe(firstNodes.items[0]?.id);
+    expect(secondEdges.offset).toBe(0);
+    expect(secondEdges.items[0]?.id).toBe(firstEdges.items[0]?.id);
+  });
+
+  test("never splits a surrogate pair when windowing text", async () => {
+    const clipped = await call(inline, "get_standard", {
+      standard_id: EMOJI_STANDARD_ID,
+      body_max_chars: 1,
+    });
+    expect(clipped.isError).toBe(false);
+    const clippedBody = (
+      clipped.body.standard as { body: { zh: TextWindowBody; en: TextWindowBody } }
+    ).body;
+    expect(clippedBody.zh.text).toBe("😀");
+    expect(clippedBody.zh.offset).toBe(0);
+    expect(clippedBody.zh.next_offset).toBe(2);
+    expect(clippedBody.zh.truncated).toBe(true);
+    expect(clippedBody.en.text).toBe("😀");
+    expect(clippedBody.en.next_offset).toBeNull();
+    expect(clippedBody.en.truncated).toBe(false);
+
+    // An offset between the two halves is pulled back instead of opening the
+    // window with a lone low surrogate.
+    const between = await call(inline, "get_standard", {
+      standard_id: EMOJI_STANDARD_ID,
+      body_offset: 1,
+      body_max_chars: 1,
+    });
+    expect(between.isError).toBe(false);
+    const betweenZh = (
+      between.body.standard as { body: { zh: TextWindowBody } }
+    ).body.zh;
+    expect(betweenZh.offset).toBe(0);
+    expect(betweenZh.text).toBe("😀");
+
+    const rest = await call(inline, "get_standard", {
+      standard_id: EMOJI_STANDARD_ID,
+      body_offset: 2,
+      body_max_chars: 1,
+    });
+    expect(rest.isError).toBe(false);
+    const restZh = (rest.body.standard as { body: { zh: TextWindowBody } }).body
+      .zh;
+    expect(restZh.text).toBe("潮");
+    expect(restZh.next_offset).toBeNull();
+    expect(restZh.truncated).toBe(false);
+  });
+
+  test("caps fan-out previews and reports the true counts", async () => {
+    const list = await call(inline, "list_workflow_tasks", { limit: 200 });
+    expect(list.isError).toBe(false);
+    const tasks = readPage<Record<string, unknown>>(list.body, "tasks");
+    const blocked = tasks.items.find((task) => task.id === "task_blocked");
+    expect(blocked).toBeDefined();
+    expect(blocked?.blocker_count).toBe(BLOCKER_TASKS);
+    expect((blocked?.blockers as unknown[]).length).toBe(10);
+    expect((blocked?.depends_on_ids as unknown[]).length).toBe(20);
+    expect(blocked?.depends_on_id_count).toBe(BLOCKER_TASKS);
+    expect((blocked?.character_ids as unknown[]).length).toBe(20);
+    expect(blocked?.character_id_count).toBe(CHAPTER_CHARACTER_IDS);
+
+    const chapter = await call(inline, "get_chapter", {
+      chapter_id: LONG_CHAPTER_ID,
+    });
+    const chapterBody = chapter.body.chapter as {
+      character_ids: string[];
+      character_id_count: number;
+    };
+    expect(chapterBody.character_ids).toHaveLength(20);
+    expect(chapterBody.character_id_count).toBe(CHAPTER_CHARACTER_IDS);
+
+    const standard = await call(inline, "get_standard", {
+      standard_id: EMOJI_STANDARD_ID,
+    });
+    expect(standard.isError).toBe(false);
+    expect(standard.body.pinned_by_task_count).toBe(BLOCKER_TASKS);
+    expect((standard.body.pinned_by_task_ids as unknown[]).length).toBe(20);
+  });
+
+  test("rejects an unknown story world instead of returning empty standards", async () => {
+    const result = await call(inline, "list_standards", {
+      universe_id: "uni_missing",
+    });
+    expect(result.isError).toBe(true);
+    expect((result.body.error as { code: string }).code).toBe("not_found");
+  });
+
+  test("write acknowledgements report sizes and merge language patches", async () => {
+    const created = await call(inline, "create_standard", {
+      kind: "style",
+      title: { zh: "局部更新", en: "Partial patch" },
+      body: { zh: "中文正文", en: "English body" },
+    });
+    expect(created.isError).toBe(false);
+    const createdView = created.body.standard as Record<string, unknown>;
+    expect(createdView.body).toBeUndefined();
+    expect(createdView.body_chars).toEqual({ zh: 4, en: 12 });
+    const id = createdView.id as string;
+
+    const patched = await call(inline, "update_standard", {
+      standard_id: id,
+      title: { zh: "更新后的标题" },
+    });
+    expect(patched.isError).toBe(false);
+    const patchedView = patched.body.standard as {
+      title: { zh: string; en: string };
+      body_chars: { zh: number; en: number };
+    };
+    expect(patchedView.title).toEqual({
+      zh: "更新后的标题",
+      en: "Partial patch",
+    });
+    expect(patchedView.body_chars).toEqual({ zh: 4, en: 12 });
+  });
+
+  test("reports export totals while previewing long lists", async () => {
+    const result = await call(inline, "export_arcreel_bundle", {
+      novel_id: "work_tide_clock",
+    });
+    expect(result.isError).toBe(false);
+    expectWithinBudget(result, "export_arcreel_bundle");
+    expect(result.body.chapter_count).toBe(3 + BULK_CHAPTERS);
+    expect((result.body.chapters as unknown[]).length).toBe(50);
+    const pathCount = result.body.path_count as number;
+    expect(pathCount).toBe(result.body.files_written as number);
+    expect(pathCount).toBeGreaterThan(50);
+    expect((result.body.paths as unknown[]).length).toBe(50);
+    expect(result.body.warning_count).toBeGreaterThan(20);
+    expect((result.body.warnings as unknown[]).length).toBe(20);
+    const directory = result.body.directory as string;
+    expect(existsSync(join(directory, "manifest.json"))).toBe(true);
+    const manifest = JSON.parse(
+      readFileSync(join(directory, "manifest.json"), "utf8"),
+    ) as {
+      files: unknown[];
+      adaptation: { totals: { chapters: number } };
+    };
+    expect(manifest.files).toHaveLength(pathCount - 1);
+    expect(manifest.adaptation.totals.chapters).toBe(3 + BULK_CHAPTERS);
   });
 });
