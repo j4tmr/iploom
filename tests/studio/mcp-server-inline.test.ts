@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
+import { MCP_TOOL_COUNTS } from "../../apps/studio/src/core/mcp-tools.ts";
 import { WorkspaceStore } from "../../apps/studio/src/node/workspace-store.ts";
 import { createStudioMcpServer } from "../../apps/studio/mcp/server.ts";
 
@@ -43,6 +44,24 @@ async function connectInline(
   };
 }
 
+interface PageBody<T> {
+  total: number;
+  count: number;
+  next_offset: number | null;
+  items: T[];
+}
+
+function pageOf<T = Record<string, unknown>>(
+  body: Record<string, unknown>,
+  key: string,
+): PageBody<T> {
+  const page = body[key] as PageBody<T> | undefined;
+  if (!page || !Array.isArray(page.items)) {
+    throw new Error(`Expected a page at body.${key}`);
+  }
+  return page;
+}
+
 async function call(
   inline: InlineServer,
   name: string,
@@ -69,25 +88,25 @@ test("inline MCP server exposes every tool and answers reads, writes and exports
   const inline = await connectInline(workspacePath);
   try {
     const listed = await inline.client.listTools();
-    expect(listed.tools).toHaveLength(14);
+    expect(listed.tools).toHaveLength(MCP_TOOL_COUNTS.total);
     expect(
       listed.tools.filter((tool) => tool.annotations?.readOnlyHint === true),
-    ).toHaveLength(11);
+    ).toHaveLength(MCP_TOOL_COUNTS.read);
 
     const worlds = await call(inline, "list_story_worlds");
     expect(worlds.isError).toBe(false);
-    expect(worlds.body.count).toBe(2);
+    expect(pageOf(worlds.body, "worlds").total).toBe(2);
 
     const world = await call(inline, "get_story_world", {
       world_id: "uni_mist_harbor",
     });
     expect(world.isError).toBe(false);
     expect((world.body.world as { id: string }).id).toBe("uni_mist_harbor");
-    expect(world.body.characters).toBeInstanceOf(Array);
+    expect(Array.isArray(pageOf(world.body, "characters").items)).toBe(true);
 
     const novels = await call(inline, "list_novels");
     expect(novels.isError).toBe(false);
-    expect(novels.body.count).toBe(2);
+    expect(pageOf(novels.body, "novels").total).toBe(2);
 
     const novel = await call(inline, "get_novel", {
       novel_id: "work_tide_clock",
@@ -113,29 +132,31 @@ test("inline MCP server exposes every tool and answers reads, writes and exports
       locale: "zh-CN",
     });
     expect(search.isError).toBe(false);
-    expect(search.body.count).toBeGreaterThan(0);
+    expect(pageOf(search.body, "hits").total).toBeGreaterThan(0);
 
     const graph = await call(inline, "get_relationship_graph", {
       world_id: "uni_mist_harbor",
       locale: "zh-CN",
     });
     expect(graph.isError).toBe(false);
-    expect(graph.body.nodes).toBeInstanceOf(Array);
+    expect(Array.isArray(pageOf(graph.body, "nodes").items)).toBe(true);
 
     const tasks = await call(inline, "list_workflow_tasks");
     expect(tasks.isError).toBe(false);
-    expect(tasks.body.count).toBe(4);
+    expect(pageOf(tasks.body, "tasks").total).toBe(4);
 
     const brief = await call(inline, "get_workflow_brief", {
       task_id: "task_chapter_three",
       locale: "en",
     });
     expect(brief.isError).toBe(false);
-    expect(brief.body.markdown).toContain("task_chapter_three");
+    expect((brief.body.markdown as { text: string }).text).toContain(
+      "task_chapter_three",
+    );
 
     const standards = await call(inline, "list_standards");
     expect(standards.isError).toBe(false);
-    expect(standards.body.count).toBe(6);
+    expect(pageOf(standards.body, "standards").total).toBe(6);
 
     const standard = await call(inline, "get_standard", {
       standard_id: "std_baseline_language",

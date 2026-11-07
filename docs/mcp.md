@@ -37,7 +37,39 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 | `update_standard` | no | Update a standard; content changes bump its version, status-only changes do not |
 | `export_arcreel_bundle` | no | Write an ArcReel-style handoff package |
 
-Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The three write tools (`create_standard`, `update_standard`, `export_arcreel_bundle`) are the only ones that can change local state; writes are serialized and re-validated against the workspace schema.
+Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The server registers 14 tools: eleven read-only, two standard writes (`create_standard`, `update_standard`) and one export (`export_arcreel_bundle`). Those three are the only tools that can change local state; writes are serialized and re-validated against the workspace schema. Tool names and access levels come from `apps/studio/src/core/mcp-tools.ts`, the single source the server, the settings copy and the verification script all share.
+
+### Response shape and paging
+
+Every collection response is a page rather than a bare array:
+
+```json
+{
+  "total": 243,
+  "offset": 0,
+  "count": 20,
+  "next_offset": 20,
+  "truncated": true,
+  "items": []
+}
+```
+
+- List tools accept `offset` and `limit` (default 20, maximum 200); `get_novel` also pages `chapters`, `get_story_world` pages each collection, `list_standards` pages `standards`.
+- Each response stays under a roughly 50 KB budget; a page carries fewer items when large entries would exceed it, so `count` can be below `limit`.
+- Follow `next_offset` until it is `null`; across all pages every item appears exactly once, and `total` does not change while the workspace revision does not change.
+- `search_ip` applies `world_id` and `kind` before ranking, so out-of-scope hits cannot crowd real matches out of the page.
+- `get_chapter` windows prose: pass `offset` and `max_chars` (default 6,000) and concatenate `content.text` until `content.next_offset` is `null` to rebuild the full chapter.
+- `get_standard` windows bodies the same way with `body_offset` and `body_max_chars` (default 4,000), applied to both `body.zh` and `body.en`.
+
+### Errors
+
+Failures return `isError: true` with a JSON text block that clients can parse:
+
+```json
+{ "error": { "code": "invalid_arguments", "message": "...", "issues": ["query: ..."] } }
+```
+
+`issues` is present for `invalid_arguments`; unknown ids and task references return `not_found`. Both keep the connection alive so a client can correct the call without reconnecting.
 
 ### Export destination boundary
 

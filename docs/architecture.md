@@ -25,6 +25,7 @@ Bundled MCP server
   ├─ eleven read-only tools
   ├─ create_standard / update_standard
   └─ export_arcreel_bundle
+     (14 tools total, from core/mcp-tools.ts)
 ```
 
 No renderer code receives Node.js primitives. IPC handlers validate their sender, payload shape, and file boundaries. The renderer is sandboxed with context isolation enabled and a restrictive Content Security Policy.
@@ -92,7 +93,9 @@ The MCP server is bundled by esbuild and run through the Electron executable wit
 - Windows can spawn the `.exe` directly rather than failing on a `.cmd` shim;
 - the server is bundled with its JavaScript dependencies.
 
-The eleven query tools, including workflow listing, brief generation and foundation-standard reads, never write. `create_standard` and `update_standard` only change foundation standards inside the workspace; `export_arcreel_bundle` is the only tool that creates files and defaults to an `exports` directory beside the workspace. Its `output_dir` is confined to that directory plus any explicit `--export-root` arguments, and each bundle is fully validated before the first write.
+The eleven read-only tools, including workflow listing, brief generation and foundation-standard reads, never write. `create_standard` and `update_standard` only change foundation standards inside the workspace; `export_arcreel_bundle` is the only tool that creates files and defaults to an `exports` directory beside the workspace. Its `output_dir` is confined to that directory plus any explicit `--export-root` arguments, and each bundle is fully validated before the first write.
+
+All 14 tool names and access levels live in `apps/studio/src/core/mcp-tools.ts`; the server asserts its registration order against that list, so the settings copy, the docs and the verification script cannot drift apart. Collection responses are paged (`total`, `offset`, `count`, `next_offset`, `truncated`, `items`) under a per-response byte budget, and large prose or rule bodies are returned as reassemblable character windows. `search_ip` filters by world and kind before ranking. Invalid arguments and unknown ids return parseable `{ "error": { "code", "message", "issues?" } }` payloads rather than killing the stdio connection.
 
 ## Security boundary
 
@@ -111,7 +114,7 @@ See [SECURITY.md](../SECURITY.md) for reporting.
 
 ## Coverage
 
-`bun run test:coverage` enforces `coverageThreshold` from [bunfig.toml](../bunfig.toml) per file — bun 1.4 rejects the run when any measured file drops below the floor, even if the totals are higher. Security-relevant code stays inside that gate: the desktop guards (`apps/studio/src/node/desktop-guards.ts`), the workspace store, the AI client and the MCP server are all measured. The stdio MCP suite spawns the server as a subprocess, which coverage cannot observe, so `tests/studio/mcp-server-inline.test.ts` drives the same registered tools over an in-memory transport inside the test process.
+`bun run test:coverage` enforces `coverageThreshold` from [bunfig.toml](../bunfig.toml) per file — bun 1.4 rejects the run when any measured file drops below the floor, even if the totals are higher. Security-relevant code stays inside that gate: the desktop guards (`apps/studio/src/node/desktop-guards.ts`), the workspace store, the AI client and the MCP server are all measured. The stdio MCP suite spawns the server as a subprocess, which coverage cannot observe, so `tests/studio/mcp-server-inline.test.ts` drives the same registered tools over an in-memory transport inside the test process. `tests/studio/mcp-paging.test.ts` builds an oversized workspace (243 chapters, 24 maximal worlds, 60 decoy lore entries, a 20,000-character standard body) to pin response budgets, page completeness, scoped search and exact prose reassembly.
 
 Files listed in `coveragePathIgnorePatterns` are excluded because they cannot be meaningfully measured in a bun test process, not because their logic is untested:
 

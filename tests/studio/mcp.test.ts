@@ -11,24 +11,30 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
+import {
+  MCP_READ_TOOL_NAMES,
+  MCP_TOOL_COUNTS,
+  MCP_TOOL_NAMES,
+} from "../../apps/studio/src/core/mcp-tools.ts";
 import { WorkspaceStore } from "../../apps/studio/src/node/workspace-store.ts";
 
-const TOOL_NAMES = [
-  "list_story_worlds",
-  "get_story_world",
-  "list_novels",
-  "get_novel",
-  "get_chapter",
-  "search_ip",
-  "get_relationship_graph",
-  "list_workflow_tasks",
-  "get_workflow_brief",
-  "list_standards",
-  "get_standard",
-  "create_standard",
-  "update_standard",
-  "export_arcreel_bundle",
-] as const;
+interface PageBody<T> {
+  total: number;
+  offset: number;
+  count: number;
+  next_offset: number | null;
+  truncated: boolean;
+  items: T[];
+}
+
+/** Reads a paged collection out of a tool body without trusting its keys. */
+function pageOf<T = Record<string, unknown>>(body: Record<string, unknown>, key: string): PageBody<T> {
+  const page = body[key] as PageBody<T> | undefined;
+  if (!page || !Array.isArray(page.items)) {
+    throw new Error(`Expected a page at body.${key}`);
+  }
+  return page;
+}
 
 function resultText(result: Awaited<ReturnType<Client["callTool"]>>): string {
   const text = result.content.find(
@@ -89,10 +95,12 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     expect(client.getServerCapabilities()?.tools).toBeDefined();
 
     const listed = await client.listTools();
-    expect(listed.tools).toHaveLength(TOOL_NAMES.length);
-    expect(listed.tools.map((tool) => tool.name).sort()).toEqual(
-      [...TOOL_NAMES].sort(),
-    );
+    expect(listed.tools).toHaveLength(MCP_TOOL_COUNTS.total);
+    // Exact order, not a set: the registry order is what `tools/list` shows and
+    // what the settings views render, so a reordering is a visible change.
+    expect(listed.tools.map((tool) => tool.name)).toEqual([
+      ...MCP_TOOL_NAMES,
+    ]);
     for (const tool of listed.tools) {
       expect(tool.description ?? "").toMatch(/[\u3400-\u9fff]/);
       expect(tool.description ?? "").toMatch(/[A-Za-z]{3}/);
@@ -101,11 +109,7 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
       .filter((tool) => tool.annotations?.readOnlyHint === true)
       .map((tool) => tool.name)
       .sort();
-    expect(readOnlyNames).toEqual(
-      TOOL_NAMES.slice(0, 11)
-        .map((name) => name)
-        .sort(),
-    );
+    expect(readOnlyNames).toEqual([...MCP_READ_TOOL_NAMES].sort());
     expect(
       listed.tools.find((tool) => tool.name === "export_arcreel_bundle")
         ?.annotations?.readOnlyHint,
@@ -113,7 +117,10 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
 
     const worlds = await call(client, "list_story_worlds");
     expect(worlds.isError).toBe(false);
-    expect(worlds.body.count).toBe(2);
+    const worldsPage = pageOf<{ id: string }>(worlds.body, "worlds");
+    expect(worldsPage.total).toBe(2);
+    expect(worldsPage.count).toBe(2);
+    expect(worldsPage.next_offset).toBeNull();
     expect(worlds.text).not.toContain("\n");
 
     const world = await call(client, "get_story_world", {
@@ -132,28 +139,38 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
       characters: 4,
       relationships: 4,
     });
+    const worldCharacters = pageOf<{ reusable: boolean }>(
+      world.body,
+      "characters",
+    );
+    expect(worldCharacters.total).toBe(4);
     expect(
-      (world.body.characters as Array<{ reusable: boolean }>).filter(
-        (character) => character.reusable,
-      ),
+      worldCharacters.items.filter((character) => character.reusable),
     ).toHaveLength(2);
 
     const novels = await call(client, "list_novels", {
       world_id: "uni_mist_harbor",
     });
     expect(novels.isError).toBe(false);
-    expect(novels.body.count).toBe(1);
-    expect((novels.body.novels as Array<{ id: string }>)[0]?.id).toBe(
-      "work_tide_clock",
-    );
+    const novelsPage = pageOf<{ id: string }>(novels.body, "novels");
+    expect(novelsPage.total).toBe(1);
+    expect(novelsPage.items[0]?.id).toBe("work_tide_clock");
 
     const novel = await call(client, "get_novel", {
       novel_id: "work_tide_clock",
     });
     expect(novel.isError).toBe(false);
-    expect((novel.body.novel as { chapters: unknown[] }).chapters).toHaveLength(
-      3,
-    );
+    const novelChapters = pageOf(novel.body, "chapters");
+    expect(novelChapters.total).toBe(3);
+    expect(novelChapters.count).toBe(3);
+    const novelSynopsis = novel.body.synopsis as {
+      text: string;
+      total_chars: number;
+      truncated: boolean;
+    };
+    expect(novelSynopsis.truncated).toBe(false);
+    expect(novelSynopsis.total_chars).toBeGreaterThan(0);
+    expect(novelSynopsis.text).toHaveLength(novelSynopsis.total_chars);
 
     const chapter = await call(client, "get_chapter", {
       novel_id: "work_tide_clock",
@@ -161,11 +178,13 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     });
     expect(chapter.isError).toBe(false);
     const chapterData = chapter.body.chapter as {
-      content: string;
+      content: { text: string; total_chars: number; next_offset: number | null };
       word_count: number;
       character_ids: string[];
     };
-    expect(chapterData.content).toContain("雾港的雨从不下在水面上");
+    expect(chapterData.content.text).toContain("雾港的雨从不下在水面上");
+    expect(chapterData.content.total_chars).toBeGreaterThan(100);
+    expect(chapterData.content.next_offset).toBeNull();
     expect(chapterData.word_count).toBeGreaterThan(100);
     expect(chapterData.character_ids).toContain("char_lin");
 
@@ -175,40 +194,46 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
       locale: "zh-CN",
     });
     expect(search.isError).toBe(false);
-    const hits = search.body.hits as Array<{
+    const searchPage = pageOf<{
       kind: string;
       id: string;
-    }>;
-    expect(hits.some((hit) => hit.kind === "chapter")).toBe(true);
-    expect(hits.some((hit) => hit.id === "chapter_tide_002")).toBe(true);
+      universe_id: string;
+    }>(search.body, "hits");
+    expect(searchPage.total).toBeGreaterThan(0);
+    expect(searchPage.items.some((hit) => hit.kind === "chapter")).toBe(true);
+    expect(searchPage.items.some((hit) => hit.id === "chapter_tide_002")).toBe(
+      true,
+    );
+    // The world filter runs before ranking, so nothing from the other world
+    // can appear in the page even when it scores higher.
+    expect(
+      searchPage.items.every((hit) => hit.universe_id === "uni_mist_harbor"),
+    ).toBe(true);
 
     const graph = await call(client, "get_relationship_graph", {
       world_id: "uni_mist_harbor",
       locale: "en",
     });
     expect(graph.isError).toBe(false);
-    expect(graph.body.edges).toHaveLength(4);
-    const nodes = graph.body.nodes as Array<{
-      id: string;
-      degree: number;
-    }>;
-    expect(nodes.find((node) => node.id === "char_lin")?.degree).toBe(3);
+    expect(pageOf(graph.body, "edges").total).toBe(4);
+    const nodes = pageOf<{ id: string; degree: number }>(graph.body, "nodes");
+    expect(nodes.items.find((node) => node.id === "char_lin")?.degree).toBe(3);
     expect(graph.body.warnings).toEqual([]);
 
     const tasks = await call(client, "list_workflow_tasks", {
       novel_id: "work_tide_clock",
     });
     expect(tasks.isError).toBe(false);
-    expect(tasks.body.count).toBe(3);
+    const taskPage = pageOf<{ id: string; ready: boolean }>(
+      tasks.body,
+      "tasks",
+    );
+    expect(taskPage.total).toBe(3);
     expect((tasks.body.summary as { ready: number }).ready).toBe(1);
-    const taskItems = tasks.body.tasks as Array<{
-      id: string;
-      ready: boolean;
-    }>;
-    expect(taskItems.find((task) => task.id === "task_review_first")?.ready).toBe(
+    expect(taskPage.items.find((task) => task.id === "task_review_first")?.ready).toBe(
       true,
     );
-    expect(taskItems.find((task) => task.id === "task_chapter_three")?.ready).toBe(
+    expect(taskPage.items.find((task) => task.id === "task_chapter_three")?.ready).toBe(
       false,
     );
 
@@ -218,8 +243,14 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     });
     expect(taskBrief.isError).toBe(false);
     expect(taskBrief.body.ready).toBe(false);
-    expect(taskBrief.body.markdown).toContain("AI 任务简报");
-    expect(taskBrief.body.markdown).toContain("task_world_rules");
+    const briefText = taskBrief.body.markdown as {
+      text: string;
+      total_chars: number;
+      truncated: boolean;
+    };
+    expect(briefText.truncated).toBe(false);
+    expect(briefText.text).toContain("AI 任务简报");
+    expect(briefText.text).toContain("task_world_rules");
 
     const missing = await call(client, "get_story_world", {
       world_id: "uni_missing",
@@ -234,15 +265,17 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     const standards = await call(client, "list_standards");
     expect(standards.isError).toBe(false);
     expect(standards.text).not.toContain("\n");
-    expect(standards.body.count).toBe(6);
-    expect(standards.body.active_applied).toBe(6);
-    const standardItems = standards.body.standards as Array<{
+    const standardsPage = pageOf<{
       id: string;
       kind: string;
       status: string;
       version: number;
       universe_id: string | null;
-    }>;
+      body?: unknown;
+    }>(standards.body, "standards");
+    expect(standardsPage.total).toBe(6);
+    expect(standards.body.active_applied).toBe(6);
+    const standardItems = standardsPage.items;
     expect(standardItems.map((standard) => standard.id)).toEqual([
       "std_baseline_language",
       "std_baseline_format",
@@ -259,18 +292,22 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
           standard.universe_id === null,
       ),
     ).toBe(true);
+    // The list view stays small: rule bodies move only when asked for.
+    expect(
+      standardItems.every((standard) => standard.body === undefined),
+    ).toBe(true);
 
     const continuity = await call(client, "list_standards", {
       kind: "continuity",
     });
     expect(continuity.isError).toBe(false);
-    expect(continuity.body.count).toBe(2);
+    expect(pageOf(continuity.body, "standards").total).toBe(2);
 
     const draftStandards = await call(client, "list_standards", {
       status: "draft",
     });
     expect(draftStandards.isError).toBe(false);
-    expect(draftStandards.body.count).toBe(0);
+    expect(pageOf(draftStandards.body, "standards").total).toBe(0);
 
     const standard = await call(client, "get_standard", {
       standard_id: "std_baseline_language",
