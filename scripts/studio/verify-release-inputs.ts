@@ -147,18 +147,28 @@ function verifyDocs(): void {
 
 function verifyMacApplication(): void {
   requireFile("apps/studio/build/icon.icns", 1_000);
-  const executable = requireFile(
-    "release/mac-universal/IPloom Studio.app/Contents/MacOS/IPloom Studio",
-    1_000_000,
-  );
-  const architectures = execFileSync("lipo", ["-archs", executable], {
-    encoding: "utf8",
-  })
-    .trim()
-    .split(/\s+/);
-  for (const architecture of ["arm64", "x86_64"]) {
-    if (!architectures.includes(architecture)) {
-      fail(`macOS bundle is missing the ${architecture} slice`);
+  // The bundle executable is a small launcher; the Electron runtime lives in
+  // Electron Framework. Both have to carry the Intel and Apple Silicon slices.
+  const binaries = [
+    requireFile(
+      "release/mac-universal/IPloom Studio.app/Contents/MacOS/IPloom Studio",
+      10_000,
+    ),
+    requireFile(
+      "release/mac-universal/IPloom Studio.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework",
+      50_000_000,
+    ),
+  ];
+  for (const binary of binaries) {
+    const architectures = execFileSync("lipo", ["-archs", binary], {
+      encoding: "utf8",
+    })
+      .trim()
+      .split(/\s+/);
+    for (const architecture of ["arm64", "x86_64"]) {
+      if (!architectures.includes(architecture)) {
+        fail(`macOS bundle is missing the ${architecture} slice in ${binary}`);
+      }
     }
   }
 }

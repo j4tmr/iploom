@@ -119,12 +119,15 @@ async function main(): Promise<void> {
         env: environment,
         stdio: "inherit",
       });
+      // Rosetta translates the whole Electron runtime on the first Intel-slice
+      // launch, and the close-time flush is slower under translation, so that
+      // run needs a much larger budget than the native one.
       const timer = setTimeout(
         () => {
           child.kill("SIGKILL");
           reject(new Error("Desktop smoke test timed out"));
         },
-        options.arch ? 120_000 : 60_000,
+        options.arch ? 300_000 : 60_000,
       );
       child.once("error", (error) => {
         clearTimeout(timer);
