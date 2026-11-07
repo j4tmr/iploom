@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { createId } from "../core/factory.ts";
-import { analysisPrompt, buildManuscriptImport, manuscriptChunks, parseAnalysis, splitManuscript, type AnalyzedChunk } from "../core/manuscript.ts";
+import { analyzeManuscriptChunks, analysisPrompt, buildManuscriptImport, planManuscriptAnalysis, splitManuscript, type AnalyzedChunk, type ManuscriptAnalysisFailure } from "../core/manuscript.ts";
 import type { StudioWorkspace, UiLocale } from "../core/types.ts";
 import { bridge } from "../platform.ts";
 import { Button, Field, Modal, TextArea, TextInput } from "./ui.tsx";
+
+type ChunkRef = { chapter: number; part: number };
+const sameChunk = (left: ChunkRef, right: ChunkRef) => left.chapter === right.chapter && left.part === right.part;
 
 export function ManuscriptImport({ locale, onClose, onImport }: { locale: UiLocale; onClose: () => void; onImport: (workspace: StudioWorkspace) => void }) {
   const en = locale === "en";
@@ -14,14 +17,65 @@ export function ManuscriptImport({ locale, onClose, onImport }: { locale: UiLoca
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [reviewed, setReviewed] = useState(false);
+  const [results, setResults] = useState<AnalyzedChunk[]>([]);
+  const [failures, setFailures] = useState<ManuscriptAnalysisFailure[]>([]);
+  const [skipped, setSkipped] = useState<ChunkRef[]>([]);
   const active = useRef("");
   const canceled = useRef(false);
   useEffect(() => bridge.onAiProgress((progress) => { if (progress.id === active.current) setOutput(progress.text); }), []);
   useEffect(() => () => { canceled.current = true; if (active.current) void bridge.cancelAi(active.current); }, []);
   let chapters: ReturnType<typeof splitManuscript> = [], parseError = "";
   try { if (text) chapters = splitManuscript(text); } catch (error) { parseError = String(error); }
-  const chunks = manuscriptChunks(chapters);
-  const resetSource = (value: string) => { setText(value); setAnalysis(""); setOutput(""); setReviewed(false); setMessage(""); };
+  const plan = planManuscriptAnalysis(chapters);
+  const chunks = plan.chunks;
+  const resetSource = (value: string) => {
+    setText(value); setAnalysis(""); setOutput(""); setReviewed(false); setMessage("");
+    setResults([]); setFailures([]); setSkipped([]);
+  };
+  const runAnalysis = async (previous: AnalyzedChunk[], skip: ChunkRef[], continueOnFailure: boolean) => {
+    const nextSkipped = [...skipped];
+    for (const item of skip) if (!nextSkipped.some((value) => sameChunk(value, item))) nextSkipped.push({ chapter: item.chapter, part: item.part });
+    setSkipped(nextSkipped);
+    const pending = chunks.filter((chunk) => !previous.some((value) => sameChunk(value, chunk)) && !nextSkipped.some((value) => sameChunk(value, chunk)));
+    if (!pending.length) { setMessage(en ? "Every segment already has a result or was skipped. Edit the manuscript to start over." : "所有片段均已有结果或已被跳过；修改原稿可重新分析。"); return; }
+    const info = await bridge.aiConfig().catch(() => null);
+    if (!info?.configured) { setMessage(en ? "Configure a model in desktop Settings first." : "请先在桌面版设置中配置模型。"); return; }
+    const already = previous.length ? (en ? ` ${previous.length}/${chunks.length} finished segments are kept and will not be sent again.` : ` 已保留 ${previous.length}/${chunks.length} 个完成片段，不会重复发送。`) : "";
+    if (!window.confirm((en ? `Send ${pending.length} segments to ${info.endpoint} (${info.model})? Provider charges may apply.` : `将 ${pending.length} 段原稿发送至 ${info.endpoint}（${info.model}）？服务商可能计费。`) + already)) return;
+    canceled.current = false; setBusy(true);
+    if (!previous.length) { setAnalysis(""); setReviewed(false); setResults([]); }
+    setFailures([]);
+    try {
+      const run = await analyzeManuscriptChunks(chapters, async (chunk) => {
+        const id = createId("analyze"); active.current = id;
+        const index = chunks.findIndex((value) => sameChunk(value, chunk));
+        const label = `${en ? "Analyzing chapter" : "正在分析章节"} ${chunk.chapter} · ${index + 1}/${chunks.length}`;
+        setMessage(label); setOutput("");
+        return bridge.runAi({ id, label, prompt: analysisPrompt(chunk, locale) });
+      }, { previous, skip: nextSkipped, continueOnFailure, shouldStop: () => canceled.current });
+      setResults(run.results);
+      setFailures(run.failures);
+      if (run.results.length) setAnalysis(JSON.stringify(run.results, null, 2));
+      if (canceled.current) {
+        setMessage(en ? `Analysis canceled. ${run.results.length} finished segments were kept.` : `分析已取消；已保留 ${run.results.length} 个完成片段。`);
+        return;
+      }
+      const skippedNote = nextSkipped.length ? (en ? ` ${nextSkipped.length} skipped segments are excluded from the import.` : ` 已跳过 ${nextSkipped.length} 个片段，不会写入导入结果。`) : "";
+      if (run.failures.length) {
+        const failure = run.failures[0]!;
+        setMessage((en ? `Chapter ${failure.chapter}, part ${failure.part} failed: ${failure.message} ${run.results.length}/${chunks.length} segments finished. Retry the failed segment without resending finished ones, or skip it and continue.` : `第 ${failure.chapter} 章第 ${failure.part} 块失败：${failure.message} 已完成 ${run.results.length}/${chunks.length} 块。可重试失败片段（不会重发已完成片段），或跳过失败片段继续。`) + skippedNote);
+        return;
+      }
+      const ready = en ? "Analysis ready. Review names, directional relationships, scenes and source quotations before importing." : "分析完成。请审阅人物名、关系方向、场景及原文依据，再确认导入。";
+      try {
+        buildManuscriptImport(title, chapters, run.results, locale);
+        setMessage(ready + skippedNote);
+      } catch (error) {
+        setMessage(`${ready}${skippedNote} ${String(error)}`);
+      }
+    } catch (error) { setMessage(String(error)); }
+    finally { active.current = ""; setBusy(false); }
+  };
   return <Modal open onClose={() => { if (!busy) onClose(); }} wide title={en ? "Import existing novel" : "导入已有小说"} description={en ? "TXT / Markdown or pasted text. Word, EPUB and PDF: export to plain text first. Import creates a new world and novel without overwriting existing work." : "支持 TXT / Markdown 或粘贴文本。Word、EPUB、PDF 请先导出纯文本；导入会新建世界与小说，不覆盖已有作品。"} footer={<>
     <Button disabled={busy} onClick={onClose}>{en ? "Close" : "关闭"}</Button>
     <Button data-testid="import-confirm" variant="primary" disabled={busy || !title.trim() || !chapters.length || Boolean(parseError) || (Boolean(analysis) && !reviewed)} onClick={() => {
@@ -44,30 +98,15 @@ export function ManuscriptImport({ locale, onClose, onImport }: { locale: UiLoca
     <Field label={en ? "Original manuscript (editable before import)" : "原稿（导入前可编辑）"}><TextArea data-testid="import-text" rows={8} value={text} disabled={busy} onChange={(e) => resetSource(e.target.value)} /></Field>
     {parseError ? <p role="alert">{parseError}</p> : null}
     <p>{en ? "Chapters / model requests" : "章节 / 模型请求数"}：{chapters.length} / {chunks.length}</p>
-    <details><summary>{en ? "Chapter preview" : "章节拆分预览"}</summary><ol>{chapters.map((chapter) => <li key={chapter.id}>{chapter.title} · {chapter.content.length}</li>)}</ol></details>
-    <p>{en ? "Analysis sends each manuscript segment to your configured model. Maximum 40 requests per import; larger novels can be split or imported without AI. All returned assets require exact source quotations and your review." : "分析会将原稿分段发送给已配置模型。每次最多 40 个请求；更长小说可拆分，或先不使用 AI 导入。资产须包含原文依据，并由你审阅。"}</p>
-    <Button disabled={busy || !chunks.length || chunks.length > 40 || Boolean(parseError)} onClick={async () => {
-      const info = await bridge.aiConfig().catch(() => null);
-      if (!info?.configured) { setMessage(en ? "Configure a model in desktop Settings first." : "请先在桌面版设置中配置模型。"); return; }
-      if (!window.confirm(en ? `Send ${chunks.length} segments to ${info.endpoint} (${info.model})? Provider charges may apply.` : `将 ${chunks.length} 段原稿发送至 ${info.endpoint}（${info.model}）？服务商可能计费。`)) return;
-      canceled.current = false; setBusy(true); setAnalysis(""); setReviewed(false);
-      const results: AnalyzedChunk[] = [];
-      try {
-        for (const [index, chunk] of chunks.entries()) {
-          if (canceled.current) throw new Error(en ? "Analysis canceled." : "分析已取消。");
-          const id = createId("analyze"); active.current = id;
-          const label = `${en ? "Analyzing chapter" : "正在分析章节"} ${chunk.chapter} · ${index + 1}/${chunks.length}`;
-          setMessage(label); setOutput("");
-          const result = await bridge.runAi({ id, label, prompt: analysisPrompt(chunk, locale) });
-          results.push({ chapter: chunk.chapter, part: chunk.part, analysis: parseAnalysis(result, chunk) });
-        }
-        if (canceled.current) throw new Error(en ? "Analysis canceled." : "分析已取消。");
-        buildManuscriptImport(title, chapters, results, locale);
-        setAnalysis(JSON.stringify(results, null, 2));
-        setMessage(en ? "Analysis ready. Review names, directional relationships, scenes and source quotations before importing." : "分析完成。请审阅人物名、关系方向、场景及原文依据，再确认导入。");
-      } catch (error) { setMessage(String(error)); }
-      finally { active.current = ""; setBusy(false); }
-    }}>{en ? "Analyze world, cast and scenes" : "自动分析世界、人物关系与场景"}</Button>
+    {plan.block ? <p role="alert">{plan.block}</p> : null}
+    {plan.warnings.length ? <ul>{plan.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul> : null}
+    <details><summary>{en ? "Chapter preview" : "章节拆分预览"}</summary><ol>{chapters.map((chapter) => { const detail = plan.chapters.find((value) => value.number === chapter.number); return <li key={chapter.id}>{chapter.title} · {chapter.content.length}{detail ? ` · ${detail.parts} ${en ? "segments" : "块"}` : ""}</li>; })}</ol></details>
+    <p>{en ? "Analysis sends each manuscript segment to your configured model. Maximum 40 requests per import; larger novels can be split or imported without AI. Finished segments are kept if a later one fails or you cancel. All returned assets require exact source quotations and your review." : "分析会将原稿分段发送给已配置模型。每次最多 40 个请求；更长小说可拆分，或先不使用 AI 导入。后续片段失败或取消时会保留已完成片段。资产须包含原文依据，并由你审阅。"}</p>
+    <Button disabled={busy || !chunks.length || Boolean(plan.block) || Boolean(parseError)} onClick={() => { void runAnalysis(results, [], false); }}>{en ? "Analyze world, cast and scenes" : "自动分析世界、人物关系与场景"}</Button>
+    {failures.length && !busy ? <>
+      <Button onClick={() => { void runAnalysis(results, [], false); }}>{en ? "Retry failed segments" : "重试失败片段"}</Button>
+      <Button onClick={() => { void runAnalysis(results, failures, true); }}>{en ? "Skip failed and continue" : "跳过失败片段并继续"}</Button>
+    </> : null}
     {busy ? <Button onClick={() => { canceled.current = true; if (active.current) void bridge.cancelAi(active.current); }}>{en ? "Cancel" : "取消分析"}</Button> : null}
     <p role="status" aria-live="polite">{message}</p>
     {busy && output ? <pre className="production-output">{output}</pre> : null}
