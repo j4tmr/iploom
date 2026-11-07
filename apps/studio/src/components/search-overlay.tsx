@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { isComposingEvent, overlayStack } from "../core/overlay-stack.ts";
 import { searchWorkspace } from "../core/search.ts";
 import type { SearchHit, StudioWorkspace, UiLocale } from "../core/types.ts";
@@ -49,6 +49,9 @@ export function SearchOverlay({
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const generatedId = useId().replaceAll(":", "");
+  const listId = `${generatedId}-results`;
+  const optionId = (index: number) => `${generatedId}-option-${index}`;
   const results = useMemo(
     () => searchWorkspace(workspace, query, locale, 36),
     [locale, query, workspace],
@@ -72,8 +75,32 @@ export function SearchOverlay({
       window.clearTimeout(timer);
     };
   }, [open]);
+  // Hand focus back to whatever opened the palette. Without this a palette
+  // opened above a dialog drops focus on <body> when it closes, and the
+  // dialog's Tab trap (bound to the dialog element) can no longer see the key.
+  const opener = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    opener.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    return () => {
+      const target = opener.current;
+      opener.current = null;
+      if (target?.isConnected) target.focus();
+    };
+  }, [open]);
 
   useEffect(() => setActive(0), [query]);
+  // Keep the highlighted result inside the scroll viewport while the query
+  // changes. `block: "nearest"` scrolls only when it has actually left it.
+  useEffect(() => {
+    if (!open) return;
+    document
+      .getElementById(optionId(active))
+      ?.scrollIntoView?.({ block: "nearest" });
+  }, [active, open]);
   if (!open) return null;
 
   return (
@@ -85,7 +112,12 @@ export function SearchOverlay({
         }
       }}
     >
-      <section className="command-palette" role="dialog" aria-modal="true">
+      <section
+        className="command-palette"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("searchDialogLabel")}
+      >
         <div className="command-input-row">
           <Icon name="search" size={20} />
           <input
@@ -93,6 +125,13 @@ export function SearchOverlay({
             value={query}
             placeholder={t("search")}
             aria-label={t("searchEverywhere")}
+            role="combobox"
+            aria-expanded={Boolean(query && results.length)}
+            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={
+              results[active] ? optionId(active) : undefined
+            }
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               // Enter while an IME candidate window is open commits the
@@ -120,7 +159,12 @@ export function SearchOverlay({
           />
           <kbd>ESC</kbd>
         </div>
-        <div className="command-results">
+        <div
+          className="command-results"
+          id={listId}
+          role={query && results.length ? "listbox" : undefined}
+          aria-label={query && results.length ? t("searchDialogLabel") : undefined}
+        >
           {!query ? (
             <div className="command-hint">
               <Icon name="sparkles" size={18} />
@@ -135,6 +179,10 @@ export function SearchOverlay({
             results.map((hit, index) => (
               <button
                 key={`${hit.kind}-${hit.id}`}
+                id={optionId(index)}
+                role="option"
+                aria-selected={index === active}
+                tabIndex={-1}
                 className={`command-result ${index === active ? "active" : ""}`}
                 onMouseEnter={() => setActive(index)}
                 onClick={() => {
@@ -156,9 +204,9 @@ export function SearchOverlay({
           )}
         </div>
         <footer className="command-footer">
-          <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
-          <span><kbd>↵</kbd> open</span>
-          <span>{results.length} results</span>
+          <span><kbd>↑</kbd><kbd>↓</kbd> {t("searchNavigate")}</span>
+          <span><kbd>↵</kbd> {t("searchOpen")}</span>
+          <span>{t("searchResultCount", { count: results.length })}</span>
         </footer>
       </section>
     </div>

@@ -5,7 +5,13 @@ import type {
   UiLocale,
   WorkStatus,
 } from "../core/types.ts";
-import { formatDate, formatNumber, statusLabels, type Translate } from "../i18n.ts";
+import {
+  formatDate,
+  formatNumber,
+  intlLocale,
+  statusLabels,
+  type Translate,
+} from "../i18n.ts";
 import { Icon } from "../components/icon.tsx";
 import {
   Badge,
@@ -71,7 +77,7 @@ export function LibraryView({
       if (sort === "title") {
         return displayText(left.title, locale).localeCompare(
           displayText(right.title, locale),
-          locale === "zh-CN" ? "zh-CN" : "en",
+          intlLocale(locale),
         );
       }
       return right.updatedAt.localeCompare(left.updatedAt);
@@ -86,7 +92,7 @@ export function LibraryView({
           <p>{t("libraryLead")}</p>
         </div>
         <div className="page-heading-actions">
-          <Button data-testid="import-open" icon="file" onClick={onImportNovel}>{locale === "en" ? "Import novel" : "导入已有小说"}</Button>
+          <Button data-testid="import-open" icon="file" onClick={onImportNovel}>{t("importNovel")}</Button>
           <Button variant="primary" icon="plus" onClick={onNewNovel}>
             {t("writeNovel")}
           </Button>

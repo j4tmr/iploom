@@ -357,7 +357,7 @@ export function UniverseView({
               <Button variant="primary" icon="plus" onClick={onAddRelationship}>{t("addRelationship")}</Button>
             </SectionTitle>
             <p className="graph-hint">{t("clickNode")}</p>
-            <RelationshipCanvas graph={graph} locale={locale} onNodeClick={(node) => {
+            <RelationshipCanvas graph={graph} locale={locale} t={t} onNodeClick={(node) => {
               const character = characters.find((item) => item.id === node.id);
               if (character) onEditCharacter(character);
             }} />

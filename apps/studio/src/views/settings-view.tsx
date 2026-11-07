@@ -132,7 +132,7 @@ export function SettingsView({
         <p>{t("settingsLead")}</p>
       </header>
       <div className="settings-layout">
-        <AiSettings locale={locale} t={t} info={aiInfo} onConfigured={onAiConfigured} />
+        <AiSettings t={t} info={aiInfo} onConfigured={onAiConfigured} />
         <section className="settings-panel">
           <SectionTitle title={t("interfaceLanguage")} />
           <div className="segmented large">
@@ -180,9 +180,9 @@ export function SettingsView({
                   })
                 }
               >
-                <option value="9:16">9:16 · Vertical</option>
-                <option value="16:9">16:9 · Landscape</option>
-                <option value="1:1">1:1 · Square</option>
+                <option value="9:16">{t("aspectRatioVertical")}</option>
+                <option value="16:9">{t("aspectRatioLandscape")}</option>
+                <option value="1:1">{t("aspectRatioSquare")}</option>
               </Select>
             </Field>
             <label className="toggle-row">
