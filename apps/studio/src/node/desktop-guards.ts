@@ -257,7 +257,16 @@ export async function revealKnownPath(
     throw new Error("Folder path must be a string");
   }
   const platform = deps.platform ?? process.platform;
-  const target = resolve(value);
+  const target = canonicalPath(value, platform);
+  const allowedFolders = [...deps.allowedFolders];
+  // Reject anything outside the allowlist before touching the filesystem.
+  // stat/realpath first would turn the differing errors into a filesystem
+  // existence/type oracle, and on Windows a UNC path would make the main
+  // process authenticate to an attacker-chosen SMB server. The post-realpath
+  // check below still catches paths that escape through a symlink.
+  if (!allowedFolders.some((folder) => isWithin(folder, target, platform))) {
+    throw new Error("Path is outside this workspace's known locations");
+  }
   if (isBlockedShellTarget(target)) {
     throw new Error("Application bundles cannot be opened");
   }
@@ -282,9 +291,13 @@ export async function revealKnownPath(
     throw new Error("Application bundles cannot be opened");
   }
   const allowed = await Promise.all(
-    [...deps.allowedFolders].map(async (folder) => {
+    allowedFolders.map(async (folder) => {
       try {
-        return isWithin(await fileRealpath(resolve(folder)), real, platform);
+        return isWithin(
+          await fileRealpath(canonicalPath(folder, platform)),
+          real,
+          platform,
+        );
       } catch {
         return false;
       }

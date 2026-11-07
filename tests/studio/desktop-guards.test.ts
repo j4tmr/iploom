@@ -377,6 +377,116 @@ describe("revealKnownPath", () => {
     }
   });
 
+  test("rejects outside paths before any filesystem call", async () => {
+    const root = mkdtempSync(join(tmpdir(), "iploom-guards-prefix-"));
+    const outside = mkdtempSync(join(tmpdir(), "iploom-guards-prefix-out-"));
+    try {
+      let statCalls = 0;
+      let realpathCalls = 0;
+      const shown: string[] = [];
+      const depsFor = (statSucceeds: boolean) => ({
+        allowedFolders: [join(root, "workspace")],
+        platform: process.platform,
+        showItemInFolder: (path: string) => shown.push(path),
+        stat: async () => {
+          statCalls += 1;
+          if (!statSucceeds) throw new Error("ENOENT");
+          return { isFile: () => true, isDirectory: () => false };
+        },
+        realpath: async (path: string) => {
+          realpathCalls += 1;
+          return path;
+        },
+      });
+      const target = join(outside, "secret.txt");
+
+      // The error must not reveal whether the outside path exists.
+      await expect(revealKnownPath(target, depsFor(true))).rejects.toThrow(
+        /outside this workspace's known locations/,
+      );
+      await expect(revealKnownPath(target, depsFor(false))).rejects.toThrow(
+        /outside this workspace's known locations/,
+      );
+      expect(statCalls).toBe(0);
+      expect(realpathCalls).toBe(0);
+      expect(shown).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects a win32 UNC path without any filesystem call", async () => {
+    let calls = 0;
+    const deps = {
+      allowedFolders: ["C:\\Users\\creator\\AppData\\IPloom Studio"],
+      platform: "win32" as const,
+      showItemInFolder: () => {
+        calls += 1;
+      },
+      stat: async () => {
+        calls += 1;
+        return { isFile: () => true, isDirectory: () => false };
+      },
+      realpath: async (path: string) => {
+        calls += 1;
+        return path;
+      },
+    };
+
+    await expect(
+      revealKnownPath("\\\\server\\share\\payload.txt", deps),
+    ).rejects.toThrow(/outside this workspace's known locations/);
+    expect(calls).toBe(0);
+  });
+
+  test("reveals an inside path through injected dependencies", async () => {
+    const shown: string[] = [];
+    const calls = { stat: 0, realpath: 0 };
+    const deps = {
+      allowedFolders: ["/workspace"],
+      platform: "linux" as const,
+      showItemInFolder: (path: string) => shown.push(path),
+      stat: async () => {
+        calls.stat += 1;
+        return { isFile: () => true, isDirectory: () => false };
+      },
+      realpath: async (path: string) => {
+        calls.realpath += 1;
+        return path;
+      },
+    };
+
+    await expect(
+      revealKnownPath("/workspace/exports/book.txt", deps),
+    ).resolves.toBe("/workspace/exports/book.txt");
+    expect(calls.stat).toBe(1);
+    // Once for the target and once for the allowed folder.
+    expect(calls.realpath).toBe(2);
+    expect(shown).toEqual(["/workspace/exports/book.txt"]);
+  });
+
+  test("still rejects an inside-looking path whose real path escapes", async () => {
+    const shown: string[] = [];
+    let realpathCalls = 0;
+    const deps = {
+      allowedFolders: ["/workspace"],
+      platform: "linux" as const,
+      showItemInFolder: (path: string) => shown.push(path),
+      stat: async () => ({ isFile: () => true, isDirectory: () => false }),
+      realpath: async (path: string) => {
+        realpathCalls += 1;
+        return path === "/workspace/link.txt" ? "/outside/link.txt" : path;
+      },
+    };
+
+    await expect(revealKnownPath("/workspace/link.txt", deps)).rejects.toThrow(
+      /outside this workspace's known locations/,
+    );
+    expect(realpathCalls).toBe(2);
+    expect(shown).toEqual([]);
+  });
+
   test.skipIf(process.platform === "win32")(
     "refuses a symlink that points outside the known locations",
     async () => {
