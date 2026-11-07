@@ -18,6 +18,7 @@ import {
   type Translate,
 } from "../i18n.ts";
 import { bridge } from "../platform.ts";
+import { BeatsInput } from "../components/beats-input.tsx";
 import { Icon } from "../components/icon.tsx";
 import { SceneEditor } from "../components/scene-editor.tsx";
 import { useToast } from "../components/use-toast.ts";
@@ -305,16 +306,13 @@ export function WorkView({
                     />
                   </Field>
                   <Field label={t("beats")} hint={t("beatsHint")}>
-                    <TextArea
+                    <BeatsInput
+                      key={selected.id}
                       rows={5}
-                      value={selected.beats.join("\n")}
-                      onChange={(event) =>
+                      value={selected.beats}
+                      onChange={(beats) =>
                         onChangeChapter(selected.id, (chapter) => {
-                          chapter.beats = event.target.value
-                            .split("\n")
-                            .map((item) => item.trim().slice(0, CHAPTER_LIMITS.beatLength))
-                            .filter(Boolean)
-                            .slice(0, CHAPTER_LIMITS.beats);
+                          chapter.beats = beats;
                         })
                       }
                     />

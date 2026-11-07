@@ -235,6 +235,7 @@ const zh = {
   reusableBadge: "通用角色",
   noRelationships: "还没有人物关系。",
   noRelationshipsLead: "添加人物之间的关系，生成可用于写作与改编的关系图谱。",
+  relationshipNeedsTwoCharacters: "至少需要两个角色才能建立关系，请先在人物库中补充角色。",
   addRelationship: "添加关系",
   sourceCharacter: "人物 A",
   targetCharacter: "人物 B",
@@ -702,6 +703,8 @@ const en: Record<MessageKey, string> = {
   noRelationships: "No relationships yet.",
   noRelationshipsLead:
     "Add character relationships to power the writing and adaptation map.",
+  relationshipNeedsTwoCharacters:
+    "A relationship needs two characters — add another character to this world first.",
   addRelationship: "Add relationship",
   sourceCharacter: "Character A",
   targetCharacter: "Character B",
