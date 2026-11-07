@@ -305,7 +305,7 @@ kbd {
 
 .workspace-switcher {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) 14px;
+  grid-template-columns: 30px minmax(0, 1fr);
   align-items: center;
   gap: 9px;
   width: 100%;
@@ -315,10 +315,6 @@ kbd {
   background: rgb(255 255 255 / 3.5%);
   color: inherit;
   text-align: left;
-}
-
-.workspace-switcher:hover {
-  background: rgb(255 255 255 / 6%);
 }
 
 .workspace-avatar {
@@ -2610,6 +2606,17 @@ select.input {
 
 .graph-node {
   cursor: pointer;
+}
+
+/* The node group is the keyboard stop (SVG outline support is uneven), so the
+   ring is drawn as a circle that only appears for keyboard focus. */
+.graph-node-focus {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.graph-node:focus-visible .graph-node-focus {
+  opacity: 1;
 }
 
 .graph-node-initial {

@@ -8,7 +8,11 @@ import type {
   RelationshipGraph,
   UiLocale,
 } from "../core/types.ts";
-import { relationshipLabels, relationStatusLabels } from "../i18n.ts";
+import {
+  relationshipLabels,
+  relationStatusLabels,
+  type Translate,
+} from "../i18n.ts";
 
 const edgeColors = {
   active: "#5f8b7e",
@@ -19,10 +23,12 @@ const edgeColors = {
 export function RelationshipCanvas({
   graph,
   locale,
+  t,
   onNodeClick,
 }: {
   graph: RelationshipGraph;
   locale: UiLocale;
+  t: Translate;
   onNodeClick?: (node: GraphLayoutNode) => void;
 }) {
   const [hovered, setHovered] = useState<RelationshipEdge | null>(null);
@@ -36,7 +42,7 @@ export function RelationshipCanvas({
     return (
       <div className="graph-empty">
         <span>◌</span>
-        <p>{locale === "en" ? "Add characters to grow the map." : "添加人物后，关系图会在这里生长。"}</p>
+        <p>{t("graphEmpty")}</p>
       </div>
     );
 
@@ -44,8 +50,8 @@ export function RelationshipCanvas({
     <div className="relationship-canvas">
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label={locale === "en" ? "Character relationship graph" : "人物关系图"}
+        role="group"
+        aria-label={t("graphLabel")}
       >
         <defs>
           <marker id={arrowId} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="context-stroke" /></marker>
@@ -127,11 +133,25 @@ export function RelationshipCanvas({
             transform={`translate(${node.x} ${node.y})`}
             role={onNodeClick ? "button" : undefined}
             tabIndex={onNodeClick ? 0 : undefined}
+            aria-label={
+              onNodeClick ? t("graphNodeOpen", { name: node.label }) : undefined
+            }
             onClick={() => onNodeClick?.(node)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") onNodeClick?.(node);
+              if (event.key === "Enter" || event.key === " ") {
+                // Space would otherwise scroll the page behind the canvas.
+                event.preventDefault();
+                onNodeClick?.(node);
+              }
             }}
           >
+            <circle
+              className="graph-node-focus"
+              r={node.radius + 13}
+              fill="none"
+              stroke="var(--accent)"
+              strokeWidth="2.5"
+            />
             <circle r={node.radius + 8} fill="var(--paper)" opacity=".88" />
             <circle
               r={node.radius}

@@ -58,7 +58,11 @@ export function RelationshipsView({
           <p>{t("clickNode")}</p>
         </div>
         <div className="page-heading-actions">
-          <Select value={universeId} onChange={(event) => setUniverseId(event.target.value)}>
+          <Select
+            value={universeId}
+            aria-label={t("selectUniverse")}
+            onChange={(event) => setUniverseId(event.target.value)}
+          >
             {workspace.universes.map((item) => (
               <option value={item.id} key={item.id}>
                 {displayText(item.name, locale)}
@@ -78,6 +82,7 @@ export function RelationshipsView({
             <RelationshipCanvas
               graph={graph}
               locale={locale}
+              t={t}
               onNodeClick={(node) => {
                 const character = characters.find((item) => item.id === node.id);
                 if (character) onEditCharacter(character);
@@ -105,7 +110,7 @@ export function RelationshipsView({
                     </strong>
                     <p>{relationshipLabels[locale][edge.type]} · {edge.label}</p>
                     <small>{relationStatusLabels[locale][edge.status]} · {edge.strength}/5</small>
-                    {edge.notes ? <details><summary>{locale === "en" ? "Notes / source evidence" : "说明 / 原文依据"}</summary><p>{edge.notes}</p></details> : null}
+                    {edge.notes ? <details><summary>{t("notesSourceEvidence")}</summary><p>{edge.notes}</p></details> : null}
                   </div>
                   <IconButton label={t("edit")} icon="edit" onClick={() => { const relationship = workspace.relationships.find((item) => item.id === edge.id); if (relationship) onEditRelationship(relationship); }} />
                   <IconButton label={t("delete")} icon="trash" onClick={() => onDeleteRelationship(edge.id)} />
