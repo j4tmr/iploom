@@ -155,6 +155,61 @@ test("section headings stay inside their chapter below a document title", () => 
   expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
 });
 
+test("a unique shallowest chapter-marker heading is the chapter itself, not a document title", () => {
+  const chinese = "# 第一章\n甲\n## 第一节\n乙\n## 第二节\n丙";
+  const chineseChapters = splitManuscript(chinese);
+  expect(chineseChapters).toHaveLength(1);
+  expect(chineseChapters.map((chapter) => chapter.title)).toEqual(["第一章"]);
+  expect(chineseChapters.map((chapter) => chapter.content).join("")).toBe(chinese);
+
+  const english = "# Chapter One\nText\n### Subscene\nMore";
+  const englishChapters = splitManuscript(english);
+  expect(englishChapters).toHaveLength(1);
+  expect(englishChapters.map((chapter) => chapter.title)).toEqual(["Chapter One"]);
+  expect(englishChapters.map((chapter) => chapter.content).join("")).toBe(english);
+
+  // Related shapes: a shallowest chapter marker above deeper chapter markers still
+  // starts the first chapter, and 序章 with sections below stays one chapter.
+  const deeperMarkers = "# 第一章\n## 第二章\n## 第三章";
+  expect(splitManuscript(deeperMarkers).map((chapter) => chapter.title)).toEqual(["第一章", "第二章", "第三章"]);
+  const prologue = "# 序章\n## 第一节\n## 第二节";
+  const prologueChapters = splitManuscript(prologue);
+  expect(prologueChapters.map((chapter) => chapter.title)).toEqual(["序章"]);
+  expect(prologueChapters.map((chapter) => chapter.content).join("")).toBe(prologue);
+});
+
+test("deeper chapter-marker headings split under a document title while sections stay inside", () => {
+  const cases: Array<[string, string[]]> = [
+    ["# 书名\n## 第一章\n### 番外\n## 第二章", ["第一章", "番外", "第二章"]],
+    ["# Novel\n## Chapter 1\n甲\n### Prologue\n乙\n### Scene\n丙", ["Chapter 1", "Prologue"]],
+    ["# 书名\n## 第一回\n甲\n### 第二回\n乙", ["第一回", "第二回"]],
+    ["# 书名\n## 第一章\n甲\n### 第1节\n乙\n## 第二章\n丙", ["第一章", "第二章"]],
+    ["# Book\n## Chapter 1\n甲\n### Section 1\n乙\n## Chapter 2\n丙", ["Chapter 1", "Chapter 2"]],
+  ];
+  for (const [text, titles] of cases) {
+    const chapters = splitManuscript(text);
+    expect(chapters.map((chapter) => chapter.title)).toEqual(titles);
+    expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
+  }
+});
+
+test("a non-chapter document title still folds into the first chapter", () => {
+  const text = "# 书名\n## 第一章\n## 第二章";
+  const chapters = splitManuscript(text);
+  expect(chapters.map((chapter) => chapter.title)).toEqual(["第一章", "第二章"]);
+  expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
+
+  const volumes = "# 书名\n## 第一卷\n### 第一章\n## 第二卷";
+  expect(splitManuscript(volumes).map((chapter) => chapter.title)).toEqual(["第一卷", "第一章", "第二卷"]);
+
+  // A chapter marker keeps its chapter status even when titled, with sections inside.
+  const single = "# 第一章 上\n甲\n## 第一节\n乙";
+  const singleChapters = splitManuscript(single);
+  expect(singleChapters).toHaveLength(1);
+  expect(singleChapters.map((chapter) => chapter.title)).toEqual(["第一章 上"]);
+  expect(singleChapters.map((chapter) => chapter.content).join("")).toBe(single);
+});
+
 test("fenced code blocks never split chapters on heading-like comments", () => {
   const cases: Array<[string, string[]]> = [
     [

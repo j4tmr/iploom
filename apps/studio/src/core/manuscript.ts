@@ -155,12 +155,16 @@ export function splitManuscript(text: string): Chapter[] {
     const deeperLevels = markdownLevels.filter((level) => level > shallowest);
     const candidate = headings.find((heading) => heading.level === shallowest)!;
     // A lone heading level is a chapter, not a title: the heuristic only promotes it when
-    // a deeper level actually exists for the chapters. In that case the title line is folded
-    // into the first chapter's slice so every source character stays in exactly one chapter.
+    // a deeper level actually exists for the chapters, and the heading itself does not
+    // already read as a chapter start (第一章, 序章, Chapter One) — a unique shallowest
+    // chapter marker IS the chapter, and its sections and scenes stay inside it. In the
+    // title case the title line is folded into the first chapter's slice so every source
+    // character stays in exactly one chapter.
     if (
       markdownLevels.filter((level) => level === shallowest).length === 1 &&
       !text.slice(0, candidate.index).trim() &&
-      deeperLevels.length
+      deeperLevels.length &&
+      candidate.chapterMarker !== true
     ) {
       titleHeading = candidate;
       chapterLevel = Math.min(...deeperLevels);
