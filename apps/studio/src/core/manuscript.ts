@@ -12,13 +12,16 @@ export const MANUSCRIPT_LIMITS = {
   analysisNotePerPart: 4_000,
 } as const;
 
-interface ManuscriptHeading { index: number; title: string }
+interface ManuscriptHeading { index: number; title: string; level?: number }
 
 // Lines are matched after BOM/whitespace trimming and NFKC normalization, so full-width
 // digits and spaces behave like their ASCII forms. Content is still sliced from the original
 // text, which keeps the "chapters concatenate back to the source" invariant.
-const MARKDOWN_HEADING = /^#{1,6}[ \t　]+(\S.*)$/;
-const CHINESE_HEADING = /^第[ \t　]*([零〇一二三四五六七八九十百千万两0-9]+)[ \t　]*([章节回卷])(?:[ \t　]*(?:[:：、.．\-—])?[ \t　]*(\S.*))?$/;
+const MARKDOWN_HEADING = /^(#{1,6})[ \t　]+(\S.*)$/;
+// The chapter marker must end the line or be followed by a separator. Without that
+// boundary, ordinary prose such as 第三回合开始了 or 第一回眸一笑百媚生 would split.
+const CHINESE_HEADING_PREFIX = /^第[ \t　]*([零〇一二三四五六七八九十百千万两0-9]+)[ \t　]*([章节回卷])/;
+const CHINESE_SEPARATOR = /^[:：、.．\-—，,·]/;
 const SPECIAL_HEADING = /^(序章|楔子|引子|尾声|终章|番外(?:篇)?|Prologue|Epilogue|Interlude)(?:[ \t　]*(?:[:：、.．\-—])?[ \t　]*(\S.*))?$/i;
 const ENGLISH_HEADING = /^(chapter)[ \t　]+((?:\d+)|[ivxlcdm]+\b|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:[ \t　]*(?:[:：、.．\-—])?[ \t　]*(\S.*))?$/i;
 const ROMAN_NUMERAL = /^m{0,4}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$/i;
@@ -27,26 +30,45 @@ const ENGLISH_SENTENCE = /[.!?;]/;
 const CHINESE_TITLE_MAX = 30;
 const ENGLISH_TITLE_MAX = 80;
 
-function headingTitle(rawLine: string): string | null {
-  const line = rawLine.replace(/^﻿/, "").replace(/\r$/, "").normalize("NFKC").trim();
+function normalizedLine(rawLine: string): string {
+  return rawLine.replace(/^﻿/, "").replace(/\r$/, "").normalize("NFKC").trim();
+}
+
+function headingTitle(rawLine: string): Omit<ManuscriptHeading, "index"> | null {
+  const line = normalizedLine(rawLine);
   if (!line) return null;
   const markdown = MARKDOWN_HEADING.exec(line);
   if (markdown) {
-    const title = markdown[1]!.trim();
-    return title && title.length <= CHAPTER_LIMITS.title ? title : null;
+    const title = markdown[2]!.trim();
+    return title && title.length <= CHAPTER_LIMITS.title
+      ? { title, level: markdown[1]!.length }
+      : null;
   }
-  const chinese = CHINESE_HEADING.exec(line);
+  const chinese = CHINESE_HEADING_PREFIX.exec(line);
   if (chinese) {
-    const suffix = (chinese[3] ?? "").trim();
+    let rest = line.slice(chinese[0].length);
+    if (rest) {
+      const leadingSpace = /^[ \t　]+/.exec(rest);
+      if (leadingSpace) rest = rest.slice(leadingSpace[0].length);
+      else {
+        const separator = CHINESE_SEPARATOR.exec(rest);
+        if (!separator) return null;
+        rest = rest.slice(separator[0].length);
+      }
+      const separator = CHINESE_SEPARATOR.exec(rest);
+      if (separator) rest = rest.slice(separator[0].length);
+      rest = rest.replace(/^[ \t　]+/, "");
+    }
+    const suffix = rest.trim();
     if ([...suffix].length > CHINESE_TITLE_MAX || SENTENCE_PUNCTUATION.test(suffix)) return null;
     const marker = `第${chinese[1]}${chinese[2]}`;
-    return suffix ? `${marker} ${suffix}` : marker;
+    return { title: suffix ? `${marker} ${suffix}` : marker };
   }
   const special = SPECIAL_HEADING.exec(line);
   if (special) {
     const suffix = (special[2] ?? "").trim();
     if ([...suffix].length > CHINESE_TITLE_MAX || SENTENCE_PUNCTUATION.test(suffix)) return null;
-    return suffix ? `${special[1]} ${suffix}` : special[1]!;
+    return { title: suffix ? `${special[1]} ${suffix}` : special[1]! };
   }
   const english = ENGLISH_HEADING.exec(line);
   if (english) {
@@ -54,28 +76,91 @@ function headingTitle(rawLine: string): string | null {
     if ([...suffix].length > ENGLISH_TITLE_MAX || ENGLISH_SENTENCE.test(suffix)) return null;
     const numeral = english[2]!;
     if (/^[ivxlcdm]+$/i.test(numeral) && !ROMAN_NUMERAL.test(numeral)) return null;
-    return `${english[1]} ${numeral}${suffix ? ` ${suffix}` : ""}`;
+    return { title: `${english[1]} ${numeral}${suffix ? ` ${suffix}` : ""}` };
   }
   return null;
+}
+
+interface CodeFence { marker: "`" | "~"; length: number }
+
+function openingFence(line: string): CodeFence | null {
+  const match = /^(`{3,}|~{3,})/.exec(line);
+  if (!match) return null;
+  const run = match[1]!;
+  return { marker: run[0] as "`" | "~", length: run.length };
+}
+
+function closesFence(line: string, fence: CodeFence): boolean {
+  const match = /^(`{3,}|~{3,})$/.exec(line);
+  if (!match) return false;
+  const run = match[1]!;
+  return run[0] === fence.marker && run.length >= fence.length;
 }
 
 export function splitManuscript(text: string): Chapter[] {
   if (!text.trim() || text.includes("\0") || text.length > CHAPTER_LIMITS.content) throw new Error("请输入不超过 200 万字符的文本 / Use non-empty text up to 2 million characters.");
   const headings: ManuscriptHeading[] = [];
+  let fence: CodeFence | null = null;
   for (let start = 0; start < text.length;) {
     const newline = text.indexOf("\n", start);
     const end = newline === -1 ? text.length : newline;
-    const title = headingTitle(text.slice(start, end));
-    if (title) headings.push({ index: start, title });
+    const rawLine = text.slice(start, end);
+    const line = normalizedLine(rawLine);
+    if (fence) {
+      if (closesFence(line, fence)) fence = null;
+    } else {
+      const opening = openingFence(line);
+      if (opening) fence = opening;
+      else {
+        const heading = headingTitle(rawLine);
+        if (heading) headings.push({ index: start, ...heading });
+      }
+    }
     if (newline === -1) break;
     start = newline + 1;
   }
-  const starts: ManuscriptHeading[] = headings.map((heading) => ({ ...heading }));
+  const markdownLevels = headings.flatMap((heading) =>
+    heading.level === undefined ? [] : [heading.level],
+  );
+  let titleHeading: ManuscriptHeading | undefined;
+  let chapterLevel: number | undefined;
+  if (markdownLevels.length) {
+    const shallowest = Math.min(...markdownLevels);
+    const deeperLevels = markdownLevels.filter((level) => level > shallowest);
+    const candidate = headings.find((heading) => heading.level === shallowest)!;
+    // A lone heading level is a chapter, not a title: the heuristic only promotes it when
+    // a deeper level actually exists for the chapters. In that case the title line is folded
+    // into the first chapter's slice so every source character stays in exactly one chapter.
+    if (
+      markdownLevels.filter((level) => level === shallowest).length === 1 &&
+      !text.slice(0, candidate.index).trim() &&
+      deeperLevels.length
+    ) {
+      titleHeading = candidate;
+      chapterLevel = Math.min(...deeperLevels);
+    } else {
+      chapterLevel = shallowest;
+    }
+  }
+  const starts: ManuscriptHeading[] = headings
+    .filter((heading) => heading.level === undefined || heading.level === chapterLevel)
+    .map((heading) => ({ ...heading }));
   if (!starts.length) starts.push({ index: 0, title: "正文 / Manuscript" });
+  else if (titleHeading) starts[0]!.index = 0;
   else if (starts[0]!.index > 0 && !text.slice(0, starts[0]!.index).trim()) starts[0]!.index = 0;
   else if (starts[0]!.index > 0) starts.unshift({ index: 0, title: "前言 / Preface" });
   if (starts.length > 1_000) throw new Error("章节超过 1000，请拆分文件 / Split files with over 1,000 chapters.");
   return starts.map((start, index) => emptyChapter({ title: start.title || `Chapter ${index + 1}`, number: index + 1, status: "draft", content: text.slice(start.index, starts[index + 1]?.index ?? text.length) }));
+}
+
+/**
+ * Insert a chapter at the position implied by its number without renumbering the
+ * chapters the writer already has. Existing order is preserved for equal numbers.
+ */
+export function insertChapterInOrder(chapters: Chapter[], chapter: Chapter): void {
+  const index = chapters.findIndex((item) => item.number > chapter.number);
+  if (index === -1) chapters.push(chapter);
+  else chapters.splice(index, 0, chapter);
 }
 
 export interface ManuscriptChunk { chapter: number; part: number; text: string }

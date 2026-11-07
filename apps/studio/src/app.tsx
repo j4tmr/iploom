@@ -93,7 +93,7 @@ import { WorkView } from "./views/work-view.tsx";
 import { WorkflowView } from "./views/workflow-view.tsx";
 import { ProductionPanel } from "./components/production-panel.tsx";
 import { ManuscriptImport } from "./components/manuscript-import.tsx";
-import { mergeManuscriptImport } from "./core/manuscript.ts";
+import { insertChapterInOrder, mergeManuscriptImport } from "./core/manuscript.ts";
 import { StoryObjectModal, TimelineEventModal } from "./components/timeline-forms.tsx";
 import { TimelineView } from "./views/timeline-view.tsx";
 import type { StandardCandidate } from "./core/standards.ts";
@@ -612,7 +612,7 @@ export function App() {
     return mutateChecked((draft) => {
       const target = draft.works.find((item) => item.id === workId);
       if (!target) return;
-      target.chapters.push(chapter);
+      insertChapterInOrder(target.chapters, chapter);
       target.updatedAt = new Date().toISOString();
     });
   };
@@ -976,6 +976,7 @@ export function App() {
               workspace={workspace}
               locale={locale}
               t={t}
+              onNotify={(message) => notify(message, "error")}
               onOpenWork={(workId) => navigate({ name: "work", workId })}
             />
           ) : null}

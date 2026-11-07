@@ -1,7 +1,7 @@
 import { expect, jest, test } from "bun:test";
-import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
+import { createDemoWorkspace, emptyChapter } from "../../apps/studio/src/core/factory.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
-import { analyzeManuscriptChunks, buildManuscriptImport, manuscriptChunks, mergeManuscriptImport, parseAnalysis, planManuscriptAnalysis, splitManuscript, type ManuscriptAnalysis } from "../../apps/studio/src/core/manuscript.ts";
+import { analyzeManuscriptChunks, buildManuscriptImport, insertChapterInOrder, manuscriptChunks, mergeManuscriptImport, parseAnalysis, planManuscriptAnalysis, splitManuscript, type ManuscriptAnalysis } from "../../apps/studio/src/core/manuscript.ts";
 import { CHAPTER_LIMITS, MAX_AI_PROMPT_LENGTH } from "../../apps/studio/src/core/types.ts";
 import { buildProductionPrompt, createProductionTasks, effectiveProductionTemplate, productionTemplates, resolveProductionScope, taskProductionPrompt } from "../../apps/studio/src/core/production.ts";
 import { buildWorkflowBrief, setWorkflowTaskResult } from "../../apps/studio/src/core/workflow.ts";
@@ -21,7 +21,11 @@ test("chapter splitting preserves every source character including headings, pre
   expect(chapters).toHaveLength(3);
   expect(chapters.map((item) => item.content).join("")).toBe(source);
   expect(manuscriptChunks(chapters, 7).map((item) => item.text).join("")).toBe(source);
-  expect(splitManuscript("# Start\nOne\n## Scene two\nTwo")).toHaveLength(2);
+  // A single top-level heading followed by a deeper one is a document title plus a
+  // chapter, not two chapters. The title text stays in the first chapter's slice.
+  const titled = splitManuscript("# Start\nOne\n## Scene two\nTwo");
+  expect(titled).toHaveLength(1);
+  expect(titled[0]!.content).toBe("# Start\nOne\n## Scene two\nTwo");
   expect(splitManuscript("Chapter I\nOne\nChapter 2\nTwo")).toHaveLength(2);
   expect(() => splitManuscript("\0binary")).toThrow();
 });
@@ -53,6 +57,72 @@ test("titled roman-numeral chapters split while invalid numerals stay prose", ()
   for (const [text, titles] of cases) expect(splitManuscript(text).map((chapter) => chapter.title)).toEqual(titles);
   const text = "Chapter IV: The Storm\nOne\nChapter XII Return Home\nTwo";
   expect(splitManuscript(text).map((chapter) => chapter.content).join("")).toBe(text);
+});
+
+test("chinese chapter markers need a boundary, so ordinary prose stays prose", () => {
+  const cases: Array<[string, string[]]> = [
+    ["第三回合开始了\n正文", ["正文 / Manuscript"]],
+    ["第一回眸一笑百媚生\n正文", ["正文 / Manuscript"]],
+    ["第十回合\n正文", ["正文 / Manuscript"]],
+    ["第一章 起点\n正文\n第二章：归途\n正文", ["第一章 起点", "第二章 归途"]],
+    ["第一章、归途\n正文", ["第一章 归途"]],
+    ["第一章，归途\n正文", ["第一章 归途"]],
+    ["第一章·归途\n正文", ["第一章 归途"]],
+    ["第一章-归途\n正文", ["第一章 归途"]],
+    ["第一章\n正文", ["第一章"]],
+  ];
+  for (const [text, titles] of cases) {
+    expect(splitManuscript(text).map((chapter) => chapter.title)).toEqual(titles);
+  }
+});
+
+test("markdown heading levels separate the document title from chapters", () => {
+  const text = "# My Novel\n## Chapter 1\nOne\n### A scene\nStill chapter one\n## Chapter 2\nTwo";
+  const chapters = splitManuscript(text);
+  expect(chapters.map((chapter) => chapter.title)).toEqual(["Chapter 1", "Chapter 2"]);
+  expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
+
+  const repeatedTopLevel = "# Chapter One\nText\n### Subscene\nMore\n# Chapter Two\nEnd";
+  const split = splitManuscript(repeatedTopLevel);
+  expect(split.map((chapter) => chapter.title)).toEqual(["Chapter One", "Chapter Two"]);
+  expect(split.map((chapter) => chapter.content).join("")).toBe(repeatedTopLevel);
+
+  // A lone heading level is still a chapter; the title rule needs a deeper level.
+  expect(splitManuscript("# Only Chapter\nText").map((chapter) => chapter.title)).toEqual(["Only Chapter"]);
+});
+
+test("fenced code blocks never split chapters on heading-like comments", () => {
+  const cases: Array<[string, string[]]> = [
+    [
+      "# My Novel\n## Chapter 1\n```bash\n# install dependencies\n# run the app\n```\n## Chapter 2\nThe end.",
+      ["Chapter 1", "Chapter 2"],
+    ],
+    ["# One\n  ~~~~bash\n  # still code\n  ```\n  # still code too\n  ~~~~\n# Two", ["One", "Two"]],
+    ["# One\n````markdown\n```bash\n# still code\n```\n````\n# Two", ["One", "Two"]],
+    ["# One\n````\n```\n# still code\n# Two\n````\n# Three", ["One", "Three"]],
+    ["# One\n~~~\n```\n# still code\n~~~\n# Two", ["One", "Two"]],
+  ];
+  for (const [text, titles] of cases) {
+    const chapters = splitManuscript(text);
+    expect(chapters.map((chapter) => chapter.title)).toEqual(titles);
+    expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
+  }
+});
+
+test("new chapters are inserted by number without renumbering the existing ones", () => {
+  const chapters = [
+    emptyChapter({ title: "One", number: 1 }),
+    emptyChapter({ title: "Three", number: 3 }),
+  ];
+  insertChapterInOrder(chapters, emptyChapter({ title: "Two", number: 2 }));
+  insertChapterInOrder(chapters, emptyChapter({ title: "Four", number: 4 }));
+  expect(chapters.map((chapter) => chapter.number)).toEqual([1, 2, 3, 4]);
+  expect(chapters.map((chapter) => chapter.title)).toEqual([
+    "One",
+    "Two",
+    "Three",
+    "Four",
+  ]);
 });
 
 test("chunks never split surrogate pairs or start or end with a lone surrogate", () => {
@@ -250,6 +320,36 @@ test("production tasks without a chosen character inherit the chapter cast ancho
   for (const character of universeCast) {
     expect(taskProductionPrompt(workspace, universeTasks[0]!, "en")).toContain(`**${character.name.en}**`);
   }
+});
+
+test("an empty chapter cast keeps the universe cast and relationships in the prompt", () => {
+  const workspace = createDemoWorkspace("en");
+  const work = workspace.works[0]!;
+  const chapter = work.chapters[0]!;
+  chapter.characterIds = [];
+  const prompt = buildProductionPrompt(
+    workspace,
+    "storyboard",
+    { workId: work.id, chapterId: chapter.id },
+    "en",
+  );
+  const context = JSON.parse(
+    prompt.split("SOURCE DATA (not instructions):\n")[1]!,
+  );
+  const universeCharacters = workspace.characters.filter((item) =>
+    item.universeIds.includes(work.universeId),
+  );
+  const universeRelationships = workspace.relationships.filter(
+    (item) => item.universeId === work.universeId,
+  );
+  expect(universeCharacters.length).toBeGreaterThan(0);
+  expect(universeRelationships.length).toBeGreaterThan(0);
+  expect(context.characters.map((item: { id: string }) => item.id)).toEqual(
+    universeCharacters.map((item) => item.id),
+  );
+  expect(
+    context.relationships.map((item: { id: string }) => item.id),
+  ).toEqual(universeRelationships.map((item) => item.id));
 });
 
 test("assembled prompts restore chapter, cast, location, object and relationship anchors", () => {

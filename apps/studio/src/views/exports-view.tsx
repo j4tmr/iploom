@@ -13,13 +13,24 @@ export function ExportsView({
   workspace,
   locale,
   t,
+  onNotify,
   onOpenWork,
 }: {
   workspace: StudioWorkspace;
   locale: UiLocale;
   t: Translate;
+  onNotify: (message: string) => void;
   onOpenWork: (workId: string) => void;
 }) {
+  const reveal = async (path: string) => {
+    try {
+      await bridge.openFolder(path);
+    } catch {
+      // The desktop bridge rejects paths outside the workspace's reveal allowlist
+      // (an export can be written anywhere). Report it instead of swallowing it.
+      onNotify(t("openFolderFailed"));
+    }
+  };
   const records = [...workspace.exports].sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt),
   );
@@ -74,7 +85,7 @@ export function ExportsView({
                 </div>
                 <div className="export-record-actions">
                   {record.outputPath ? (
-                    <Button variant="ghost" icon="folder" onClick={() => void bridge.openFolder(record.outputPath!)}>
+                    <Button variant="ghost" icon="folder" onClick={() => void reveal(record.outputPath!)}>
                       {t("openFolder")}
                     </Button>
                   ) : null}
