@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createId, displayText } from "../core/factory.ts";
 import { STANDARD_KINDS, standardKindLabel, standardRefsFor } from "../core/standards.ts";
 import { CHAPTER_LIMITS, MAX_LOCALIZED_LENGTH } from "../core/types.ts";
@@ -855,11 +855,42 @@ export function RelationshipModal({
   initial?: Relationship;
   onSave: (relationship: Relationship) => boolean;
 }) {
-  const characters = workspace.characters.filter((character) =>
-    character.universeIds.includes(universeId),
+  const characters = useMemo(
+    () =>
+      workspace.characters.filter((character) =>
+        character.universeIds.includes(universeId),
+      ),
+    [workspace.characters, universeId],
   );
-  const [sourceId, setSourceId] = useState(initial?.sourceId ?? characters[0]?.id ?? "");
-  const [targetId, setTargetId] = useState(initial?.targetId ?? characters[1]?.id ?? "");
+  const [sourceId, setSourceId] = useState(() => {
+    const preferred = initial?.sourceId ?? "";
+    return characters.some((character) => character.id === preferred)
+      ? preferred
+      : characters[0]?.id ?? "";
+  });
+  useEffect(() => {
+    if (!characters.some((character) => character.id === sourceId)) {
+      setSourceId(characters[0]?.id ?? "");
+    }
+  }, [characters, sourceId]);
+  // The target select only offers characters other than the source. Deriving
+  // the options first keeps the initial state inside that set even when the
+  // saved relationship is corrupt or the world has fewer than two characters.
+  const targetOptions = useMemo(
+    () => characters.filter((character) => character.id !== sourceId),
+    [characters, sourceId],
+  );
+  const [targetId, setTargetId] = useState(() => {
+    const preferred = initial?.targetId ?? "";
+    return targetOptions.some((character) => character.id === preferred)
+      ? preferred
+      : targetOptions[0]?.id ?? "";
+  });
+  useEffect(() => {
+    if (!targetOptions.some((character) => character.id === targetId)) {
+      setTargetId(targetOptions[0]?.id ?? "");
+    }
+  }, [targetId, targetOptions]);
   const [type, setType] = useState<RelationshipType>(initial?.type ?? "ally");
   const [labelZh, setLabelZh] = useState(initial?.label.zh ?? "");
   const [labelEn, setLabelEn] = useState(initial?.label.en ?? "");
@@ -867,6 +898,12 @@ export function RelationshipModal({
   const [status, setStatus] = useState<RelationshipStatus>(initial?.status ?? "active");
   const [mutual, setMutual] = useState(initial?.mutual ?? true);
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  const sourceIsValid = characters.some(
+    (character) => character.id === sourceId,
+  );
+  const targetIsValid = targetOptions.some(
+    (character) => character.id === targetId,
+  );
   return (
     <Modal
       open={open}
@@ -879,7 +916,7 @@ export function RelationshipModal({
           <Button
             variant="primary"
             icon="link"
-            disabled={!sourceId || !targetId || sourceId === targetId}
+            disabled={!sourceIsValid || !targetIsValid}
             onClick={() => {
               const now = new Date().toISOString();
               const saved = onSave({
@@ -906,19 +943,44 @@ export function RelationshipModal({
     >
       <FieldGrid>
         <Field label={t("sourceCharacter")}>
-          <Select value={sourceId} onChange={(event) => setSourceId(event.target.value)}>
+          <Select
+            value={sourceId}
+            aria-label={t("sourceCharacter")}
+            onChange={(event) => {
+              const nextSourceId = event.target.value;
+              setSourceId(nextSourceId);
+              // Keep the pair valid: when the new source was the target, move
+              // the target to the first remaining character instead of leaving
+              // a select whose visible option and state disagree.
+              if (nextSourceId === targetId) {
+                setTargetId(
+                  characters.find(
+                    (character) => character.id !== nextSourceId,
+                  )?.id ?? "",
+                );
+              }
+            }}
+          >
             {characters.map((character) => (
               <option key={character.id} value={character.id}>{displayText(character.name, locale)}</option>
             ))}
           </Select>
         </Field>
         <Field label={t("targetCharacter")}>
-          <Select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
-            {characters.filter((character) => character.id !== sourceId).map((character) => (
+          <Select
+            value={targetId}
+            aria-label={t("targetCharacter")}
+            disabled={targetOptions.length === 0}
+            onChange={(event) => setTargetId(event.target.value)}
+          >
+            {targetOptions.map((character) => (
               <option key={character.id} value={character.id}>{displayText(character.name, locale)}</option>
             ))}
           </Select>
         </Field>
+        {characters.length < 2 ? (
+          <p className="field-hint field-wide">{t("relationshipNeedsTwoCharacters")}</p>
+        ) : null}
         <Field label={t("relationType")}>
           <Select value={type} onChange={(event) => setType(event.target.value as RelationshipType)}>
             {(Object.keys(relationshipLabels[locale]) as RelationshipType[]).map((value) => (
