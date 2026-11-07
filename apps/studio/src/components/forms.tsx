@@ -113,11 +113,7 @@ export function CharacterModal({
   const requestClose = () => {
     if (
       snapshot !== baselineRef.current &&
-      !window.confirm(
-        locale === "zh-CN"
-          ? "这个人物还有未保存的修改，关闭后会丢失。确定关闭？"
-          : "This character has unsaved changes that will be lost. Close anyway?",
-      )
+      !window.confirm(t("characterUnsavedClose"))
     ) {
       return;
     }
@@ -127,6 +123,7 @@ export function CharacterModal({
     <Modal
       open={open}
       onClose={requestClose}
+      closeLabel={t("close")}
       title={initial ? t("editCharacterTitle") : t("createCharacterTitle")}
       description={t("characterLead")}
       wide
@@ -331,6 +328,7 @@ export function UniverseModal({
     <Modal
       open={open}
       onClose={onClose}
+      closeLabel={t("close")}
       title={initial ? t("editWorldTitle") : t("createWorldTitle")}
       description={t("createWorldLead")}
       wide
@@ -479,6 +477,7 @@ export function NovelModal({
     <Modal
       open={open}
       onClose={onClose}
+      closeLabel={t("close")}
       title={initial ? t("editNovelTitle") : t("createNovelTitle")}
       description={t("createNovelLead")}
       wide
@@ -649,6 +648,7 @@ export function ChapterModal({
     <Modal
       open={open}
       onClose={onClose}
+      closeLabel={t("close")}
       title={t("addChapterTitle")}
       description={t("addChapterLead")}
       footer={
@@ -802,6 +802,7 @@ export function WorkflowTaskModal({
     <Modal
       open={open}
       onClose={onClose}
+      closeLabel={t("close")}
       title={initial ? t("workflowEditTask") : t("workflowNewTask")}
       description={t("workflowTaskLead")}
       wide
@@ -1125,6 +1126,7 @@ export function RelationshipModal({
     <Modal
       open={open}
       onClose={onClose}
+      closeLabel={t("close")}
       title={initial ? t("edit") : t("createRelationshipTitle")}
       description={t("relationshipLead")}
       footer={
@@ -1364,6 +1366,7 @@ export function AtlasModal({
     <Modal
       open={open}
       onClose={onClose}
+      closeLabel={t("close")}
       title={title}
       footer={
         <>
@@ -1553,6 +1556,7 @@ export function StandardModal({
     <Modal
       open={open}
       onClose={onClose}
+      closeLabel={t("close")}
       title={initial ? t("foundationEditStandard") : t("foundationNewStandard")}
       description={t("foundationDraftNote")}
       footer={

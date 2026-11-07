@@ -102,7 +102,7 @@ export function WorkView({
 
   useEffect(() => {
     setTitleDraft(selected?.title ?? "");
-  }, [selected?.id, selected?.title]);
+  }, [selected?.title]);
 
   const commitTitle = () => {
     if (!selected) return;
@@ -215,7 +215,7 @@ export function WorkView({
         <div className="manuscript-layout">
           <aside className="chapter-list-panel">
             <div className="chapter-list-head">
-              <span className="eyebrow">CHAPTERS</span>
+              <span className="eyebrow">CHAPTERS / 章节</span>
               <IconButton
                 label={t("addChapterTitle")}
                 icon="plus"
@@ -331,7 +331,10 @@ export function WorkView({
 
               <div className="chapter-split">
                 <div className="chapter-prose-column">
-                  <label className="prose-editor-label" htmlFor="chapter-prose">
+                  <label
+                    className="prose-editor-label"
+                    htmlFor="chapter-prose-editor"
+                  >
                     <span>{t("chapterBody")}</span>
                     <small>
                       {formatNumber(countChapterWords(selected), locale)}{" "}
@@ -339,7 +342,7 @@ export function WorkView({
                     </small>
                   </label>
                   <textarea
-                    id="chapter-prose"
+                    id="chapter-prose-editor"
                     className="prose-editor"
                     value={selected.content}
                     maxLength={CHAPTER_LIMITS.content}
@@ -463,6 +466,7 @@ export function WorkView({
                     characters={characters}
                     locations={locations}
                     locale={locale}
+                    t={t}
                     onChange={(change) => onChangeChapter(selected.id, change)}
                   />
                 </aside>
@@ -645,9 +649,7 @@ function AdaptationPanel({
           <span className="style-orb">3D</span>
           <div>
             <strong>{t("style3d")}</strong>
-            <small>
-              9:16 · character model sheets · negative prompts · scene drafts
-            </small>
+            <small>{t("style3dMeta")}</small>
           </div>
         </div>
         <div className="chapter-select-head">

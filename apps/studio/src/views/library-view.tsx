@@ -4,6 +4,7 @@ import type { StudioWorkspace, UiLocale, WorkStatus } from "../core/types.ts";
 import {
   formatDate,
   formatNumber,
+  intlLocale,
   statusLabels,
   type Translate,
 } from "../i18n.ts";
@@ -72,7 +73,7 @@ export function LibraryView({
       if (sort === "title") {
         return displayText(left.title, locale).localeCompare(
           displayText(right.title, locale),
-          locale === "zh-CN" ? "zh-CN" : "en",
+          intlLocale(locale),
         );
       }
       return right.updatedAt.localeCompare(left.updatedAt);
@@ -88,7 +89,7 @@ export function LibraryView({
         </div>
         <div className="page-heading-actions">
           <Button data-testid="import-open" icon="file" onClick={onImportNovel}>
-            {locale === "en" ? "Import novel" : "导入已有小说"}
+            {t("importNovel")}
           </Button>
           <Button variant="primary" icon="plus" onClick={onNewNovel}>
             {t("writeNovel")}
@@ -97,10 +98,10 @@ export function LibraryView({
       </header>
 
       <div className="library-toolbar library-toolbar-wide">
-        {/* biome-ignore lint/a11y/noLabelWithoutControl: TextInput renders the control inside the label */}
-        <label className="search-field">
+        <label className="search-field" htmlFor="library-search">
           <Icon name="search" size={17} />
           <TextInput
+            id="library-search"
             value={query}
             placeholder={t("search")}
             onChange={(event) => setQuery(event.target.value)}

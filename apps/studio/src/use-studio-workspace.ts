@@ -167,7 +167,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
       await persist(current);
     }
     if (pendingSave.current) await pendingSave.current;
-  }, [persist, workspace]);
+  }, [persist]);
 
   useEffect(() => {
     return bridge.onFlushRequest(async (requestId) => {

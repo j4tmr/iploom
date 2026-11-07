@@ -211,6 +211,7 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [state.saveNow]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the route is the trigger — a new page should start at the top even though the effect does not read it
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [route]);
@@ -358,7 +359,7 @@ export function App() {
     notify(t("saved"));
   };
 
-  const deleteCharacter = (character: Character) => {
+  const deleteCharacter = (character: Character, _universeId?: string) => {
     if (character.universeIds.length > 1) {
       const message = t("confirmDeleteCharacterEverywhere", {
         worlds: character.universeIds.length,
@@ -481,9 +482,7 @@ export function App() {
     ]);
     const message =
       removed.size > 1
-        ? locale === "en"
-          ? `Delete this task and ${removed.size - 1} subtask(s)?`
-          : `确定删除此任务及其 ${removed.size - 1} 个子任务吗？`
+        ? t("confirmDeleteSubtasks", { count: removed.size - 1 })
         : t("confirmDelete");
     if (!window.confirm(message)) return;
     mutateChecked((draft) => {
@@ -916,7 +915,9 @@ export function App() {
                   universeId: universe.id,
                 })
               }
-              onDeleteCharacter={(character) => deleteCharacter(character)}
+              onDeleteCharacter={(character) =>
+                deleteCharacter(character, universe.id)
+              }
               onRemoveCharacterFromWorld={(character) =>
                 removeCharacterFromUniverse(character, universe.id)
               }
@@ -1157,6 +1158,7 @@ export function App() {
       {modal?.kind === "import" ? (
         <ManuscriptImport
           locale={locale}
+          t={t}
           onClose={() => setModal(null)}
           onImport={async (imported) => {
             if (!(await snapshotBefore("before-import-novel"))) return;
@@ -1225,6 +1227,7 @@ export function App() {
           open
           onClose={() => setModal(null)}
           locale={locale}
+          t={t}
           workspace={workspace}
           initial={modal.initial}
           defaultUniverseId={modal.universeId}
@@ -1237,6 +1240,7 @@ export function App() {
           open
           onClose={() => setModal(null)}
           locale={locale}
+          t={t}
           workspace={workspace}
           initial={modal.initial}
           defaultUniverseId={modal.universeId}
@@ -1280,7 +1284,6 @@ export function App() {
           onClose={() => setModal(null)}
           t={t}
           workspacePath={state.path}
-          locale={locale}
         />
       ) : null}
       {modal?.kind === "standard" ? (
@@ -1320,13 +1323,11 @@ function McpModal({
   onClose,
   t,
   workspacePath,
-  locale,
 }: {
   open: boolean;
   onClose: () => void;
   t: Translate;
   workspacePath: string;
-  locale: UiLocale;
 }) {
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [copied, setCopied] = useState(false);
@@ -1370,6 +1371,7 @@ function McpModal({
     <Modal
       open={open}
       onClose={onClose}
+      closeLabel={t("close")}
       title={t("mcpTitle")}
       description={t("mcpLead")}
       wide
@@ -1396,11 +1398,7 @@ function McpModal({
         <div>
           <span className="eyebrow">STDIO SERVER</span>
           <h3>
-            {info?.desktop
-              ? locale === "en"
-                ? "Bundled desktop server"
-                : "桌面内置服务"
-              : t("browserPreview")}
+            {info?.desktop ? t("mcpBundledDesktopServer") : t("browserPreview")}
           </h3>
           <p>{t("mcpToolsNote")}</p>
           <div className="tool-pills vertical">

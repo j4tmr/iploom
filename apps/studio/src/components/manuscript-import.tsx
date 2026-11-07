@@ -10,6 +10,7 @@ import {
   type ManuscriptAnalysisFailure,
 } from "../core/manuscript.ts";
 import type { StudioWorkspace, UiLocale } from "../core/types.ts";
+import type { Translate } from "../i18n.ts";
 import { bridge } from "../platform.ts";
 import { Button, Field, Modal, TextArea, TextInput } from "./ui.tsx";
 
@@ -19,14 +20,15 @@ const sameChunk = (left: ChunkRef, right: ChunkRef) =>
 
 export function ManuscriptImport({
   locale,
+  t,
   onClose,
   onImport,
 }: {
   locale: UiLocale;
+  t: Translate;
   onClose: () => void;
   onImport: (workspace: StudioWorkspace) => void;
 }) {
-  const en = locale === "en";
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [analysis, setAnalysis] = useState("");
@@ -88,33 +90,24 @@ export function ManuscriptImport({
         !nextSkipped.some((value) => sameChunk(value, chunk)),
     );
     if (!pending.length) {
-      setMessage(
-        en
-          ? "Every segment already has a result or was skipped. Edit the manuscript to start over."
-          : "所有片段均已有结果或已被跳过；修改原稿可重新分析。",
-      );
+      setMessage(t("importNothingPending"));
       return;
     }
     const info = await bridge.aiConfig().catch(() => null);
     if (!info?.configured) {
-      setMessage(
-        en
-          ? "Configure a model in desktop Settings first."
-          : "请先在桌面版设置中配置模型。",
-      );
+      setMessage(t("importNeedModel"));
       return;
     }
     const already = previous.length
-      ? en
-        ? ` ${previous.length}/${chunks.length} finished segments are kept and will not be sent again.`
-        : ` 已保留 ${previous.length}/${chunks.length} 个完成片段，不会重复发送。`
+      ? t("importKeptSegments", { done: previous.length, total: chunks.length })
       : "";
     if (
       !window.confirm(
-        (en
-          ? `Send ${pending.length} segments to ${info.endpoint} (${info.model})? Provider charges may apply.`
-          : `将 ${pending.length} 段原稿发送至 ${info.endpoint}（${info.model}）？服务商可能计费。`) +
-          already,
+        t("importSendConfirm", {
+          pending: pending.length,
+          endpoint: info.endpoint,
+          model: info.model,
+        }) + already,
       )
     )
       return;
@@ -133,7 +126,7 @@ export function ManuscriptImport({
           const id = createId("analyze");
           active.current = id;
           const index = chunks.findIndex((value) => sameChunk(value, chunk));
-          const label = `${en ? "Analyzing chapter" : "正在分析章节"} ${chunk.chapter} · ${index + 1}/${chunks.length}`;
+          const label = `${t("importAnalyzingLabel", { chapter: chunk.chapter })} · ${index + 1}/${chunks.length}`;
           setMessage(label);
           setOutput("");
           return (
@@ -163,31 +156,26 @@ export function ManuscriptImport({
         setReviewed(false);
       }
       if (canceled.current) {
-        setMessage(
-          en
-            ? `Analysis canceled. ${run.results.length} finished segments were kept.`
-            : `分析已取消；已保留 ${run.results.length} 个完成片段。`,
-        );
+        setMessage(t("importCanceled", { count: run.results.length }));
         return;
       }
       const skippedNote = nextSkipped.length
-        ? en
-          ? ` ${nextSkipped.length} skipped segments are excluded from the import.`
-          : ` 已跳过 ${nextSkipped.length} 个片段，不会写入导入结果。`
+        ? t("importSkippedNote", { count: nextSkipped.length })
         : "";
       if (run.failures.length) {
         const failure = run.failures[0]!;
         setMessage(
-          (en
-            ? `Chapter ${failure.chapter}, part ${failure.part} failed: ${failure.message} ${run.results.length}/${chunks.length} segments finished. Retry the failed segment without resending finished ones, or skip it and continue.`
-            : `第 ${failure.chapter} 章第 ${failure.part} 块失败：${failure.message} 已完成 ${run.results.length}/${chunks.length} 块。可重试失败片段（不会重发已完成片段），或跳过失败片段继续。`) +
-            skippedNote,
+          t("importFailure", {
+            chapter: failure.chapter,
+            part: failure.part,
+            message: failure.message,
+            done: run.results.length,
+            total: chunks.length,
+          }) + skippedNote,
         );
         return;
       }
-      const ready = en
-        ? "Analysis ready. Review names, directional relationships, scenes and source quotations before importing."
-        : "分析完成。请审阅人物名、关系方向、场景及原文依据，再确认导入。";
+      const ready = t("importReady");
       try {
         buildManuscriptImport(title, chapters, run.results, locale);
         setMessage(ready + skippedNote);
@@ -209,15 +197,7 @@ export function ManuscriptImport({
     const dirty = Boolean(
       title.trim() || text.trim() || analysis.trim() || results.length,
     );
-    if (
-      dirty &&
-      !window.confirm(
-        en
-          ? "This import has text or analysis that will not be kept. Close anyway?"
-          : "这次导入的原文或分析尚未导入，关闭后会丢失。确定关闭？",
-      )
-    )
-      return;
+    if (dirty && !window.confirm(t("importDiscardConfirm"))) return;
     onClose();
   };
   return (
@@ -225,16 +205,13 @@ export function ManuscriptImport({
       open
       onClose={requestClose}
       wide
-      title={en ? "Import existing novel" : "导入已有小说"}
-      description={
-        en
-          ? "TXT / Markdown or pasted text. Word, EPUB and PDF: export to plain text first. Import creates a new world and novel without overwriting existing work."
-          : "支持 TXT / Markdown 或粘贴文本。Word、EPUB、PDF 请先导出纯文本；导入会新建世界与小说，不覆盖已有作品。"
-      }
+      closeLabel={t("close")}
+      title={t("importTitle")}
+      description={t("importLead")}
       footer={
         <>
           <Button disabled={busy} onClick={requestClose}>
-            {en ? "Close" : "关闭"}
+            {t("close")}
           </Button>
           <Button
             data-testid="import-confirm"
@@ -261,19 +238,13 @@ export function ManuscriptImport({
               }
             }}
           >
-            {analysis
-              ? en
-                ? "Import reviewed assets and manuscript"
-                : "导入已审阅资产与原稿"
-              : en
-                ? "Import manuscript only"
-                : "仅导入原稿"}
+            {analysis ? t("importButtonReviewed") : t("importButtonPlain")}
           </Button>
         </>
       }
     >
       <fieldset disabled={busy} className="production-controls">
-        <Field label={en ? "Novel title / new world" : "小说标题 / 新世界名称"}>
+        <Field label={t("importTitleField")}>
           <TextInput
             data-testid="import-title"
             value={title}
@@ -281,9 +252,7 @@ export function ManuscriptImport({
             onChange={(e) => setTitle(e.target.value)}
           />
         </Field>
-        <Field
-          label={en ? "Choose TXT / Markdown" : "选择 TXT / Markdown 文件"}
-        >
+        <Field label={t("importChooseFile")}>
           <input
             type="file"
             accept=".txt,.md,.markdown,text/plain,text/markdown"
@@ -295,11 +264,7 @@ export function ManuscriptImport({
                   !/\.(txt|md|markdown)$/i.test(file.name) ||
                   file.size > 8_000_000
                 )
-                  throw new Error(
-                    en
-                      ? "Use TXT/Markdown under 8 MB."
-                      : "请选择 8 MB 以内的 TXT/Markdown。",
-                  );
+                  throw new Error(t("importFileTooLarge"));
                 const bytes = new Uint8Array(await file.arrayBuffer());
                 const encoding =
                   bytes[0] === 0xff && bytes[1] === 0xfe
@@ -314,23 +279,13 @@ export function ManuscriptImport({
                 resetSource(decoded);
                 setTitle(file.name.replace(/\.[^.]+$/, ""));
               } catch {
-                setMessage(
-                  en
-                    ? "Cannot read this file. Convert it to UTF-8 TXT/Markdown (up to 2 million characters)."
-                    : "无法读取此文件，请转换为 UTF-8 TXT/Markdown（不超过 200 万字符）。",
-                );
+                setMessage(t("importFileUnreadable"));
               }
             }}
           />
         </Field>
       </fieldset>
-      <Field
-        label={
-          en
-            ? "Original manuscript (editable before import)"
-            : "原稿（导入前可编辑）"
-        }
-      >
+      <Field label={t("importSourceLabel")}>
         <TextArea
           data-testid="import-text"
           rows={8}
@@ -341,8 +296,10 @@ export function ManuscriptImport({
       </Field>
       {parseError ? <p role="alert">{parseError}</p> : null}
       <p>
-        {en ? "Chapters / model requests" : "章节 / 模型请求数"}：
-        {chapters.length} / {chunks.length}
+        {t("importCounts", {
+          chapters: chapters.length,
+          requests: chunks.length,
+        })}
       </p>
       {plan.block ? <p role="alert">{plan.block}</p> : null}
       {plan.warnings.length ? (
@@ -353,7 +310,7 @@ export function ManuscriptImport({
         </ul>
       ) : null}
       <details>
-        <summary>{en ? "Chapter preview" : "章节拆分预览"}</summary>
+        <summary>{t("importPreview")}</summary>
         <ol>
           {chapters.map((chapter) => {
             const detail = plan.chapters.find(
@@ -362,17 +319,15 @@ export function ManuscriptImport({
             return (
               <li key={chapter.id}>
                 {chapter.title} · {chapter.content.length}
-                {detail ? ` · ${detail.parts} ${en ? "segments" : "块"}` : ""}
+                {detail
+                  ? ` · ${t("importSegments", { count: detail.parts })}`
+                  : ""}
               </li>
             );
           })}
         </ol>
       </details>
-      <p>
-        {en
-          ? "Analysis sends each manuscript segment to your configured model. Maximum 40 requests per import; larger novels can be split or imported without AI. Finished segments are kept if a later one fails or you cancel. All returned assets require exact source quotations and your review."
-          : "分析会将原稿分段发送给已配置模型。每次最多 40 个请求；更长小说可拆分，或先不使用 AI 导入。后续片段失败或取消时会保留已完成片段。资产须包含原文依据，并由你审阅。"}
-      </p>
+      <p>{t("importLeadBody")}</p>
       <Button
         disabled={
           busy || !chunks.length || Boolean(plan.block) || Boolean(parseError)
@@ -381,7 +336,7 @@ export function ManuscriptImport({
           void runAnalysis(results, [], false);
         }}
       >
-        {en ? "Analyze world, cast and scenes" : "自动分析世界、人物关系与场景"}
+        {t("importAnalyze")}
       </Button>
       {failures.length && !busy ? (
         <>
@@ -390,14 +345,14 @@ export function ManuscriptImport({
               void runAnalysis(results, [], false);
             }}
           >
-            {en ? "Retry failed segments" : "重试失败片段"}
+            {t("importRetry")}
           </Button>
           <Button
             onClick={() => {
               void runAnalysis(results, failures, true);
             }}
           >
-            {en ? "Skip failed and continue" : "跳过失败片段并继续"}
+            {t("importSkip")}
           </Button>
         </>
       ) : null}
@@ -408,7 +363,7 @@ export function ManuscriptImport({
             if (active.current) void bridge.cancelAi(active.current);
           }}
         >
-          {en ? "Cancel" : "取消分析"}
+          {t("importCancelAnalysis")}
         </Button>
       ) : null}
       <p role="status" aria-live="polite">
@@ -419,13 +374,7 @@ export function ManuscriptImport({
       ) : null}
       {analysis ? (
         <>
-          <Field
-            label={
-              en
-                ? "Review / edit extracted assets and evidence"
-                : "审阅 / 编辑资产与依据"
-            }
-          >
+          <Field label={t("importReviewLabel")}>
             <TextArea
               rows={12}
               value={analysis}
@@ -441,9 +390,7 @@ export function ManuscriptImport({
               checked={reviewed}
               onChange={(e) => setReviewed(e.target.checked)}
             />
-            {en
-              ? "I reviewed asset identities, relationships, scenes and source quotations."
-              : "已审阅资产身份、关系、场景及原文依据。"}
+            {t("importReviewConfirm")}
           </label>
         </>
       ) : null}

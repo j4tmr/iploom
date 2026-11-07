@@ -178,6 +178,31 @@ export function SectionTitle({
   );
 }
 
+/**
+ * Elements a dialog may move focus to, in document order. Visibility is not
+ * inspected: happy-dom has no layout, so `offsetParent`/`getBoundingClientRect`
+ * would report every element hidden and break the trap in tests. Overlays that
+ * hide a control use the `disabled`/`hidden` attributes this selector honors.
+ */
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  'input:not([disabled]):not([type="hidden"])',
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
+function focusableWithin(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+  ).filter(
+    (element) =>
+      !element.hasAttribute("hidden") &&
+      element.getAttribute("aria-hidden") !== "true",
+  );
+}
+
 export function Modal({
   open,
   title,
@@ -186,6 +211,7 @@ export function Modal({
   footer,
   onClose,
   wide,
+  closeLabel = "Close",
 }: {
   open: boolean;
   title: string;
@@ -194,8 +220,11 @@ export function Modal({
   footer?: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  /** Accessible name for the header close button; callers pass `t("close")`. */
+  closeLabel?: string;
 }) {
   const titleId = useId();
+  const dialogRef = useRef<HTMLElement>(null);
   // Escape and the backdrop both flow through the shared overlay stack, so a
   // dialog that opened on top of this one (the command palette) keeps Escape
   // for itself. The ref keeps the stable layer wired to the latest onClose.
@@ -216,6 +245,36 @@ export function Modal({
       document.body.style.overflow = previous;
     };
   }, [open]);
+  // Move focus into the dialog while it is open and hand it back to the
+  // trigger on close. The dialog itself takes focus (it is tabIndex -1) so
+  // screen readers announce the title instead of landing on the close button;
+  // Tab then walks the controls through the trap below. A child marked
+  // `autoFocus` keeps the focus React already moved to it during commit.
+  //
+  // The opener is captured during render, before the portal commits: React
+  // applies a descendant's `autoFocus` while committing, so a passive effect
+  // would read the dialog's own field as the previously focused element and
+  // the restore would target a node that is unmounted by then.
+  const opener = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
+  if (open && !wasOpen.current) {
+    opener.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+  }
+  wasOpen.current = open;
+  useEffect(() => {
+    if (!open) return;
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.contains(document.activeElement)) {
+      (dialog.querySelector<HTMLElement>("[data-autofocus]") ?? dialog).focus();
+    }
+    return () => {
+      const target = opener.current;
+      if (target?.isConnected) target.focus();
+    };
+  }, [open]);
   if (!open) return null;
   return createPortal(
     // biome-ignore lint/a11y/noStaticElementInteractions: the backdrop only handles mouse dismissal; Escape is handled by the overlay stack
@@ -229,17 +288,44 @@ export function Modal({
       }}
     >
       <section
+        ref={dialogRef}
         className={`modal ${wide ? "modal-wide" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={(event) => {
+          if (event.key !== "Tab") return;
+          const dialog = event.currentTarget;
+          const focusables = focusableWithin(dialog);
+          if (!focusables.length) {
+            event.preventDefault();
+            dialog.focus();
+            return;
+          }
+          const first = focusables[0]!;
+          const last = focusables[focusables.length - 1]!;
+          const current = document.activeElement;
+          const inside = current instanceof Node && dialog.contains(current);
+          if (event.shiftKey) {
+            // Shift-Tab from the first control (or from the dialog chrome,
+            // which is not a tab stop itself) wraps to the last one.
+            if (!inside || current === first || current === dialog) {
+              event.preventDefault();
+              last.focus();
+            }
+          } else if (!inside || current === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }}
       >
         <header className="modal-head">
           <div>
             <h2 id={titleId}>{title}</h2>
             {description ? <p>{description}</p> : null}
           </div>
-          <IconButton label="Close" icon="close" onClick={requestClose} />
+          <IconButton label={closeLabel} icon="close" onClick={requestClose} />
         </header>
         <div className="modal-body">{children}</div>
         {footer ? <footer className="modal-foot">{footer}</footer> : null}

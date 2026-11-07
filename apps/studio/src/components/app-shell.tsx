@@ -1,7 +1,12 @@
 import { displayText, workWords } from "../core/factory.ts";
 import type { AiConfigInfo } from "../core/ai.ts";
 import type { StudioWorkspace, ThemeMode, UiLocale } from "../core/types.ts";
-import { formatNumber, type Translate } from "../i18n.ts";
+import {
+  formatNumber,
+  localeShortLabels,
+  otherLocale,
+  type Translate,
+} from "../i18n.ts";
 import type { SaveState } from "../use-studio-workspace.ts";
 import type { StudioRoute } from "../routes.ts";
 import { Icon, type IconName } from "./icon.tsx";
@@ -45,11 +50,10 @@ export function Sidebar({
           <small>STUDIO</small>
         </span>
       </div>
-      <button
-        type="button"
-        className="workspace-switcher"
-        title={workspace.name}
-      >
+      {/* One local workspace per project: this is an identity card, not a
+          menu. It used to be a button with no handler, which promised a
+          switcher that does not exist. */}
+      <div className="workspace-switcher" title={workspace.name}>
         <span className="workspace-avatar">
           <Icon name="layers" size={16} />
         </span>
@@ -57,8 +61,7 @@ export function Sidebar({
           <small>{t("workspace")}</small>
           <strong>{workspace.name}</strong>
         </span>
-        <Icon name="chevron" size={14} />
-      </button>
+      </div>
       <nav className="sidebar-nav" aria-label={t("workspace")}>
         {nav.map((item) => (
           <button
@@ -66,6 +69,7 @@ export function Sidebar({
             key={item.route}
             data-route={item.route}
             className={route.name === item.route ? "active" : ""}
+            aria-current={route.name === item.route ? "page" : undefined}
             onClick={() => onNavigate({ name: item.route } as StudioRoute)}
           >
             <Icon name={item.icon} size={18} />
@@ -91,6 +95,11 @@ export function Sidebar({
                 route.name === "universe" && route.id === universe.id
                   ? "active"
                   : ""
+              }
+              aria-current={
+                route.name === "universe" && route.id === universe.id
+                  ? "page"
+                  : undefined
               }
               onClick={() => onNavigate({ name: "universe", id: universe.id })}
             >
@@ -127,6 +136,7 @@ export function Sidebar({
       <button
         type="button"
         className={`sidebar-settings ${route.name === "settings" ? "active" : ""}`}
+        aria-current={route.name === "settings" ? "page" : undefined}
         onClick={() => onNavigate({ name: "settings" })}
       >
         <Icon name="settings" size={18} />
@@ -197,10 +207,10 @@ export function Topbar({
         <IconButton
           label={t("switchLanguage")}
           icon="globe"
-          onClick={() => onSetLocale(locale === "zh-CN" ? "en" : "zh-CN")}
+          onClick={() => onSetLocale(otherLocale(locale))}
           className="locale-button"
         />
-        <span className="locale-code">{locale === "zh-CN" ? "中" : "EN"}</span>
+        <span className="locale-code">{localeShortLabels[locale]}</span>
         <IconButton
           label={t("switchTheme")}
           icon={theme === "dark" ? "sun" : "moon"}

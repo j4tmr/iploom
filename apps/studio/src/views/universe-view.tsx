@@ -511,6 +511,7 @@ export function UniverseView({
             <RelationshipCanvas
               graph={graph}
               locale={locale}
+              t={t}
               onNodeClick={(node) => {
                 const character = characters.find(
                   (item) => item.id === node.id,

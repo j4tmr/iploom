@@ -6,6 +6,7 @@ import type {
   TimelineEventKind,
   TimelineSubjectKind,
   UiLocale,
+  WorkflowTaskTemplate,
   WorkStatus,
 } from "./core/types.ts";
 
@@ -120,6 +121,7 @@ const zh = {
   close: "关闭",
   delete: "删除",
   confirmDelete: "确定删除吗？此操作会立即写入本地工作区。",
+  confirmDeleteSubtasks: "确定删除此任务及其 {count} 个子任务吗？",
   deleteEverywhere: "在所有世界删除",
   removeFromThisWorld: "从此世界移除",
   confirmDeleteCharacterEverywhere:
@@ -268,6 +270,7 @@ const zh = {
   manifestHash: "Manifest SHA-256",
   adaptationStyle: "视觉风格",
   style3d: "风格化 3D 动画（3D 漫）",
+  style3dMeta: "9:16 · 角色设定图 · 反向提示词 · 场景草案",
   totalScenes: "场景总数",
   totalShots: "镜头总数",
   sourceChapters: "来源章节",
@@ -284,6 +287,9 @@ const zh = {
   themeLight: "日间",
   themeDark: "夜间",
   aspectRatio: "默认画幅",
+  aspectRatioVertical: "9:16 · 竖屏",
+  aspectRatioLandscape: "16:9 · 横屏",
+  aspectRatioSquare: "1:1 · 方形",
   dataLocation: "本地数据",
   dataLocationNote: "桌面版以原子写入保存 workspace.json，并保留上一版备份。",
   mcpTitle: "MCP 连接",
@@ -294,6 +300,7 @@ const zh = {
   copied: "已复制",
   mcpTools: "可用工具",
   mcpToolsNote: "11 个只读查询工具 + 2 个基础规则写入工具 + 1 个本地导出工具。",
+  mcpBundledDesktopServer: "桌面内置服务",
   resetDemo: "载入演示工作区",
   resetDemoNote:
     "先把当前工作区存入 snapshots 快照目录，再载入双世界演示数据。",
@@ -468,6 +475,264 @@ const zh = {
   issueSceneNeedsChapter: "场景需要先绑定章节",
   issueSceneSubjectNeedsChapter: "场景主体需要先绑定章节",
   issueMoreIssues: "（另有 {count} 项问题）",
+  searchDialogLabel: "搜索工作区",
+  searchNavigate: "切换",
+  searchOpen: "打开",
+  searchResultCount: "{count} 条结果",
+  graphLabel: "人物关系图",
+  graphEmpty: "添加人物后，关系图会在这里生长。",
+  graphNodeOpen: "编辑人物 {name}",
+  notesSourceEvidence: "说明 / 原文依据",
+  productionSummary: "AI 制作台 · 提示词、实时工作与结果审阅",
+  productionWorking: "正在工作",
+  productionLead:
+    "选择制作对象，生成并编辑对应提示词，再明确发送给已配置模型。产出为待审设计稿，不代表已生成图片或视频。",
+  productionExistingTask: "现有工作流任务",
+  productionNewDesign: "新建设计",
+  productionTemplate: "制作模板",
+  productionWorld: "世界",
+  productionNovel: "小说",
+  productionChapter: "章节",
+  productionCharacter: "人物",
+  productionRelevantCast: "相关人物",
+  productionCompose: "生成对应提示词",
+  productionTasksAdded: "已在工作流中建立六个有依赖关系的制作任务。",
+  productionTasksNotSaved: "制作任务未能保存。",
+  productionCreateWorkflow: "建立制作工作流",
+  productionPromptLabel: "将发送给模型的提示词（可编辑）",
+  productionDependencyBlocker: "请先审阅并完成前置任务，再执行此任务。",
+  productionCopyPrompt: "复制提示词",
+  productionConfigureFirst: "请先在设置中配置模型（仅桌面版）。",
+  productionSendConfirm:
+    "将此提示词发送至 {endpoint}，使用 {model}？服务商可能计费。",
+  productionRerunConfirm:
+    "再次运行将替换“{title}”已审阅的结果。旧结果仍可找回，依赖此产出的已完成任务会标记需复审。继续吗？",
+  productionWorkingOn: "正在执行：{label}",
+  productionTaskChanged: "任务已发生变化，无法标记为进行中；请重新打开后再试。",
+  productionTargetRemoved:
+    "执行期间目标已被删除，请复制结果保留，本次没有写入。",
+  productionOutputTooLong: "输出超过保存长度，请先复制保留。",
+  productionResultNotSaved: "结果未能保存，请先复制保留。",
+  productionResultNotSavedToWorkflow: "结果未能写入工作流，请先复制保留。",
+  productionDraftSaved: "设计稿已保存到工作流，等待审阅；原稿未被覆盖。",
+  productionSendRun: "发送并执行",
+  productionPromptTooLong: "提示词超过 {limit} 字符，请缩小范围或编辑后发送。",
+  productionLiveOutput: "实时产出 / 待审结果",
+  productionCopyResult: "复制结果",
+  productionReviewedSaved: "审阅修改已保存，确认后可在工作流标记完成。",
+  productionReviewedNotSaved: "审阅修改未能保存。",
+  productionSaveReviewed: "保存审阅修改",
+  importNovel: "导入已有小说",
+  importTitle: "导入已有小说",
+  importLead:
+    "支持 TXT / Markdown 或粘贴文本。Word、EPUB、PDF 请先导出纯文本；导入会新建世界与小说，不覆盖已有作品。",
+  importTitleField: "小说标题 / 新世界名称",
+  importChooseFile: "选择 TXT / Markdown 文件",
+  importFileTooLarge: "请选择 8 MB 以内的 TXT/Markdown。",
+  importFileUnreadable:
+    "无法读取此文件，请转换为 UTF-8 TXT/Markdown（不超过 200 万字符）。",
+  importSourceLabel: "原稿（导入前可编辑）",
+  importCounts: "章节 / 模型请求数：{chapters} / {requests}",
+  importPreview: "章节拆分预览",
+  importSegments: "{count} 块",
+  importLeadBody:
+    "分析会将原稿分段发送给已配置模型。每次最多 40 个请求；更长小说可拆分，或先不使用 AI 导入。后续片段失败或取消时会保留已完成片段。资产须包含原文依据，并由你审阅。",
+  importAnalyze: "自动分析世界、人物关系与场景",
+  importRetry: "重试失败片段",
+  importSkip: "跳过失败片段并继续",
+  importCancelAnalysis: "取消分析",
+  importReviewLabel: "审阅 / 编辑资产与依据",
+  importReviewConfirm: "已审阅资产身份、关系、场景及原文依据。",
+  importButtonReviewed: "导入已审阅资产与原稿",
+  importButtonPlain: "仅导入原稿",
+  importNothingPending: "所有片段均已有结果或已被跳过；修改原稿可重新分析。",
+  importNeedModel: "请先在桌面版设置中配置模型。",
+  importKeptSegments: " 已保留 {done}/{total} 个完成片段，不会重复发送。",
+  importSendConfirm:
+    "将 {pending} 段原稿发送至 {endpoint}（{model}）？服务商可能计费。",
+  importAnalyzingLabel: "正在分析章节 {chapter}",
+  importCanceled: "分析已取消；已保留 {count} 个完成片段。",
+  importSkippedNote: " 已跳过 {count} 个片段，不会写入导入结果。",
+  importFailure:
+    "第 {chapter} 章第 {part} 块失败：{message} 已完成 {done}/{total} 块。可重试失败片段（不会重发已完成片段），或跳过失败片段继续。",
+  importReady: "分析完成。请审阅人物名、关系方向、场景及原文依据，再确认导入。",
+  importDiscardConfirm:
+    "这次导入的原文或分析尚未导入，关闭后会丢失。确定关闭？",
+  scenesTitle: "场景与制作镜头",
+  scenesLead:
+    "为章节维护场景地点、出场人物与镜头提示词。AI 草案先在制作台审阅，再将确认的设计填入这里。",
+  scenesShots: "{count} 镜头",
+  sceneTitleField: "场景标题",
+  sceneSummaryField: "行动、时间与原文依据",
+  sceneLocationField: "地点",
+  sceneCastField: "出场人物",
+  sceneShot: "镜头",
+  sceneNew: "新场景",
+  sceneAdd: "添加场景",
+  sceneDelete: "删除场景",
+  sceneDeleteConfirm: "删除此场景及镜头？",
+  shotFraming: "景别",
+  shotAction: "动作 / 调度",
+  shotCamera: "摄影 / 运镜",
+  shotDialogue: "对白 / 声音",
+  shotVisualPrompt: "图像 / 视频制作提示词",
+  shotDuration: "时长（毫秒）",
+  shotAdd: "添加镜头",
+  shotDelete: "删除镜头",
+  shotDeleteConfirm: "删除此镜头？",
+  aiSettingsLead:
+    "兼容 Chat Completions。配置与密钥仅保存在本次桌面会话内存，重启后需重新填写；只有点击执行才发送内容。本地服务可不填密钥。",
+  aiBaseUrl: "API 基础地址（含 /v1）",
+  aiModelId: "模型 ID",
+  aiApiKey: "API 密钥",
+  aiConfigureSession: "配置本次会话",
+  characterUnsavedClose: "这个人物还有未保存的修改，关闭后会丢失。确定关闭？",
+  workflowUnsavedSwitch:
+    "当前任务的结果有未保存的修改，切换后这些修改会丢失。继续切换？",
+  workflowStatReady: "可独立开始",
+  workflowStatWaiting: "等待依赖",
+  workflowStatActive: "进行中",
+  workflowStatReview: "待审",
+  workflowStatDone: "已完成",
+  workflowFilterReady: "可开始",
+  workflowFilterWaiting: "等待中",
+  workflowFilterActive: "进行中",
+  workflowFilterDone: "已完成",
+  workflowReReview: "需复审",
+  workflowBlocker: "依赖",
+  workflowSuperseded:
+    "上游任务的结果已更新，本任务通过审阅时的产出可能过期；重新审阅并保存后标记完成即可清除。",
+  workflowDependencyOpen: " · 未完成",
+  workflowConflict:
+    "这个结果的已保存版本在别处被更新了。你的修改仍保留在这里，未被覆盖。",
+  workflowLoadSavedVersion: "载入已保存版本",
+  workflowPreviousResult: "上次运行前的结果",
+  workflowRestoreVersion: "恢复此版本",
+  foundationScopeWorld: "限「{world}」",
+  foundationScopeUnknown: "限未知宇宙",
+  foundationStatTotal: "规则总数",
+  foundationStatActive: "生效",
+  foundationStatDraft: "草稿",
+  foundationStatDisabled: "停用",
+  foundationStatPinned: "已引用任务",
+  foundationNeedModel: "请先在设置中配置模型（仅桌面版），再让 AI 起草规则。",
+  foundationDraftConfirm:
+    "根据当前项目前提起草基础规则，并发送至 {endpoint}（{model}）？服务商可能计费。",
+  foundationDraftingMessage: "正在根据已登记的项目前提起草候选规则…",
+  foundationDraftLabel: "起草项目基础规则",
+  foundationDraftEmpty:
+    "模型没有返回可登记的规则，请重试或手动新建。原有规则未改动。",
+  foundationDraftGenerated:
+    "已生成 {count} 条候选规则。勾选并登记后才会写入项目，且默认仍为草稿。",
+  foundationDraftingShort: "AI 起草中…",
+  foundationDraftAction: "AI 起草规则",
+  foundationNewStandardShort: "新建规则",
+  foundationSearchPlaceholder: "搜索规则、正文或 ID…",
+  foundationSearchLabel: "搜索规则",
+  foundationNoMatch: "没有匹配的规则。",
+  foundationEmptyLead:
+    "基础规则约束所有 AI 产出；小说、游戏与设定集共用同一套规则。",
+  foundationDraftingTitle: "正在起草候选规则",
+  foundationDraftingLead:
+    "模型会读取已登记的世界与作品前提，返回 3 到 6 条可执行的规则候选。不会直接写入项目。",
+  foundationReviewCandidates: "审阅候选规则",
+  foundationCandidateCount: "{count} 条",
+  foundationCandidateLead:
+    "只登记确认过的条目；登记后为草稿，启用后才会注入 AI 提示词与工作简报。",
+  foundationRegisteredCount:
+    "已登记 {count} 条草稿规则。启用后才会影响 AI 产出。",
+  foundationRegisterSelected: "登记选中（{count}）",
+  foundationClearAll: "取消全选",
+  foundationSelectAll: "全选",
+  foundationDiscard: "丢弃候选",
+  foundationPinnedCount: "{count} 个任务引用",
+  foundationBodyLabel: "规则正文",
+  foundationAppliedScope: "生效范围",
+  foundationActiveScope:
+    "此规则会注入项目内所有匹配范围的 AI 提示词与工作简报。",
+  foundationInactiveScope:
+    "草稿与停用规则不会注入提示词；启用后才参与 AI 工作。",
+  foundationPinnedByTasks: "任务固定引用",
+  foundationNoPins:
+    "还没有任务固定引用此规则；新建任务时会自动固定当时生效的版本。",
+  foundationDisable: "停用",
+  foundationActivate: "启用",
+  foundationCopyBody: "复制正文",
+  foundationNoSelectionLead:
+    "选择一条规则查看正文、适用范围和被任务固定的版本。",
+  timelineHeading: "每一次变化，都留下可追溯的状态。",
+  timelineLead:
+    "按章节或故事内时间追踪人物、场景、地点与物件。既定状态会进入制作提示词，提案状态保持明确标记。",
+  timelineAddEvent: "新增状态事件",
+  timelineUniverseLabel: "宇宙",
+  timelineAllNovels: "全部小说",
+  timelineStateOwner: "状态主体",
+  timelineAllSubjects: "全部主体",
+  timelineCanonStatus: "事实状态",
+  timelineCanonAndProposals: "既定事实 + 提案",
+  timelineCanonOnly: "仅既定事实",
+  timelineProposalsOnly: "仅待审提案",
+  timelineSearchPlaceholder: "搜索状态、证据或提示词…",
+  timelineVisibleEvents: "可见事件",
+  timelineCanonStates: "既定状态",
+  timelineReusableProps: "可复用物件",
+  timelineChapterAnchors: "章节锚点",
+  timelineStreamLabel: "故事时间线",
+  timelineCanon: "既定事实",
+  timelineProposed: "待审提案",
+  timelineEditEvent: "编辑事件",
+  timelineDeleteEvent: "删除事件",
+  timelineStateOf: "状态主体",
+  timelineBefore: "变化前",
+  timelineAfter: "变化后",
+  timelineProductionState: "制作状态提示词",
+  timelineEvidence: "依据",
+  timelineNoEvents: "当前筛选下没有状态事件。",
+  timelineCreateFirst: "建立第一个事件",
+  timelineEmptyLead:
+    "记录首次出现、服装变化、受伤、关系揭示、地点变化或物件交接。",
+  timelineNewProp: "新增物件",
+  timelineObjectsLead:
+    "物件在人物与场景之间流转时，固定轮廓、材质、磨损和持有规则。",
+  timelineProp: "物件",
+  timelineLinkCount: "{count} 条时间线关联",
+  timelineDeleteProp: "删除物件",
+  timelineAddFirstProp: "添加第一个可复用物件",
+  storyObjectEditTitle: "编辑故事物件",
+  storyObjectNewTitle: "新增故事物件",
+  storyObjectLead:
+    "物件可以记录外观、磨损、持有者变化、揭示规则与可复用的图像提示词。",
+  storyObjectSave: "保存物件",
+  storyObjectUniverseFixed: "创建后不可更改所属宇宙。",
+  storyObjectCategoryZh: "中文类别",
+  storyObjectCategoryEn: "英文类别",
+  storyObjectVisualPrompt: "可复用视觉提示词",
+  storyObjectVisualPromptHint: "固定 Identity、材质、磨损、视图与负向约束。",
+  storyObjectSourceNotes: "来源与连续性备注",
+  timelineEventEditTitle: "编辑时间线事件",
+  timelineEventNewTitle: "新增时间线事件",
+  timelineEventLead:
+    "把状态变化绑定到章节、故事内时间或两者。既定事实与未来提案会保持明确区分。",
+  timelineSaveEvent: "保存事件",
+  timelineNovelSource: "小说 / 来源",
+  timelineChapterAnchor: "章节锚点",
+  timelineChapterAnchorHint: "填写故事内时间时可留空。",
+  timelineStoryTime: "故事内时间",
+  timelineStoryTimeHint: "例如：帝国历 112 年冬月初七 22:40。",
+  timelineSceneAssociation: "关联场景",
+  timelineOrder: "同一时间锚点内顺序",
+  timelineSubject: "具体对象",
+  timelineEventKind: "事件类型",
+  timelineEstablished: "已确立 / 既定事实",
+  timelineProposedNeedsReview: "提案 / 待审",
+  timelineStateBefore: "变化前状态",
+  timelineStateAfter: "变化后状态",
+  timelineCharacters: "关联人物",
+  timelineLocations: "关联地点",
+  timelineProps: "关联物件",
+  timelineEvidenceField: "证据 / 原文位置",
+  timelineProductionPrompt: "制作状态提示词",
+  timelineProductionPromptHint: "描述可看见的状态，而不是重复剧情摘要。",
 } as const;
 
 export type MessageKey = keyof typeof zh;
@@ -592,6 +857,7 @@ const en: Record<MessageKey, string> = {
   delete: "Delete",
   confirmDelete:
     "Delete this item? The change will be written to your local workspace.",
+  confirmDeleteSubtasks: "Delete this task and {count} subtask(s)?",
   deleteEverywhere: "Delete in all worlds",
   removeFromThisWorld: "Remove from this world",
   confirmDeleteCharacterEverywhere:
@@ -747,6 +1013,8 @@ const en: Record<MessageKey, string> = {
   manifestHash: "Manifest SHA-256",
   adaptationStyle: "Visual direction",
   style3d: "Stylized 3D animation (3D comic drama)",
+  style3dMeta:
+    "9:16 · character model sheets · negative prompts · scene drafts",
   totalScenes: "Total scenes",
   totalShots: "Total shots",
   sourceChapters: "Source chapters",
@@ -765,6 +1033,9 @@ const en: Record<MessageKey, string> = {
   themeLight: "Light",
   themeDark: "Dark",
   aspectRatio: "Default frame",
+  aspectRatioVertical: "9:16 · Vertical",
+  aspectRatioLandscape: "16:9 · Landscape",
+  aspectRatioSquare: "1:1 · Square",
   dataLocation: "Local data",
   dataLocationNote:
     "The desktop app writes workspace.json atomically and retains the previous backup.",
@@ -777,6 +1048,7 @@ const en: Record<MessageKey, string> = {
   mcpTools: "Available tools",
   mcpToolsNote:
     "11 read-only query tools + 2 foundation-standard writers + 1 local export tool.",
+  mcpBundledDesktopServer: "Bundled desktop server",
   resetDemo: "Load demo workspace",
   resetDemoNote:
     "Save the current workspace into the snapshots folder, then load the two-world demo.",
@@ -962,6 +1234,282 @@ const en: Record<MessageKey, string> = {
   issueSceneNeedsChapter: "A scene requires a chapter",
   issueSceneSubjectNeedsChapter: "A scene subject requires a chapter",
   issueMoreIssues: " (+{count} more)",
+  searchDialogLabel: "Search the workspace",
+  searchNavigate: "navigate",
+  searchOpen: "open",
+  searchResultCount: "{count} results",
+  graphLabel: "Character relationship graph",
+  graphEmpty: "Add characters to grow the map.",
+  graphNodeOpen: "Edit character {name}",
+  notesSourceEvidence: "Notes / source evidence",
+  productionSummary: "AI production desk · prompts, live output and review",
+  productionWorking: "Working",
+  productionLead:
+    "Select the production target, compose and edit its prompt, then explicitly send it to your configured model. Output is a draft specification, not rendered media.",
+  productionExistingTask: "Existing workflow task",
+  productionNewDesign: "New design",
+  productionTemplate: "Template",
+  productionWorld: "World",
+  productionNovel: "Novel",
+  productionChapter: "Chapter",
+  productionCharacter: "Character",
+  productionRelevantCast: "Relevant cast",
+  productionCompose: "Compose prompt",
+  productionTasksAdded: "Six dependent production tasks added to Workflow.",
+  productionTasksNotSaved: "The production tasks were not saved.",
+  productionCreateWorkflow: "Create production workflow",
+  productionPromptLabel: "Prompt sent to model (editable)",
+  productionDependencyBlocker:
+    "Approve dependency results before running this task.",
+  productionCopyPrompt: "Copy prompt",
+  productionConfigureFirst:
+    "Configure a model in Settings first (desktop only).",
+  productionSendConfirm:
+    "Send this prompt to {endpoint} using {model}? Provider charges may apply.",
+  productionRerunConfirm:
+    "Running again replaces the reviewed result on “{title}”. The previous result stays recoverable, and done tasks that depend on this output will be flagged for re-review. Continue?",
+  productionWorkingOn: "Working on: {label}",
+  productionTaskChanged:
+    "This task changed while the panel was open and could not be marked active. Reopen it and try again.",
+  productionTargetRemoved:
+    "The target was removed while running. Copy the result; it was not saved.",
+  productionOutputTooLong:
+    "Output exceeds the saved-result limit; copy it before continuing.",
+  productionResultNotSaved:
+    "The result was not saved; copy it before continuing.",
+  productionResultNotSavedToWorkflow:
+    "The result could not be saved to Workflow. Copy it before continuing.",
+  productionDraftSaved:
+    "Draft saved to Workflow for review. Source manuscript is unchanged.",
+  productionSendRun: "Send and run",
+  productionPromptTooLong:
+    "Prompt exceeds {limit} characters. Narrow its scope or edit it before sending.",
+  productionLiveOutput: "Live draft / reviewed result",
+  productionCopyResult: "Copy result",
+  productionReviewedSaved:
+    "Reviewed edits saved. Mark the task done in Workflow when ready.",
+  productionReviewedNotSaved: "The reviewed edits were not saved.",
+  productionSaveReviewed: "Save reviewed edits",
+  importNovel: "Import novel",
+  importTitle: "Import existing novel",
+  importLead:
+    "TXT / Markdown or pasted text. Export Word, EPUB or PDF to plain text first. Import creates a new world and novel; existing works are not overwritten.",
+  importTitleField: "Novel title / new world name",
+  importChooseFile: "Choose TXT / Markdown",
+  importFileTooLarge: "Use TXT/Markdown under 8 MB.",
+  importFileUnreadable:
+    "Cannot read this file. Convert it to UTF-8 TXT/Markdown (up to 2 million characters).",
+  importSourceLabel: "Original manuscript (editable before import)",
+  importCounts: "Chapters / model requests: {chapters} / {requests}",
+  importPreview: "Chapter preview",
+  importSegments: "{count} segments",
+  importLeadBody:
+    "Analysis sends the manuscript to the configured model in segments, up to 40 requests per run. Split longer novels or import without AI. If later segments fail or you cancel, finished segments are kept. Assets must cite source quotations and are reviewed by you.",
+  importAnalyze: "Analyze world, cast and scenes",
+  importRetry: "Retry failed segments",
+  importSkip: "Skip failed and continue",
+  importCancelAnalysis: "Cancel analysis",
+  importReviewLabel: "Review / edit extracted assets and evidence",
+  importReviewConfirm:
+    "I reviewed asset identities, relationships, scenes and source quotations.",
+  importButtonReviewed: "Import reviewed assets and manuscript",
+  importButtonPlain: "Import manuscript only",
+  importNothingPending:
+    "Every segment already has a result or was skipped; edit the manuscript to analyze again.",
+  importNeedModel: "Configure a model in desktop Settings first.",
+  importKeptSegments:
+    " {done}/{total} finished segments are kept and will not be sent again.",
+  importSendConfirm:
+    "Send {pending} segments to {endpoint} ({model})? Provider charges may apply.",
+  importAnalyzingLabel: "Analyzing chapter {chapter}",
+  importCanceled: "Analysis canceled. {count} finished segments were kept.",
+  importSkippedNote: " {count} skipped segments are excluded from the import.",
+  importFailure:
+    "Chapter {chapter}, part {part} failed: {message} {done}/{total} segments finished. Retry the failed segment without resending finished ones, or skip it and continue.",
+  importReady:
+    "Analysis ready. Review names, directional relationships, scenes and source quotations before importing.",
+  importDiscardConfirm:
+    "This import has text or analysis that has not been imported. Close anyway?",
+  scenesTitle: "Scenes and production shots",
+  scenesLead:
+    "Keep scene locations, cast and shot prompts per chapter. Review AI drafts in the production panel, then carry the approved design here.",
+  scenesShots: "{count} shots",
+  sceneTitleField: "Scene title",
+  sceneSummaryField: "Action, time and source evidence",
+  sceneLocationField: "Location",
+  sceneCastField: "Cast",
+  sceneShot: "Shot",
+  sceneNew: "New scene",
+  sceneAdd: "Add scene",
+  sceneDelete: "Delete scene",
+  sceneDeleteConfirm: "Delete this scene and its shots?",
+  shotFraming: "Framing",
+  shotAction: "Action / staging",
+  shotCamera: "Camera / motion",
+  shotDialogue: "Dialogue / audio",
+  shotVisualPrompt: "Image / video production prompt",
+  shotDuration: "Duration (milliseconds)",
+  shotAdd: "Add shot",
+  shotDelete: "Delete shot",
+  shotDeleteConfirm: "Delete this shot?",
+  aiSettingsLead:
+    "Chat Completions compatible. Configuration and key stay in desktop memory for this session only; re-enter them after a restart. Nothing is sent until you run a request. Local servers may leave the key blank.",
+  aiBaseUrl: "API base URL (including /v1)",
+  aiModelId: "Model ID",
+  aiApiKey: "API key",
+  aiConfigureSession: "Configure session",
+  characterUnsavedClose:
+    "This character has unsaved changes that will be lost. Close anyway?",
+  workflowUnsavedSwitch:
+    "This result has unsaved edits. Switching tasks will discard them. Continue?",
+  workflowStatReady: "Ready",
+  workflowStatWaiting: "Waiting",
+  workflowStatActive: "Active",
+  workflowStatReview: "In review",
+  workflowStatDone: "Done",
+  workflowFilterReady: "Ready",
+  workflowFilterWaiting: "Waiting",
+  workflowFilterActive: "Active",
+  workflowFilterDone: "Done",
+  workflowReReview: "Re-review",
+  workflowBlocker: "blocker",
+  workflowSuperseded:
+    "An upstream task's result changed, so the output from when you reviewed this task may be stale. Review again and save to clear this.",
+  workflowDependencyOpen: " · Open",
+  workflowConflict:
+    "A newer saved version of this result appeared elsewhere. Your edits are still here and were not overwritten.",
+  workflowLoadSavedVersion: "Load saved version",
+  workflowPreviousResult: "Result before the last run",
+  workflowRestoreVersion: "Restore this version",
+  foundationScopeWorld: "Only {world}",
+  foundationScopeUnknown: "Unknown world",
+  foundationStatTotal: "Total",
+  foundationStatActive: "Active",
+  foundationStatDraft: "Draft",
+  foundationStatDisabled: "Disabled",
+  foundationStatPinned: "Pinned tasks",
+  foundationNeedModel:
+    "Configure a model in Settings first (desktop only), then let AI draft standards.",
+  foundationDraftConfirm:
+    "Draft foundation standards from the current premise and send them to {endpoint} ({model})? Provider charges may apply.",
+  foundationDraftingMessage:
+    "Drafting candidate standards from the registered premise…",
+  foundationDraftLabel: "Draft project foundation standards",
+  foundationDraftEmpty:
+    "The model returned no registrable standards. Retry or add one manually; existing standards were not changed.",
+  foundationDraftGenerated:
+    "{count} candidate standards generated. Nothing is written until you select and register them; they register as drafts.",
+  foundationDraftingShort: "Drafting…",
+  foundationDraftAction: "AI draft",
+  foundationNewStandardShort: "New standard",
+  foundationSearchPlaceholder: "Search standards, bodies or IDs…",
+  foundationSearchLabel: "Search standards",
+  foundationNoMatch: "No standards match.",
+  foundationEmptyLead:
+    "Foundation standards constrain every AI deliverable; novels, games and setting bibles share the same rules.",
+  foundationDraftingTitle: "Drafting candidates",
+  foundationDraftingLead:
+    "The model reads the registered worlds and works, then returns 3–6 executable candidates. Nothing is written to the project directly.",
+  foundationReviewCandidates: "Review candidates",
+  foundationCandidateCount: "{count} drafts",
+  foundationCandidateLead:
+    "Register only what you have reviewed. Entries are saved as drafts and join prompts only after activation.",
+  foundationRegisteredCount:
+    "{count} draft standards registered. They affect AI output once activated.",
+  foundationRegisterSelected: "Register selected ({count})",
+  foundationClearAll: "Clear all",
+  foundationSelectAll: "Select all",
+  foundationDiscard: "Discard",
+  foundationPinnedCount: "{count} tasks pinned",
+  foundationBodyLabel: "Standard body",
+  foundationAppliedScope: "Applied scope",
+  foundationActiveScope:
+    "This standard is injected into every matching AI prompt and workflow brief in the project.",
+  foundationInactiveScope:
+    "Draft and disabled standards are not injected. Activate one to include it in AI work.",
+  foundationPinnedByTasks: "Pinned by tasks",
+  foundationNoPins:
+    "No task pins this standard yet. New tasks pin the active version automatically.",
+  foundationDisable: "Disable",
+  foundationActivate: "Activate",
+  foundationCopyBody: "Copy body",
+  foundationNoSelectionLead:
+    "Select a standard to see its body, scope and pinned versions.",
+  timelineHeading: "Every change leaves a trace.",
+  timelineLead:
+    "Track characters, scenes, locations and props by chapter or in-world time. Canon states feed production prompts; proposals stay clearly marked.",
+  timelineAddEvent: "Add state event",
+  timelineUniverseLabel: "World",
+  timelineAllNovels: "All novels",
+  timelineStateOwner: "State owner",
+  timelineAllSubjects: "All state owners",
+  timelineCanonStatus: "Canon status",
+  timelineCanonAndProposals: "Canon + proposals",
+  timelineCanonOnly: "Canon only",
+  timelineProposalsOnly: "Proposals only",
+  timelineSearchPlaceholder: "Search state, evidence or prompt…",
+  timelineVisibleEvents: "visible events",
+  timelineCanonStates: "canon states",
+  timelineReusableProps: "reusable props",
+  timelineChapterAnchors: "chapter anchors",
+  timelineStreamLabel: "Story timeline",
+  timelineCanon: "Canon",
+  timelineProposed: "Proposed",
+  timelineEditEvent: "Edit event",
+  timelineDeleteEvent: "Delete event",
+  timelineStateOf: "State of",
+  timelineBefore: "Before",
+  timelineAfter: "After",
+  timelineProductionState: "PRODUCTION STATE",
+  timelineEvidence: "Evidence",
+  timelineNoEvents: "No state events match these filters.",
+  timelineCreateFirst: "Create the first event",
+  timelineEmptyLead:
+    "Record an introduction, costume change, injury, relationship reveal, location change or prop handoff.",
+  timelineNewProp: "New prop",
+  timelineObjectsLead:
+    "Keep silhouette, material, wear and hand-change rules stable when props move between people or scenes.",
+  timelineProp: "Prop",
+  timelineLinkCount: "{count} timeline links",
+  timelineDeleteProp: "Delete prop",
+  timelineAddFirstProp: "Add the first reusable prop",
+  storyObjectEditTitle: "Edit story prop",
+  storyObjectNewTitle: "New story prop",
+  storyObjectLead:
+    "Props can record appearance, wear, changes of hands, reveal rules and a reusable image prompt.",
+  storyObjectSave: "Save prop",
+  storyObjectUniverseFixed: "The universe is fixed after creation.",
+  storyObjectCategoryZh: "Chinese category",
+  storyObjectCategoryEn: "English category",
+  storyObjectVisualPrompt: "Reusable visual prompt",
+  storyObjectVisualPromptHint:
+    "Identity, materials, wear, views and negatives.",
+  storyObjectSourceNotes: "Source and continuity notes",
+  timelineEventEditTitle: "Edit timeline event",
+  timelineEventNewTitle: "New timeline event",
+  timelineEventLead:
+    "Anchor each state change to a chapter, an in-world time or both. Canon facts and future proposals stay clearly distinguished.",
+  timelineSaveEvent: "Save event",
+  timelineNovelSource: "Novel / source",
+  timelineChapterAnchor: "Chapter anchor",
+  timelineChapterAnchorHint: "Optional when an in-world time is supplied.",
+  timelineStoryTime: "In-world time",
+  timelineStoryTimeHint: "Example: Year 112, winter 7th, 22:40.",
+  timelineSceneAssociation: "Scene association",
+  timelineOrder: "Order within the anchor",
+  timelineSubject: "Subject",
+  timelineEventKind: "Event kind",
+  timelineEstablished: "Established / canon",
+  timelineProposedNeedsReview: "Proposed / needs review",
+  timelineStateBefore: "State before",
+  timelineStateAfter: "State after",
+  timelineCharacters: "Characters present or affected",
+  timelineLocations: "Locations",
+  timelineProps: "Props",
+  timelineEvidenceField: "Evidence / source location",
+  timelineProductionPrompt: "Production state prompt",
+  timelineProductionPromptHint:
+    "Describe the visible state, not the plot summary.",
 };
 
 export const dictionaries: Record<UiLocale, Record<MessageKey, string>> = {
@@ -1109,14 +1657,58 @@ export const timelineEventLabels: Record<
   },
 };
 
+export const productionTemplateLabels: Record<
+  UiLocale,
+  Record<WorkflowTaskTemplate, string>
+> = {
+  "zh-CN": {
+    world: "世界观设计",
+    chapter: "章节创作",
+    character: "人物设计",
+    costume: "人物服装",
+    relationship: "人物关系",
+    location: "地点与布景",
+    scene: "场景设计",
+    storyboard: "分镜与镜头",
+    review: "连续性审查",
+  },
+  en: {
+    world: "World bible",
+    chapter: "Chapter writing",
+    character: "Character design",
+    costume: "Costume design",
+    relationship: "Relationships",
+    location: "Location design",
+    scene: "Scene design",
+    storyboard: "Storyboard",
+    review: "Continuity review",
+  },
+};
+
+/** BCP 47 tag for `Intl` and `toLocaleString`; the UI locale is not one. */
+export function intlLocale(locale: UiLocale): string {
+  return locale === "en" ? "en-US" : "zh-CN";
+}
+
+/** The locale the language toggle switches to. */
+export function otherLocale(locale: UiLocale): UiLocale {
+  return locale === "en" ? "zh-CN" : "en";
+}
+
+/** The two-glyph language chip in the top bar. */
+export const localeShortLabels: Record<UiLocale, string> = {
+  "zh-CN": "中",
+  en: "EN",
+};
+
 export function formatNumber(value: number, locale: UiLocale): string {
-  return value.toLocaleString(locale === "en" ? "en-US" : "zh-CN");
+  return value.toLocaleString(intlLocale(locale));
 }
 
 export function formatDate(value: string, locale: UiLocale): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "zh-CN", {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     year: "numeric",
     month: "short",
     day: "numeric",

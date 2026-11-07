@@ -65,6 +65,7 @@ export function RelationshipsView({
         <div className="page-heading-actions">
           <Select
             value={universeId}
+            aria-label={t("selectUniverse")}
             onChange={(event) => setUniverseId(event.target.value)}
           >
             {workspace.universes.map((item) => (
@@ -93,6 +94,7 @@ export function RelationshipsView({
             <RelationshipCanvas
               graph={graph}
               locale={locale}
+              t={t}
               onNodeClick={(node) => {
                 const character = characters.find(
                   (item) => item.id === node.id,
@@ -139,11 +141,7 @@ export function RelationshipsView({
                     </small>
                     {edge.notes ? (
                       <details>
-                        <summary>
-                          {locale === "en"
-                            ? "Notes / source evidence"
-                            : "说明 / 原文依据"}
-                        </summary>
+                        <summary>{t("notesSourceEvidence")}</summary>
                         <p>{edge.notes}</p>
                       </details>
                     ) : null}

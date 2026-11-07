@@ -5,6 +5,7 @@ import type {
   StoryLocation,
   UiLocale,
 } from "../core/types.ts";
+import { formatNumber, type Translate } from "../i18n.ts";
 import { Button, Field, Select, TextArea, TextInput } from "./ui.tsx";
 
 export function SceneEditor({
@@ -12,30 +13,29 @@ export function SceneEditor({
   characters,
   locations,
   locale,
+  t,
   onChange,
 }: {
   chapter: Chapter;
   characters: Character[];
   locations: StoryLocation[];
   locale: UiLocale;
+  t: Translate;
   onChange: (change: (chapter: Chapter) => void) => void;
 }) {
-  const en = locale === "en";
   return (
     <section className="settings-panel">
-      <h3>{en ? "Scenes and production shots" : "场景与制作镜头"}</h3>
-      <p>
-        {en
-          ? "Keep scene locations, cast and shot prompts with the chapter. AI drafts can be reviewed in the production desk before applying edits here."
-          : "为章节维护场景地点、出场人物与镜头提示词。AI 草案先在制作台审阅，再将确认的设计填入这里。"}
-      </p>
+      <h3>{t("scenesTitle")}</h3>
+      <p>{t("scenesLead")}</p>
       {chapter.scenes.map((scene, sceneIndex) => (
         <details key={scene.id}>
           <summary>
-            {sceneIndex + 1}. {scene.title} · {scene.shots.length}{" "}
-            {en ? "shots" : "镜头"}
+            {sceneIndex + 1}. {scene.title} ·{" "}
+            {t("scenesShots", {
+              count: formatNumber(scene.shots.length, locale),
+            })}
           </summary>
-          <Field label={en ? "Scene title" : "场景标题"}>
+          <Field label={t("sceneTitleField")}>
             <TextInput
               maxLength={300}
               value={scene.title}
@@ -46,11 +46,7 @@ export function SceneEditor({
               }
             />
           </Field>
-          <Field
-            label={
-              en ? "Action, time and source evidence" : "行动、时间与原文依据"
-            }
-          >
+          <Field label={t("sceneSummaryField")}>
             <TextArea
               rows={4}
               maxLength={20_000}
@@ -62,7 +58,7 @@ export function SceneEditor({
               }
             />
           </Field>
-          <Field label={en ? "Location" : "地点"}>
+          <Field label={t("sceneLocationField")}>
             <Select
               value={scene.locationId ?? ""}
               onChange={(e) =>
@@ -80,7 +76,7 @@ export function SceneEditor({
               ))}
             </Select>
           </Field>
-          <Field label={en ? "Cast" : "出场人物"}>
+          <Field label={t("sceneCastField")}>
             <div className="cast-check-list">
               {characters.map((character) => (
                 <label key={character.id}>
@@ -106,26 +102,16 @@ export function SceneEditor({
           {scene.shots.map((shot, shotIndex) => (
             <details key={shot.id}>
               <summary>
-                {en ? "Shot" : "镜头"} {shotIndex + 1} · {shot.shotType} ·{" "}
+                {t("sceneShot")} {shotIndex + 1} · {shot.shotType} ·{" "}
                 {shot.durationMs / 1000}s
               </summary>
               {(
                 [
-                  ["shotType", en ? "Framing" : "景别", 100],
-                  [
-                    "description",
-                    en ? "Action / staging" : "动作 / 调度",
-                    20_000,
-                  ],
-                  ["camera", en ? "Camera / motion" : "摄影 / 运镜", 2000],
-                  ["dialogue", en ? "Dialogue / audio" : "对白 / 声音", 20_000],
-                  [
-                    "visualPrompt",
-                    en
-                      ? "Image / video production prompt"
-                      : "图像 / 视频制作提示词",
-                    20_000,
-                  ],
+                  ["shotType", t("shotFraming"), 100],
+                  ["description", t("shotAction"), 20_000],
+                  ["camera", t("shotCamera"), 2000],
+                  ["dialogue", t("shotDialogue"), 20_000],
+                  ["visualPrompt", t("shotVisualPrompt"), 20_000],
                 ] as const
               ).map(([key, label, max]) => (
                 <Field key={key} label={label}>
@@ -142,7 +128,7 @@ export function SceneEditor({
                   />
                 </Field>
               ))}
-              <Field label={en ? "Duration (milliseconds)" : "时长（毫秒）"}>
+              <Field label={t("shotDuration")}>
                 <TextInput
                   type="number"
                   min={400}
@@ -166,13 +152,13 @@ export function SceneEditor({
               <Button
                 variant="danger"
                 onClick={() => {
-                  if (window.confirm(en ? "Delete this shot?" : "删除此镜头？"))
+                  if (window.confirm(t("shotDeleteConfirm")))
                     onChange((draft) => {
                       draft.scenes[sceneIndex]!.shots.splice(shotIndex, 1);
                     });
                 }}
               >
-                {en ? "Delete shot" : "删除镜头"}
+                {t("shotDelete")}
               </Button>
             </details>
           ))}
@@ -194,24 +180,18 @@ export function SceneEditor({
                 })
               }
             >
-              {en ? "Add shot" : "添加镜头"}
+              {t("shotAdd")}
             </Button>
             <Button
               variant="danger"
               onClick={() => {
-                if (
-                  window.confirm(
-                    en
-                      ? "Delete this scene and its shots?"
-                      : "删除此场景及镜头？",
-                  )
-                )
+                if (window.confirm(t("sceneDeleteConfirm")))
                   onChange((draft) => {
                     draft.scenes.splice(sceneIndex, 1);
                   });
               }}
             >
-              {en ? "Delete scene" : "删除场景"}
+              {t("sceneDelete")}
             </Button>
           </div>
         </details>
@@ -222,7 +202,7 @@ export function SceneEditor({
           onChange((draft) => {
             draft.scenes.push({
               id: createId("scene"),
-              title: en ? "New scene" : "新场景",
+              title: t("sceneNew"),
               summary: "",
               characterIds: [...draft.characterIds],
               locationId: draft.locationId,
@@ -231,7 +211,7 @@ export function SceneEditor({
           })
         }
       >
-        {en ? "Add scene" : "添加场景"}
+        {t("sceneAdd")}
       </Button>
     </section>
   );

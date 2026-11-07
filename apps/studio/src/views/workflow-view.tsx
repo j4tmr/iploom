@@ -27,10 +27,6 @@ const statusTone = {
   done: "green",
 } as const;
 
-function local(locale: UiLocale, zh: string, en: string): string {
-  return locale === "zh-CN" ? zh : en;
-}
-
 function taskDepth(tasks: WorkflowTask[], task: WorkflowTask): number {
   let depth = 0;
   let parentId = task.parentId;
@@ -45,7 +41,7 @@ function taskDepth(tasks: WorkflowTask[], task: WorkflowTask): number {
   return depth;
 }
 
-function statusText(t: Translate, status: WorkflowTaskStatus): string {
+export function statusText(t: Translate, status: WorkflowTaskStatus): string {
   return {
     queued: t("taskStatus_queued"),
     active: t("taskStatus_active"),
@@ -113,6 +109,7 @@ export function WorkflowView({
     }
   }, [selectedId, workspace.workflowTasks]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the workspace text fields are the trigger; depending on `selected`'s identity would rerun the sync on every workspace write
   useEffect(() => {
     const incoming = selected ? displayText(selected.result, locale) : "";
     const base = baseRef.current;
@@ -142,13 +139,7 @@ export function WorkflowView({
   const switchTo = (taskId: string) => {
     if (taskId === selected?.id) return;
     if (isDirty) {
-      const confirmed = window.confirm(
-        local(
-          locale,
-          "当前任务的结果有未保存的修改，切换后这些修改会丢失。继续切换？",
-          "This result has unsaved edits. Switching tasks will discard them. Continue?",
-        ),
-      );
+      const confirmed = window.confirm(t("workflowUnsavedSwitch"));
       if (!confirmed) return;
     }
     setSelectedId(taskId);
@@ -175,31 +166,31 @@ export function WorkflowView({
   const stats = [
     {
       key: "ready",
-      label: local(locale, "可独立开始", "Ready"),
+      label: t("workflowStatReady"),
       value: summary.ready,
       tone: "green",
     },
     {
       key: "waiting",
-      label: local(locale, "等待依赖", "Waiting"),
+      label: t("workflowStatWaiting"),
       value: summary.waiting,
       tone: "amber",
     },
     {
       key: "active",
-      label: local(locale, "进行中", "Active"),
+      label: t("workflowStatActive"),
       value: summary.active,
       tone: "blue",
     },
     {
       key: "review",
-      label: local(locale, "待审", "In review"),
+      label: t("workflowStatReview"),
       value: summary.review,
       tone: "violet",
     },
     {
       key: "done",
-      label: local(locale, "已完成", "Done"),
+      label: t("workflowStatDone"),
       value: summary.done,
       tone: "green",
     },
@@ -229,22 +220,18 @@ export function WorkflowView({
 
   const filters: { id: WorkflowFilter; label: string; count: number }[] = [
     { id: "all", label: t("all"), count: workspace.workflowTasks.length },
-    {
-      id: "ready",
-      label: local(locale, "可开始", "Ready"),
-      count: summary.ready,
-    },
+    { id: "ready", label: t("workflowFilterReady"), count: summary.ready },
     {
       id: "waiting",
-      label: local(locale, "等待中", "Waiting"),
+      label: t("workflowFilterWaiting"),
       count: summary.waiting,
     },
     {
       id: "active",
-      label: local(locale, "进行中", "Active"),
+      label: t("workflowFilterActive"),
       count: summary.active,
     },
-    { id: "done", label: local(locale, "已完成", "Done"), count: summary.done },
+    { id: "done", label: t("workflowFilterDone"), count: summary.done },
   ];
 
   return (
@@ -335,9 +322,7 @@ export function WorkflowView({
                           {statusText(t, task.status)}
                         </Badge>
                         {task.resultSuperseded ? (
-                          <Badge tone="amber">
-                            {local(locale, "需复审", "Re-review")}
-                          </Badge>
+                          <Badge tone="amber">{t("workflowReReview")}</Badge>
                         ) : null}
                       </span>
                       <small>
@@ -350,12 +335,11 @@ export function WorkflowView({
                     </span>
                     {taskReadiness.ready ? (
                       <Badge tone="green" dot>
-                        {local(locale, "可开始", "Ready")}
+                        {t("workflowFilterReady")}
                       </Badge>
                     ) : task.status === "queued" ? (
                       <Badge tone="amber">
-                        {taskReadiness.blockers.length}{" "}
-                        {local(locale, "依赖", "blocker")}
+                        {taskReadiness.blockers.length} {t("workflowBlocker")}
                       </Badge>
                     ) : null}
                   </button>
@@ -410,11 +394,7 @@ export function WorkflowView({
               {selected.resultSuperseded ? (
                 <div className="workflow-readiness waiting">
                   <Icon name="link" size={16} />
-                  {local(
-                    locale,
-                    "上游任务的结果已更新，本任务通过审阅时的产出可能过期；重新审阅并保存后标记完成即可清除。",
-                    "An upstream result changed since this task was approved. Re-review it, save, then mark done to clear this flag.",
-                  )}
+                  {t("workflowSuperseded")}
                 </div>
               ) : null}
 
@@ -477,17 +457,19 @@ export function WorkflowView({
                       <Icon name="link" size={14} />
                       {t("workflowDepends")}:{" "}
                       {displayText(dependency.title, locale)}
-                      {dependency.status !== "done" ? " · Open" : null}
+                      {dependency.status !== "done"
+                        ? t("workflowDependencyOpen")
+                        : null}
                     </button>
                   ))}
                 </section>
               ) : null}
 
               <section className="workflow-result">
-                {/* biome-ignore lint/a11y/noLabelWithoutControl: TextArea renders the control inside the label */}
-                <label>
+                <label htmlFor="workflow-result-editor">
                   <span className="eyebrow">{t("workflowResult")}</span>
                   <TextArea
+                    id="workflow-result-editor"
                     data-testid="workflow-result"
                     rows={4}
                     maxLength={MAX_WORKFLOW_RESULT_LENGTH}
@@ -499,13 +481,7 @@ export function WorkflowView({
                 {conflictText !== null ? (
                   <div className="workflow-readiness waiting workflow-conflict">
                     <Icon name="link" size={16} />
-                    <span>
-                      {local(
-                        locale,
-                        "这个结果的已保存版本在别处被更新了。你的修改仍保留在这里，未被覆盖。",
-                        "The saved version of this result changed elsewhere. Your edits are still here and were not overwritten.",
-                      )}
-                    </span>
+                    <span>{t("workflowConflict")}</span>
                     <Button
                       variant="ghost"
                       onClick={() => {
@@ -517,7 +493,7 @@ export function WorkflowView({
                         setConflictText(null);
                       }}
                     >
-                      {local(locale, "载入已保存版本", "Load saved version")}
+                      {t("workflowLoadSavedVersion")}
                     </Button>
                   </div>
                 ) : null}
@@ -571,13 +547,7 @@ export function WorkflowView({
               (selected.previousResult.zh.trim() ||
                 selected.previousResult.en.trim()) ? (
                 <details className="workflow-previous-result">
-                  <summary>
-                    {local(
-                      locale,
-                      "上次运行前的结果",
-                      "Result before the last run",
-                    )}
-                  </summary>
+                  <summary>{t("workflowPreviousResult")}</summary>
                   <p>{displayText(selected.previousResult, locale)}</p>
                   <Button
                     variant="ghost"
@@ -587,7 +557,7 @@ export function WorkflowView({
                       )
                     }
                   >
-                    {local(locale, "恢复此版本", "Restore this version")}
+                    {t("workflowRestoreVersion")}
                   </Button>
                 </details>
               ) : null}

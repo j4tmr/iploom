@@ -1,22 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import type { AiConfigInfo } from "../core/ai.ts";
-import type { UiLocale } from "../core/types.ts";
 import type { Translate } from "../i18n.ts";
 import { bridge } from "../platform.ts";
 import { Button, Field, TextInput } from "./ui.tsx";
 
 export function AiSettings({
-  locale,
   t,
   info,
   onConfigured,
 }: {
-  locale: UiLocale;
   t: Translate;
   info: AiConfigInfo | null;
   onConfigured: (info: AiConfigInfo) => void;
 }) {
-  const en = locale === "en";
   const [endpoint, setEndpoint] = useState("");
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -31,11 +27,7 @@ export function AiSettings({
   return (
     <section className="settings-panel">
       <h2>{t("modelSettings")}</h2>
-      <p>
-        {en
-          ? "Chat Completions compatible. Configuration and key stay in desktop memory for this session only; re-enter after restart. Sending requires an explicit run action. Local servers may leave the key blank."
-          : "兼容 Chat Completions。配置与密钥仅保存在本次桌面会话内存，重启后需重新填写；只有点击执行才发送内容。本地服务可不填密钥。"}
-      </p>
+      <p>{t("aiSettingsLead")}</p>
       {info?.configured ? (
         <div className="model-status">
           <span className="model-status-dot" />
@@ -58,19 +50,17 @@ export function AiSettings({
           </div>
         </div>
       )}
-      <Field
-        label={en ? "API base URL (including /v1)" : "API 基础地址（含 /v1）"}
-      >
+      <Field label={t("aiBaseUrl")}>
         <TextInput
           value={endpoint}
           placeholder="https://your-provider.example/v1"
           onChange={(e) => setEndpoint(e.target.value)}
         />
       </Field>
-      <Field label={en ? "Model ID" : "模型 ID"}>
+      <Field label={t("aiModelId")}>
         <TextInput value={model} onChange={(e) => setModel(e.target.value)} />
       </Field>
-      <Field label="API key">
+      <Field label={t("aiApiKey")}>
         <TextInput
           type="password"
           autoComplete="off"
@@ -92,7 +82,7 @@ export function AiSettings({
           }
         }}
       >
-        {en ? "Configure session" : "配置本次会话"}
+        {t("aiConfigureSession")}
       </Button>
       <p role="status">{message}</p>
     </section>

@@ -25,8 +25,13 @@ import type {
   WorkflowTaskRunMeta,
 } from "../core/types.ts";
 import { workflowResultReplaceConfirm } from "../core/workflow.ts";
-import { formatNumber, type Translate } from "../i18n.ts";
+import {
+  formatNumber,
+  productionTemplateLabels,
+  type Translate,
+} from "../i18n.ts";
 import { Button, Field, Select, TextArea } from "./ui.tsx";
+import { statusText } from "../views/workflow-view.tsx";
 
 export function ProductionPanel({
   workspace,
@@ -53,7 +58,6 @@ export function ProductionPanel({
     run?: WorkflowTaskRunMeta,
   ) => boolean;
 }) {
-  const en = locale === "en";
   const [scope, setScope] = useState<ProductionScope>(context);
   const [template, setTemplate] = useState<ProductionTemplate>("world");
   const [taskId, setTaskId] = useState("");
@@ -77,6 +81,7 @@ export function ProductionPanel({
         "done",
     ),
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the scope fields are the actual trigger; `context` is rebuilt every render and depending on its identity would reset the prompt in a loop
   useEffect(() => {
     if (!activeId.current) {
       setScope(context);
@@ -143,10 +148,8 @@ export function ProductionPanel({
       onToggle={(event) => setExpanded(event.currentTarget.open)}
     >
       <summary>
-        {en
-          ? "AI production desk · prompts, live output and review"
-          : "AI 制作台 · 提示词、实时工作与结果审阅"}
-        {busy ? ` · ${en ? "Working" : "正在工作"}` : ""}
+        {t("productionSummary")}
+        {busy ? ` · ${t("productionWorking")}` : ""}
         {aiInfo && !aiInfo.configured ? ` · ${t("modelSetupTitle")}` : ""}
       </summary>
       {aiInfo && !aiInfo.configured ? (
@@ -166,13 +169,9 @@ export function ProductionPanel({
           <code>{aiInfo.endpoint}</code>
         </div>
       ) : null}
-      <p>
-        {en
-          ? "Select the production target, compose and edit its prompt, then explicitly send it to your configured model. Output is a draft specification, not rendered media."
-          : "选择制作对象，生成并编辑对应提示词，再明确发送给已配置模型。产出为待审设计稿，不代表已生成图片或视频。"}
-      </p>
+      <p>{t("productionLead")}</p>
       <fieldset disabled={busy} className="production-controls">
-        <Field label={en ? "Existing workflow task" : "现有工作流任务"}>
+        <Field label={t("productionExistingTask")}>
           <Select
             value={taskId}
             onChange={(e) => {
@@ -180,17 +179,17 @@ export function ProductionPanel({
               reset();
             }}
           >
-            <option value="">{en ? "New design" : "新建设计"}</option>
+            <option value="">{t("productionNewDesign")}</option>
             {workspace.workflowTasks.map((item) => (
               <option key={item.id} value={item.id}>
-                {displayText(item.title, locale)} · {item.status}
+                {displayText(item.title, locale)} · {statusText(t, item.status)}
               </option>
             ))}
           </Select>
         </Field>
         {!task ? (
           <>
-            <Field label={en ? "Template" : "制作模板"}>
+            <Field label={t("productionTemplate")}>
               <Select
                 value={template}
                 onChange={(e) => {
@@ -198,14 +197,18 @@ export function ProductionPanel({
                   reset();
                 }}
               >
-                {Object.entries(productionTemplates).map(([key, value]) => (
+                {Object.entries(productionTemplates).map(([key]) => (
                   <option key={key} value={key}>
-                    {value[en ? 1 : 0]}
+                    {
+                      productionTemplateLabels[locale][
+                        key as ProductionTemplate
+                      ]
+                    }
                   </option>
                 ))}
               </Select>
             </Field>
-            <Field label={en ? "World" : "世界"}>
+            <Field label={t("productionWorld")}>
               <Select
                 value={universeId ?? ""}
                 onChange={(e) => {
@@ -221,7 +224,7 @@ export function ProductionPanel({
                 ))}
               </Select>
             </Field>
-            <Field label={en ? "Novel" : "小说"}>
+            <Field label={t("productionNovel")}>
               <Select
                 value={scope.workId ?? ""}
                 onChange={(e) => {
@@ -241,7 +244,7 @@ export function ProductionPanel({
                   ))}
               </Select>
             </Field>
-            <Field label={en ? "Chapter" : "章节"}>
+            <Field label={t("productionChapter")}>
               <Select
                 value={scope.chapterId ?? ""}
                 onChange={(e) => {
@@ -257,7 +260,7 @@ export function ProductionPanel({
                 ))}
               </Select>
             </Field>
-            <Field label={en ? "Character" : "人物"}>
+            <Field label={t("productionCharacter")}>
               <Select
                 value={scope.characterId ?? ""}
                 onChange={(e) => {
@@ -265,7 +268,7 @@ export function ProductionPanel({
                   reset();
                 }}
               >
-                <option value="">{en ? "Relevant cast" : "相关人物"}</option>
+                <option value="">{t("productionRelevantCast")}</option>
                 {workspace.characters
                   .filter((item) => item.universeIds.includes(universeId ?? ""))
                   .map((item) => (
@@ -278,7 +281,7 @@ export function ProductionPanel({
           </>
         ) : null}
         <Button data-testid="production-compose" onClick={compose}>
-          {en ? "Compose prompt" : "生成对应提示词"}
+          {t("productionCompose")}
         </Button>
         {!task ? (
           <Button
@@ -288,19 +291,15 @@ export function ProductionPanel({
                 const created = createProductionTasks(workspace, scope, locale);
                 setMessage(
                   onTasks(created)
-                    ? en
-                      ? "Six dependent production tasks added to Workflow."
-                      : "已在工作流中建立六个有依赖关系的制作任务。"
-                    : en
-                      ? "The production tasks were not saved."
-                      : "制作任务未能保存。",
+                    ? t("productionTasksAdded")
+                    : t("productionTasksNotSaved"),
                 );
               } catch (error) {
                 setMessage(String(error));
               }
             }}
           >
-            {en ? "Create production workflow" : "建立制作工作流"}
+            {t("productionCreateWorkflow")}
           </Button>
         ) : null}
       </fieldset>
@@ -308,18 +307,16 @@ export function ProductionPanel({
         <p>
           {t("productionEffectiveTemplate")}:{" "}
           <b>
-            {productionTemplates[effectiveProductionTemplate(task)][en ? 1 : 0]}
+            {
+              productionTemplateLabels[locale][
+                effectiveProductionTemplate(task)
+              ]
+            }
           </b>
         </p>
       ) : null}
       {prompt ? (
-        <Field
-          label={
-            en
-              ? "Prompt sent to model (editable)"
-              : "将发送给模型的提示词（可编辑）"
-          }
-        >
+        <Field label={t("productionPromptLabel")}>
           <TextArea
             rows={8}
             value={prompt}
@@ -328,13 +325,7 @@ export function ProductionPanel({
           />
         </Field>
       ) : null}
-      {blocked ? (
-        <p role="status">
-          {en
-            ? "Approve dependency results before running this task."
-            : "请先审阅并完成前置任务，再执行此任务。"}
-        </p>
-      ) : null}
+      {blocked ? <p role="status">{t("productionDependencyBlocker")}</p> : null}
       <div className="production-actions">
         <Button
           disabled={!prompt || busy}
@@ -342,7 +333,7 @@ export function ProductionPanel({
             void bridge.copyText(prompt).catch((e) => setMessage(String(e)))
           }
         >
-          {en ? "Copy prompt" : "复制提示词"}
+          {t("productionCopyPrompt")}
         </Button>
         <Button
           data-testid="production-run"
@@ -356,18 +347,15 @@ export function ProductionPanel({
           onClick={async () => {
             const info = await bridge.aiConfig().catch(() => null);
             if (!info?.configured) {
-              setMessage(
-                en
-                  ? "Configure a model in Settings first (desktop only)."
-                  : "请先在设置中配置模型（仅桌面版）。",
-              );
+              setMessage(t("productionConfigureFirst"));
               return;
             }
             if (
               !window.confirm(
-                en
-                  ? `Send this prompt to ${info.endpoint} using ${info.model}? Provider charges may apply.`
-                  : `将此提示词发送至 ${info.endpoint}，使用 ${info.model}？服务商可能计费。`,
+                t("productionSendConfirm", {
+                  endpoint: info.endpoint,
+                  model: info.model,
+                }),
               )
             )
               return;
@@ -375,9 +363,9 @@ export function ProductionPanel({
               task &&
               workflowResultReplaceConfirm(task) &&
               !window.confirm(
-                en
-                  ? `Running again replaces the reviewed result on “${displayText(task.title, locale)}”. The previous result stays recoverable, and done tasks that depend on this output will be flagged for re-review. Continue?`
-                  : `再次运行将替换“${displayText(task.title, locale)}”已审阅的结果。旧结果仍可找回，依赖此产出的已完成任务会标记需复审。继续吗？`,
+                t("productionRerunConfirm", {
+                  title: displayText(task.title, locale),
+                }),
               )
             )
               return;
@@ -395,8 +383,8 @@ export function ProductionPanel({
             setCompletedTask(null);
             const label = task
               ? displayText(task.title, locale)
-              : productionTemplates[template][en ? 1 : 0];
-            setMessage(`${en ? "Working on" : "正在执行"}：${label}`);
+              : productionTemplateLabels[locale][template];
+            setMessage(t("productionWorkingOn", { label }));
             if (
               task &&
               !workspaceRef.current.workflowTasks.some(
@@ -405,11 +393,7 @@ export function ProductionPanel({
             ) {
               activeId.current = "";
               setBusy(false);
-              setMessage(
-                en
-                  ? "This task changed while the panel was open and could not be marked active. Reopen it and try again."
-                  : "任务已发生变化，无法标记为进行中；请重新打开后再试。",
-              );
+              setMessage(t("productionTaskChanged"));
               return;
             }
             if (task) onStatus(task, "active");
@@ -427,18 +411,10 @@ export function ProductionPanel({
                 (scope.chapterId && !resolved.chapterId) ||
                 (scope.universeId && !resolved.universeId)
               ) {
-                throw new Error(
-                  en
-                    ? "The target was removed while running. Copy the result; it was not saved."
-                    : "执行期间目标已被删除，请复制结果保留，本次没有写入。",
-                );
+                throw new Error(t("productionTargetRemoved"));
               }
               if (text.length > MAX_WORKFLOW_RESULT_LENGTH)
-                throw new Error(
-                  en
-                    ? "Output exceeds the saved-result limit; copy it before continuing."
-                    : "输出超过保存长度，请先复制保留。",
-                );
+                throw new Error(t("productionOutputTooLong"));
               const resultTask = task ?? {
                 id: createId("task"),
                 title: {
@@ -464,24 +440,12 @@ export function ProductionPanel({
                 updatedAt: new Date().toISOString(),
               };
               if (!task && !onTasks([resultTask]))
-                throw new Error(
-                  en
-                    ? "The result could not be saved to Workflow. Copy it before continuing."
-                    : "结果未能写入工作流，请先复制保留。",
-                );
+                throw new Error(t("productionResultNotSavedToWorkflow"));
               if (!onResult(resultTask, text, runMeta))
-                throw new Error(
-                  en
-                    ? "The result was not saved; copy it before continuing."
-                    : "结果未能保存，请先复制保留。",
-                );
+                throw new Error(t("productionResultNotSaved"));
               onStatus(resultTask, "review");
               setCompletedTask(resultTask);
-              setMessage(
-                en
-                  ? "Draft saved to Workflow for review. Source manuscript is unchanged."
-                  : "设计稿已保存到工作流，等待审阅；原稿未被覆盖。",
-              );
+              setMessage(t("productionDraftSaved"));
             } catch (error) {
               setMessage(String(error));
               if (task) onStatus(task, task.status);
@@ -491,11 +455,11 @@ export function ProductionPanel({
             }
           }}
         >
-          {en ? "Send and run" : "发送并执行"}
+          {t("productionSendRun")}
         </Button>
         {busy ? (
           <Button onClick={() => void bridge.cancelAi(activeId.current)}>
-            {en ? "Cancel" : "取消"}
+            {t("cancel")}
           </Button>
         ) : null}
       </div>
@@ -505,16 +469,14 @@ export function ProductionPanel({
       {usageMessage ? <p>{usageMessage}</p> : null}
       {prompt.length > MAX_AI_PROMPT_LENGTH ? (
         <p role="alert">
-          {en
-            ? `Prompt exceeds ${formatNumber(MAX_AI_PROMPT_LENGTH, locale)} characters. Narrow its scope or edit it before sending.`
-            : `提示词超过 ${formatNumber(MAX_AI_PROMPT_LENGTH, locale)} 字符，请缩小范围或编辑后发送。`}
+          {t("productionPromptTooLong", {
+            limit: formatNumber(MAX_AI_PROMPT_LENGTH, locale),
+          })}
         </p>
       ) : null}
       {output ? (
         <>
-          <Field
-            label={en ? "Live draft / reviewed result" : "实时产出 / 待审结果"}
-          >
+          <Field label={t("productionLiveOutput")}>
             <TextArea
               data-testid="production-output"
               rows={10}
@@ -524,7 +486,7 @@ export function ProductionPanel({
             />
           </Field>
           <Button onClick={() => void bridge.copyText(output)}>
-            {en ? "Copy result" : "复制结果"}
+            {t("productionCopyResult")}
           </Button>
           {completedTask && !busy ? (
             <Button
@@ -532,16 +494,12 @@ export function ProductionPanel({
               onClick={() => {
                 setMessage(
                   onResult(completedTask, output)
-                    ? en
-                      ? "Reviewed edits saved. Mark the task done in Workflow when ready."
-                      : "审阅修改已保存，确认后可在工作流标记完成。"
-                    : en
-                      ? "The reviewed edits were not saved."
-                      : "审阅修改未能保存。",
+                    ? t("productionReviewedSaved")
+                    : t("productionReviewedNotSaved"),
                 );
               }}
             >
-              {en ? "Save reviewed edits" : "保存审阅修改"}
+              {t("productionSaveReviewed")}
             </Button>
           ) : null}
         </>

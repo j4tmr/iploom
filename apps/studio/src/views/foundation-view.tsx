@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AiConfigInfo } from "../core/ai.ts";
-import { createId } from "../core/factory.ts";
+import { createId, displayText } from "../core/factory.ts";
 import {
   buildStandardDraftPrompt,
   parseStandardCandidates,
@@ -30,37 +30,21 @@ const statusTone = {
   disabled: "neutral",
 } as const;
 
-function local(locale: UiLocale, zh: string, en: string): string {
-  return locale === "zh-CN" ? zh : en;
-}
-
 function scopeText(
   workspace: StudioWorkspace,
   standard: WorkspaceStandard,
   locale: UiLocale,
+  t: Translate,
 ): string {
   if (!standard.universeId) {
-    return local(locale, "项目通用", "Project-wide");
+    return t("foundationProjectWide");
   }
   const universe = workspace.universes.find(
     (item) => item.id === standard.universeId,
   );
   return universe
-    ? local(
-        locale,
-        `限「${displayUniverseName(universe.name, locale)}」`,
-        `Only ${displayUniverseName(universe.name, locale)}`,
-      )
-    : local(locale, "限未知宇宙", "Unknown world");
-}
-
-function displayUniverseName(
-  name: { zh: string; en: string },
-  locale: UiLocale,
-): string {
-  return locale === "en"
-    ? name.en.trim() || name.zh.trim()
-    : name.zh.trim() || name.en.trim();
+    ? t("foundationScopeWorld", { world: displayText(universe.name, locale) })
+    : t("foundationScopeUnknown");
 }
 
 export function FoundationView({
@@ -154,31 +138,31 @@ export function FoundationView({
   const stats = [
     {
       key: "total",
-      label: local(locale, "规则总数", "Total"),
+      label: t("foundationStatTotal"),
       value: counts.total,
       tone: "blue",
     },
     {
       key: "active",
-      label: local(locale, "生效", "Active"),
+      label: t("foundationStatActive"),
       value: counts.active,
       tone: "green",
     },
     {
       key: "draft",
-      label: local(locale, "草稿", "Draft"),
+      label: t("foundationStatDraft"),
       value: counts.draft,
       tone: "amber",
     },
     {
       key: "disabled",
-      label: local(locale, "停用", "Disabled"),
+      label: t("foundationStatDisabled"),
       value: counts.disabled,
       tone: "violet",
     },
     {
       key: "pinned",
-      label: local(locale, "已引用任务", "Pinned tasks"),
+      label: t("foundationStatPinned"),
       value: pinnedCount,
       tone: "green",
     },
@@ -188,13 +172,13 @@ export function FoundationView({
     { id: "all", label: t("all"), count: counts.total },
     {
       id: "active",
-      label: local(locale, "生效", "Active"),
+      label: t("foundationStatActive"),
       count: counts.active,
     },
-    { id: "draft", label: local(locale, "草稿", "Draft"), count: counts.draft },
+    { id: "draft", label: t("foundationStatDraft"), count: counts.draft },
     {
       id: "disabled",
-      label: local(locale, "停用", "Disabled"),
+      label: t("foundationStatDisabled"),
       count: counts.disabled,
     },
   ];
@@ -206,22 +190,15 @@ export function FoundationView({
   const draft = async () => {
     const info = await bridge.aiConfig().catch(() => null);
     if (!info?.configured) {
-      setDraftMessage(
-        local(
-          locale,
-          "请先在设置中配置模型（仅桌面版），再让 AI 起草规则。",
-          "Configure a model in Settings first (desktop only), then let AI draft standards.",
-        ),
-      );
+      setDraftMessage(t("foundationNeedModel"));
       return;
     }
     if (
       !window.confirm(
-        local(
-          locale,
-          `根据当前项目前提起草基础规则，并发送至 ${info.endpoint}（${info.model}）？服务商可能计费。`,
-          `Draft foundation standards from the current premise and send them to ${info.endpoint} (${info.model})? Provider charges may apply.`,
-        ),
+        t("foundationDraftConfirm", {
+          endpoint: info.endpoint,
+          model: info.model,
+        }),
       )
     )
       return;
@@ -230,45 +207,23 @@ export function FoundationView({
     setDrafting(true);
     setCandidates([]);
     setSelectedCandidates(new Set());
-    setDraftMessage(
-      local(
-        locale,
-        "正在根据已登记的项目前提起草候选规则…",
-        "Drafting candidate standards from the registered premise…",
-      ),
-    );
+    setDraftMessage(t("foundationDraftingMessage"));
     try {
       const raw = (
         await bridge.runAi({
           id,
           prompt: buildStandardDraftPrompt(workspace, locale),
-          label: local(
-            locale,
-            "起草项目基础规则",
-            "Draft project foundation standards",
-          ),
+          label: t("foundationDraftLabel"),
         })
       ).text;
       const parsed = parseStandardCandidates(raw);
       if (!parsed.length) {
-        setDraftMessage(
-          local(
-            locale,
-            "模型没有返回可登记的规则，请重试或手动新建。原有规则未改动。",
-            "The model returned no registrable standards. Retry or add one manually; existing standards were not changed.",
-          ),
-        );
+        setDraftMessage(t("foundationDraftEmpty"));
         return;
       }
       setCandidates(parsed);
       setSelectedCandidates(new Set(parsed.map((_, index) => index)));
-      setDraftMessage(
-        local(
-          locale,
-          `已生成 ${parsed.length} 条候选规则。勾选并登记后才会写入项目，且默认仍为草稿。`,
-          `${parsed.length} candidate standards generated. Nothing is written until you select and register them; they register as drafts.`,
-        ),
-      );
+      setDraftMessage(t("foundationDraftGenerated", { count: parsed.length }));
     } catch (error) {
       setDraftMessage(String(error));
     } finally {
@@ -304,11 +259,11 @@ export function FoundationView({
             onClick={() => void draft()}
           >
             {drafting
-              ? local(locale, "AI 起草中…", "Drafting…")
-              : local(locale, "AI 起草规则", "AI draft")}
+              ? t("foundationDraftingShort")
+              : t("foundationDraftAction")}
           </Button>
           <Button variant="primary" icon="plus" onClick={onNewStandard}>
-            {local(locale, "新建规则", "New standard")}
+            {t("foundationNewStandardShort")}
           </Button>
         </div>
       </header>
@@ -351,12 +306,8 @@ export function FoundationView({
               className="input workflow-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={local(
-                locale,
-                "搜索规则、正文或 ID…",
-                "Search standards, bodies or IDs…",
-              )}
-              aria-label={local(locale, "搜索规则", "Search standards")}
+              placeholder={t("foundationSearchPlaceholder")}
+              aria-label={t("foundationSearchLabel")}
             />
           </div>
           <div className="workflow-filters" role="tablist">
@@ -403,7 +354,7 @@ export function FoundationView({
                     </span>
                     <small>
                       {standardKindLabel(standard.kind, locale)} ·{" "}
-                      {scopeText(workspace, standard, locale)} · v
+                      {scopeText(workspace, standard, locale, t)} · v
                       {standard.version}
                     </small>
                   </span>
@@ -413,18 +364,14 @@ export function FoundationView({
             ) : (
               <EmptyState
                 icon="layers"
-                title={local(locale, "没有匹配的规则。", "No standards match.")}
+                title={t("foundationNoMatch")}
                 action={
                   <Button variant="primary" icon="plus" onClick={onNewStandard}>
-                    {local(locale, "新建规则", "New standard")}
+                    {t("foundationNewStandardShort")}
                   </Button>
                 }
               >
-                {local(
-                  locale,
-                  "基础规则约束所有 AI 产出；小说、游戏与设定集共用同一套规则。",
-                  "Foundation standards constrain every AI deliverable; novels, games and setting bibles share the same rules.",
-                )}
+                {t("foundationEmptyLead")}
               </EmptyState>
             )}
           </div>
@@ -434,16 +381,8 @@ export function FoundationView({
           {drafting && !candidates.length ? (
             <div className="foundation-drafting">
               <span className="boot-loader" />
-              <h2>
-                {local(locale, "正在起草候选规则", "Drafting candidates")}
-              </h2>
-              <p>
-                {local(
-                  locale,
-                  "模型会读取已登记的世界与作品前提，返回 3 到 6 条可执行的规则候选。不会直接写入项目。",
-                  "The model reads the registered worlds and works, then returns 3–6 executable candidates. Nothing is written to the project directly.",
-                )}
-              </p>
+              <h2>{t("foundationDraftingTitle")}</h2>
+              <p>{t("foundationDraftingLead")}</p>
               <Button onClick={() => void bridge.cancelAi(activeAi.current)}>
                 {t("cancel")}
               </Button>
@@ -453,26 +392,21 @@ export function FoundationView({
               <div className="workflow-detail-head">
                 <div>
                   <span className="eyebrow">AI DRAFT / 候选规则</span>
-                  <h2>{local(locale, "审阅候选规则", "Review candidates")}</h2>
+                  <h2>{t("foundationReviewCandidates")}</h2>
                 </div>
                 <Badge tone="amber">
-                  {candidates.length} {local(locale, "条", "drafts")}
+                  {t("foundationCandidateCount", { count: candidates.length })}
                 </Badge>
               </div>
               <p className="foundation-candidate-lead">
-                {local(
-                  locale,
-                  "只登记确认过的条目；登记后为草稿，启用后才会注入 AI 提示词与工作简报。",
-                  "Register only what you have reviewed. Entries are saved as drafts and join prompts only after activation.",
-                )}
+                {t("foundationCandidateLead")}
               </p>
               <div className="foundation-candidates">
                 {candidates.map((candidate, index) => {
                   const checked = selectedCandidates.has(index);
                   return (
                     <label
-                      // biome-ignore lint/suspicious/noArrayIndexKey: selection is tracked by candidate position and the list is replaced, never reordered
-                      key={`${candidate.kind}-${index}`}
+                      key={`${candidate.kind}-${candidate.title.zh || candidate.title.en}`}
                       className={
                         "foundation-candidate " + (checked ? "selected" : "")
                       }
@@ -509,19 +443,11 @@ export function FoundationView({
                     setCandidates([]);
                     setSelectedCandidates(new Set());
                     setDraftMessage(
-                      local(
-                        locale,
-                        `已登记 ${drafted.length} 条草稿规则。启用后才会影响 AI 产出。`,
-                        `${drafted.length} draft standards registered. They affect AI output once activated.`,
-                      ),
+                      t("foundationRegisteredCount", { count: drafted.length }),
                     );
                   }}
                 >
-                  {local(
-                    locale,
-                    `登记选中（${drafted.length}）`,
-                    `Register selected (${drafted.length})`,
-                  )}
+                  {t("foundationRegisterSelected", { count: drafted.length })}
                 </Button>
                 <Button
                   onClick={() =>
@@ -533,8 +459,8 @@ export function FoundationView({
                   }
                 >
                   {allCandidatesSelected
-                    ? local(locale, "取消全选", "Clear all")
-                    : local(locale, "全选", "Select all")}
+                    ? t("foundationClearAll")
+                    : t("foundationSelectAll")}
                 </Button>
                 <Button
                   variant="ghost"
@@ -544,7 +470,7 @@ export function FoundationView({
                     setDraftMessage("");
                   }}
                 >
-                  {local(locale, "丢弃候选", "Discard")}
+                  {t("foundationDiscard")}
                 </Button>
               </div>
             </>
@@ -565,52 +491,37 @@ export function FoundationView({
               <div className="workflow-scope">
                 <span>
                   <Icon name="layers" size={14} />
-                  {scopeText(workspace, selected, locale)}
+                  {scopeText(workspace, selected, locale, t)}
                 </span>
                 <span>
                   <Icon name="check" size={14} />v{selected.version}
                 </span>
                 <span>
                   <Icon name="link" size={14} />
-                  {
-                    workspace.workflowTasks.filter((task) =>
+                  {t("foundationPinnedCount", {
+                    count: workspace.workflowTasks.filter((task) =>
                       task.standardRefs.some((ref) => ref.id === selected.id),
-                    ).length
-                  }{" "}
-                  {local(locale, "个任务引用", "tasks pinned")}
+                    ).length,
+                  })}
                 </span>
               </div>
 
               <section className="workflow-brief-block foundation-body">
-                <span className="eyebrow">
-                  {local(locale, "规则正文", "Standard body")}
-                </span>
+                <span className="eyebrow">{t("foundationBodyLabel")}</span>
                 <p>{standardBody(selected, locale) || "—"}</p>
               </section>
 
               <section className="workflow-brief-block">
-                <span className="eyebrow">
-                  {local(locale, "生效范围", "Applied scope")}
-                </span>
+                <span className="eyebrow">{t("foundationAppliedScope")}</span>
                 <p>
                   {selected.status === "active"
-                    ? local(
-                        locale,
-                        "此规则会注入项目内所有匹配范围的 AI 提示词与工作简报。",
-                        "This standard is injected into every matching AI prompt and workflow brief in the project.",
-                      )
-                    : local(
-                        locale,
-                        "草稿与停用规则不会注入提示词；启用后才参与 AI 工作。",
-                        "Draft and disabled standards are not injected. Activate one to include it in AI work.",
-                      )}
+                    ? t("foundationActiveScope")
+                    : t("foundationInactiveScope")}
                 </p>
               </section>
 
               <section className="foundation-pinned-tasks">
-                <span className="eyebrow">
-                  {local(locale, "任务固定引用", "Pinned by tasks")}
-                </span>
+                <span className="eyebrow">{t("foundationPinnedByTasks")}</span>
                 {workspace.workflowTasks.filter((task) =>
                   task.standardRefs.some((ref) => ref.id === selected.id),
                 ).length ? (
@@ -631,20 +542,14 @@ export function FoundationView({
                             onClick={onOpenWorkflow}
                           >
                             <Icon name="link" size={13} />
-                            {displayUniverseName(task.title, locale)}
+                            {displayText(task.title, locale)}
                             <code>{standardRefLabel(ref)}</code>
                           </button>
                         );
                       })}
                   </div>
                 ) : (
-                  <p>
-                    {local(
-                      locale,
-                      "还没有任务固定引用此规则；新建任务时会自动固定当时生效的版本。",
-                      "No task pins this standard yet. New tasks pin the active version automatically.",
-                    )}
-                  </p>
+                  <p>{t("foundationNoPins")}</p>
                 )}
               </section>
 
@@ -658,7 +563,7 @@ export function FoundationView({
                     icon="close"
                     onClick={() => onStatusChange(selected, "disabled")}
                   >
-                    {local(locale, "停用", "Disable")}
+                    {t("foundationDisable")}
                   </Button>
                 ) : (
                   <Button
@@ -666,7 +571,7 @@ export function FoundationView({
                     icon="check"
                     onClick={() => onStatusChange(selected, "active")}
                   >
-                    {local(locale, "启用", "Activate")}
+                    {t("foundationActivate")}
                   </Button>
                 )}
                 <Button
@@ -676,17 +581,13 @@ export function FoundationView({
                     void bridge.copyText(standardBody(selected, locale))
                   }
                 >
-                  {local(locale, "复制正文", "Copy body")}
+                  {t("foundationCopyBody")}
                 </Button>
               </div>
             </>
           ) : (
             <EmptyState icon="layers" title={t("foundationNoSelection")}>
-              {local(
-                locale,
-                "选择一条规则查看正文、适用范围和被任务固定的版本。",
-                "Select a standard to see its body, scope and pinned versions.",
-              )}
+              {t("foundationNoSelectionLead")}
             </EmptyState>
           )}
         </aside>
