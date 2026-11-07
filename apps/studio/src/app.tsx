@@ -469,9 +469,7 @@ export function App() {
     ]);
     const message =
       removed.size > 1
-        ? locale === "en"
-          ? `Delete this task and ${removed.size - 1} subtask(s)?`
-          : `确定删除此任务及其 ${removed.size - 1} 个子任务吗？`
+        ? t("confirmDeleteSubtasks", { count: removed.size - 1 })
         : t("confirmDelete");
     if (!window.confirm(message)) return;
     mutateChecked((draft) => {
@@ -1065,7 +1063,7 @@ export function App() {
         onSelect={selectSearchHit}
       />
 
-      {modal?.kind === "import" ? <ManuscriptImport locale={locale} onClose={() => setModal(null)} onImport={async (imported) => {
+      {modal?.kind === "import" ? <ManuscriptImport locale={locale} t={t} onClose={() => setModal(null)} onImport={async (imported) => {
         if (!(await snapshotBefore("before-import-novel"))) return;
         // Validate the combined snapshot before scheduling the mutation.
         mergeManuscriptImport(workspace, imported);
@@ -1128,6 +1126,7 @@ export function App() {
           open
           onClose={() => setModal(null)}
           locale={locale}
+          t={t}
           workspace={workspace}
           initial={modal.initial}
           defaultUniverseId={modal.universeId}
@@ -1140,6 +1139,7 @@ export function App() {
           open
           onClose={() => setModal(null)}
           locale={locale}
+          t={t}
           workspace={workspace}
           initial={modal.initial}
           defaultUniverseId={modal.universeId}
@@ -1264,6 +1264,7 @@ function McpModal({
     <Modal
       open={open}
       onClose={onClose}
+      closeLabel={t("close")}
       title={t("mcpTitle")}
       description={t("mcpLead")}
       wide
@@ -1287,7 +1288,7 @@ function McpModal({
       <div className="mcp-modal-grid">
         <div>
           <span className="eyebrow">STDIO SERVER</span>
-          <h3>{info?.desktop ? (locale === "en" ? "Bundled desktop server" : "桌面内置服务") : t("browserPreview")}</h3>
+          <h3>{info?.desktop ? t("mcpBundledDesktopServer") : t("browserPreview")}</h3>
           <p>{t("mcpToolsNote")}</p>
           <div className="tool-pills vertical">
             {tools.map((tool) => <code key={tool}>{tool}</code>)}

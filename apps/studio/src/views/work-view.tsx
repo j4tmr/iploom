@@ -179,7 +179,7 @@ export function WorkView({
         <div className="manuscript-layout">
           <aside className="chapter-list-panel">
             <div className="chapter-list-head">
-              <span className="eyebrow">CHAPTERS</span>
+              <span className="eyebrow">CHAPTERS / 章节</span>
               <IconButton label={t("addChapterTitle")} icon="plus" onClick={onAddChapter} />
             </div>
             <div className="chapter-list">
@@ -380,7 +380,7 @@ export function WorkView({
                       }
                     />
                   </Field>
-                  <SceneEditor chapter={selected} characters={characters} locations={locations} locale={locale} onChange={(change) => onChangeChapter(selected.id, change)} />
+                  <SceneEditor chapter={selected} characters={characters} locations={locations} locale={locale} t={t} onChange={(change) => onChangeChapter(selected.id, change)} />
                 </aside>
               </div>
             </section>
@@ -534,7 +534,7 @@ function AdaptationPanel({
           <span className="style-orb">3D</span>
           <div>
             <strong>{t("style3d")}</strong>
-            <small>9:16 · character model sheets · negative prompts · scene drafts</small>
+            <small>{t("style3dMeta")}</small>
           </div>
         </div>
         <div className="chapter-select-head">
