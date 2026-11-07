@@ -50,7 +50,9 @@ try {
     cwd: root,
     stderr: "pipe",
   });
-  await client.connect(transport);
+  // The first Intel launch is translated by Rosetta before the server can
+  // answer the handshake, so the arch run needs a larger connect budget.
+  await client.connect(transport, arch ? { timeout: 300_000 } : undefined);
   const tools = await client.listTools();
   if (tools.tools.length !== 14)
     throw new Error(`Expected 14 MCP tools, received ${tools.tools.length}`);
