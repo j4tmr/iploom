@@ -18,16 +18,17 @@ Electron main process
   ├─ atomic workspace store
   ├─ native folder picker
   ├─ ArcReel package writer
+  ├─ model API client (key held in memory)
   └─ MCP configuration
-        │
-        ▼ stdio
-Bundled MCP server
+        │                         │
+        ▼ stdio                   ▼ HTTPS / loopback HTTP
+Bundled MCP server         Configured Chat Completions endpoint
   ├─ eleven read-only tools
   ├─ create_standard / update_standard
   └─ export_arcreel_bundle
 ```
 
-No renderer code receives Node.js primitives. IPC handlers validate their sender, payload shape, and file boundaries. The renderer is sandboxed with context isolation enabled and a restrictive Content Security Policy.
+No renderer code receives Node.js primitives. IPC handlers validate the sender against the trusted renderer URL; model configuration and model requests are validated with strict schemas, and workspace saves pass through the store's full schema and referential validation before any write. File boundaries are enforced separately, as described under [Security boundary](#security-boundary). The renderer is sandboxed with context isolation enabled and a restrictive Content Security Policy.
 
 ## Domain model
 
@@ -69,10 +70,13 @@ The export path takes an immutable workspace revision and produces:
   production-structure.json
   episodes/*.json
   storyboards/*.storyboard.json
+  production/approved-designs.json
   handoff.md
 ```
 
 The package is assembled as a set of in-memory files, validated, then written into a staging directory and atomically renamed. A second export never overwrites an existing package directory.
+
+`production/approved-designs.json` uses schema `iploom.production-designs/v1` and carries the completed, author-reviewed text designs and reusable prompts for the exported work; selection rules are in [ArcReel handoff](arcreel-handoff.md#approved-designs).
 
 `storyboards/*.storyboard.json` is validated against the included contract-4 subset before writing. Scene and shot sequences are generated from array position instead of parsed from user-editable IDs. This keeps exported identifiers stable even when a scene has a nonnumeric ID.
 
@@ -84,6 +88,14 @@ Workflow tasks form a separate tree from the story hierarchy. A task can point a
 
 Each task can produce a deterministic Markdown brief. The brief includes only the selected task's scope: objective, deliverable, parent/children, dependency state, the referenced world, novel, chapter, cast, lore, places, factions and relationships. It also carries the project's stylized 3D animation boundary when adaptation work is in scope. The same generator powers the copy action in the app and the `get_workflow_brief` MCP tool.
 
+## Model API
+
+The model client lives in the main process (`apps/studio/src/node/ai-client.ts`); the renderer composes a prompt and sends it over typed IPC. A run is possible only after the author configures **Settings → Model API** and confirms the send: the production desk displays the exact, editable prompt, and the confirmation names the endpoint and model. The import analyzer likewise names the endpoint, model and request count, and caps an import at 40 analysis requests. There is no background, scheduled or automatic transmission, and no automatic retry beyond one resend without `stream_options` after a 400/422 that names it.
+
+What is sent is the composed prompt: task instructions, foundation standards, the selected world's rules and asset records, chapter prose and outline, relationship, timeline and location context, and the results of dependency tasks the author marked done. The prompt is shown and editable before sending, and is not stored in the workspace; runs record only metadata (`lastRun`: model, prompt hash, source revision, timestamp). Output arrives as a workflow draft for review and never replaces a chapter or approved asset automatically.
+
+The API key is held in a main-process module variable for the current session. It is never written to `workspace.json`, exports or the filesystem, and the configuration IPC returns only endpoint, model and a configured flag to the renderer. Endpoint validation accepts HTTPS, or plain HTTP only on `localhost`, `127.0.0.1` or `[::1]`, and rejects credentials, query strings and fragments. Requests use `redirect: "error"`, so a redirect cannot forward the prompt or bearer token to another origin. Requests go directly from the local main process to the configured endpoint; its operator receives the manuscript under its own retention policy, which IPloom does not control.
+
 ## MCP
 
 The MCP server is bundled by esbuild and run through the Electron executable with `ELECTRON_RUN_AS_NODE=1`. This matters on clean installs:
@@ -92,7 +104,7 @@ The MCP server is bundled by esbuild and run through the Electron executable wit
 - Windows can spawn the `.exe` directly rather than failing on a `.cmd` shim;
 - the server is bundled with its JavaScript dependencies.
 
-The eleven query tools, including workflow listing, brief generation and foundation-standard reads, never write. `create_standard` and `update_standard` only change foundation standards inside the workspace; `export_arcreel_bundle` is the only tool that creates files and defaults to an `exports` directory beside the workspace. Its `output_dir` is confined to that directory plus any explicit `--export-root` arguments, and each bundle is fully validated before the first write.
+The eleven query tools, including workflow listing, brief generation and foundation-standard reads, never write. `create_standard` and `update_standard` only change foundation standards inside the workspace; `export_arcreel_bundle` is the only tool that creates files and defaults to an `exports` directory beside the workspace. Its `output_dir` is confined to that directory plus any explicit `--export-root` arguments, compared by real path; each bundle is schema-validated in full before the first write, and per-file paths are checked while it is assembled in a staging directory.
 
 ## Security boundary
 
@@ -105,6 +117,9 @@ Desktop policy lives in `apps/studio/src/node/desktop-guards.ts`, which imports 
 - “Open folder” reveals a file or directory only when its real path stays inside a location the main process created (the workspace directory and its `snapshots` directory), refuses application bundles, and never derives locations from renderer-writable export records.
 - Export file paths are normalized and checked against directory traversal; the package directory must sit exactly one level below the selected destination.
 - ArcReel bundles arriving over IPC or MCP are schema-validated in full — identifiers, timestamp, SHA-256 digest, media types, file count and total size — before any filesystem write.
+- Model requests go only to the configured Chat Completions endpoint over HTTPS or loopback HTTP, use `redirect: "error"`, and are never sent without an explicit author action and confirmation.
+- The model API key stays in main-process memory for the session and is excluded from the renderer, workspace files and exports.
+- Imported manuscripts and lore are included verbatim in model prompts and exposed through MCP tools; they are treated as a prompt-injection surface, and model output is reviewable data rather than an instruction.
 - Content, credentials and generated packages are excluded from Git.
 
 See [SECURITY.md](../SECURITY.md) for reporting.
