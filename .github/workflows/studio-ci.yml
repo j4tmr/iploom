@@ -32,7 +32,7 @@ jobs:
           node-version-file: .node-version
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
-      - run: bun run test
+      - run: bun run test:coverage
       - run: bun run studio:build:release
       - name: Verify release inputs
         run: |

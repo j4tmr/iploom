@@ -39,6 +39,19 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 
 Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The three write tools (`create_standard`, `update_standard`, `export_arcreel_bundle`) are the only ones that can change local state; writes are serialized and re-validated against the workspace schema.
 
+### Export destination boundary
+
+`export_arcreel_bundle` may only write below the workspace's own `exports` directory. A relative `output_dir` is resolved against the directory that holds `workspace.json`; `exports/sub`, `./exports/sub` and an absolute path inside that directory are all accepted. Absolute paths elsewhere, `..` traversal and symlinked ancestors that resolve outside the allowed roots are rejected before anything is created.
+
+For exports that must live somewhere else, start the server with one or more `--export-root` options:
+
+```sh
+bun run studio:mcp --workspace /absolute/path/workspace.json \
+  --export-root /absolute/path/other-exports
+```
+
+Each root is resolved and compared by real path, and the default workspace `exports` directory stays available. Every bundle is validated in full before the first filesystem write: identifiers, timestamp, SHA-256 digest, file paths, media types, file count and total size are checked, so a tampered `output_dir`, `manifestSha256` or timestamp cannot escape the selected destination.
+
 ## Example prompts
 
 ```text

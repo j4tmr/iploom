@@ -3,3 +3,26 @@
 # before any test module (which imports react-dom) is evaluated — see the
 # comment in tests/studio/dom-setup.ts for why a plain import is too late.
 preload = ["./tests/studio/dom-setup.ts"]
+
+# `bun run test:coverage` fails when any measured file drops below these
+# totals (bun 1.4 enforces the threshold per file). Security policy lives in
+# `apps/studio/src/node/desktop-guards.ts`, which the tests import directly,
+# and the MCP server is driven in-process by tests/studio/mcp-server-inline.test.ts.
+# Files listed in coveragePathIgnorePatterns are excluded from the gate and the
+# report; the reasons are documented in docs/architecture.md under "Coverage".
+coverageThreshold = { lines = 0.85, functions = 0.84 }
+coveragePathIgnorePatterns = [
+  # Electron runtime entry point: imports `electron` at module load, so it can
+  # never be imported by the bun test process.
+  "apps/studio/electron/main.ts",
+  # Renderer bridge: every call goes through window.iploom, which only exists
+  # inside Electron; unit tests mock the parts they exercise instead.
+  "apps/studio/src/platform.ts",
+  # Interaction-heavy UI surfaces exercised by studio:smoke and manual QA;
+  # their happy-dom tests cover the extractable logic in dedicated modules.
+  "apps/studio/src/components/forms.tsx",
+  "apps/studio/src/components/manuscript-import.tsx",
+  "apps/studio/src/components/search-overlay.tsx",
+  "apps/studio/src/components/ui.tsx",
+  "apps/studio/src/views/workflow-view.tsx",
+]

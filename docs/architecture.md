@@ -92,16 +92,29 @@ The MCP server is bundled by esbuild and run through the Electron executable wit
 - Windows can spawn the `.exe` directly rather than failing on a `.cmd` shim;
 - the server is bundled with its JavaScript dependencies.
 
-The eleven query tools, including workflow listing, brief generation and foundation-standard reads, never write. `create_standard` and `update_standard` only change foundation standards inside the workspace; `export_arcreel_bundle` is the only tool that creates files and defaults to an `exports` directory beside the workspace.
+The eleven query tools, including workflow listing, brief generation and foundation-standard reads, never write. `create_standard` and `update_standard` only change foundation standards inside the workspace; `export_arcreel_bundle` is the only tool that creates files and defaults to an `exports` directory beside the workspace. Its `output_dir` is confined to that directory plus any explicit `--export-root` arguments, and each bundle is fully validated before the first write.
 
 ## Security boundary
+
+Desktop policy lives in `apps/studio/src/node/desktop-guards.ts`, which imports no Electron API so the main process, the MCP server and tests all exercise the same code.
 
 - No remote content is loaded by the renderer.
 - Navigation and new-window requests are intercepted.
 - Permission requests are denied.
 - Only credential-free HTTP(S) links can be opened externally.
-- “Open folder” is limited to workspace/export paths remembered by the main process.
-- Export file paths are normalized and checked against directory traversal.
+- “Open folder” reveals a file or directory only when its real path stays inside a location the main process created (the workspace directory and its `snapshots` directory), refuses application bundles, and never derives locations from renderer-writable export records.
+- Export file paths are normalized and checked against directory traversal; the package directory must sit exactly one level below the selected destination.
+- ArcReel bundles arriving over IPC or MCP are schema-validated in full — identifiers, timestamp, SHA-256 digest, media types, file count and total size — before any filesystem write.
 - Content, credentials and generated packages are excluded from Git.
 
 See [SECURITY.md](../SECURITY.md) for reporting.
+
+## Coverage
+
+`bun run test:coverage` enforces `coverageThreshold` from [bunfig.toml](../bunfig.toml) per file — bun 1.4 rejects the run when any measured file drops below the floor, even if the totals are higher. Security-relevant code stays inside that gate: the desktop guards (`apps/studio/src/node/desktop-guards.ts`), the workspace store, the AI client and the MCP server are all measured. The stdio MCP suite spawns the server as a subprocess, which coverage cannot observe, so `tests/studio/mcp-server-inline.test.ts` drives the same registered tools over an in-memory transport inside the test process.
+
+Files listed in `coveragePathIgnorePatterns` are excluded because they cannot be meaningfully measured in a bun test process, not because their logic is untested:
+
+- `apps/studio/electron/main.ts` imports `electron` at module load; the policy it applies lives in `desktop-guards.ts`, which is fully covered.
+- `apps/studio/src/platform.ts` is the renderer bridge to `window.iploom`, which only exists inside Electron; unit tests mock the calls they exercise.
+- `apps/studio/src/components/forms.tsx`, `manuscript-import.tsx`, `search-overlay.tsx`, `ui.tsx` and `apps/studio/src/views/workflow-view.tsx` are interaction-heavy UI surfaces covered by `studio:smoke` and manual QA; the extractable logic behind them lives in dedicated modules with their own tests.

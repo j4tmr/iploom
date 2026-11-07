@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   buildArcReelBundle,
   sha256Text,
@@ -953,6 +959,62 @@ describe("workspace store", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("rejects malformed manifests and oversized packages before writing", async () => {
+    const root = mkdtempSync(join(tmpdir(), "iploom-studio-bundle-"));
+    try {
+      const workspace = createDemoWorkspace(
+        "en",
+        "2026-11-06T00:00:00.000Z",
+      );
+      const bundle = await buildArcReelBundle(workspace, {
+        workId: "work_tide_clock",
+        generatedAt: "2026-11-06T03:00:00.000Z",
+      });
+      const store = new WorkspaceStore(join(root, "workspace.json"));
+      const destination = join(root, "exports");
+
+      for (const manifestSha256 of [
+        "/../..//",
+        "A".repeat(64),
+        "0".repeat(63),
+        `${"a".repeat(60)}/../`,
+      ]) {
+        const tampered = structuredClone(bundle);
+        tampered.manifestSha256 = manifestSha256;
+        await expect(
+          store.exportArcReel(tampered, destination),
+        ).rejects.toThrow(/Invalid ArcReel bundle/);
+        expect(existsSync(destination)).toBe(false);
+      }
+
+      const wrongSchema = structuredClone(bundle) as unknown as {
+        schema: string;
+      };
+      wrongSchema.schema = "iploom.arcreel.manifest/v0";
+      await expect(
+        store.exportArcReel(wrongSchema as never, destination),
+      ).rejects.toThrow(/Invalid ArcReel bundle/);
+
+      const oversized = structuredClone(bundle);
+      oversized.files = Array.from({ length: 2_049 }, (_, index) => ({
+        path: `files/${index}.txt`,
+        content: "x",
+        mediaType: "text/plain" as const,
+      }));
+      await expect(
+        store.exportArcReel(oversized, destination),
+      ).rejects.toThrow(/Invalid ArcReel bundle/);
+      expect(existsSync(destination)).toBe(false);
+
+      // A valid bundle still exports, and the package is exactly one level
+      // below the selected destination.
+      const written = await store.exportArcReel(bundle, destination);
+      expect(dirname(written.directory)).toBe(destination);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("desktop MCP configuration", () => {
@@ -987,5 +1049,115 @@ describe("desktop MCP configuration", () => {
     expect(server.command.endsWith(".cmd")).toBe(false);
     expect(server.args[0]!.endsWith("iploom-mcp")).toBe(true);
     expect(server.env).toEqual({ ELECTRON_RUN_AS_NODE: "1" });
+  });
+});
+
+describe("storyboard write contract", () => {
+  const sha256 = "a".repeat(64);
+  const shot = (id: string, sequence: number) => ({
+    id,
+    sequence,
+    shot_type: "wide",
+    description: "The harbor wakes.",
+  });
+  const scene = (
+    id: string,
+    sequence: number,
+    shots: ReturnType<typeof shot>[],
+  ) => ({
+    id,
+    sequence,
+    heading: "EXT. MIST HARBOR - DAWN",
+    shots,
+  });
+  const baseInput = {
+    contract_version: 4,
+    expected_revision: 1,
+    id: "sb_test",
+    episode_id: "ep_test",
+    source_prose_version_id: "pv_test",
+    source_prose_sha256: sha256,
+    title: "Tide clock storyboard",
+    data: {},
+    scenes: [scene("sc_1", 1, [shot("sh_1", 1), shot("sh_2", 2)])],
+  };
+
+  test("requires the script version id and sha together", () => {
+    const withShaOnly = storyboardWriteSchema.safeParse({
+      ...baseInput,
+      source_script_sha256: sha256,
+    });
+    expect(withShaOnly.success).toBe(false);
+    if (!withShaOnly.success) {
+      expect(withShaOnly.error.issues[0]?.message).toBe(
+        "script version and sha must be supplied together",
+      );
+      expect(withShaOnly.error.issues[0]?.path).toEqual([
+        "source_script_sha256",
+      ]);
+    }
+    const withVersionOnly = storyboardWriteSchema.safeParse({
+      ...baseInput,
+      source_script_version_id: "sv_test",
+    });
+    expect(withVersionOnly.success).toBe(false);
+  });
+
+  test("rejects a duplicate scene id or sequence", () => {
+    const parsed = storyboardWriteSchema.safeParse({
+      ...baseInput,
+      scenes: [
+        scene("sc_1", 1, [shot("sh_1", 1)]),
+        scene("sc_1", 2, [shot("sh_2", 1)]),
+      ],
+    });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]?.message).toBe(
+        "duplicate scene identity or sequence",
+      );
+      expect(parsed.error.issues[0]?.path).toEqual(["scenes", 1]);
+    }
+  });
+
+  test("rejects a duplicate shot id or sequence inside a scene", () => {
+    const parsed = storyboardWriteSchema.safeParse({
+      ...baseInput,
+      scenes: [scene("sc_1", 1, [shot("sh_1", 1), shot("sh_1", 2)])],
+    });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]?.message).toBe(
+        "duplicate shot identity or sequence",
+      );
+      expect(parsed.error.issues[0]?.path).toEqual(["scenes", 0, "shots", 1]);
+    }
+  });
+
+  test("caps the total shot count across scenes at the shared limit", () => {
+    const scenes = Array.from({ length: 4 }, (_, sceneIndex) =>
+      scene(
+        `sc_${sceneIndex + 1}`,
+        sceneIndex + 1,
+        Array.from({ length: STORYBOARD_LIMITS.shotsPerScene }, (_, shotIndex) =>
+          shot(`sh_${sceneIndex}_${shotIndex}`, shotIndex + 1),
+        ),
+      ),
+    );
+    const parsed = storyboardWriteSchema.safeParse({ ...baseInput, scenes });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]!;
+      expect(issue.code).toBe("too_big");
+      expect(issue.path).toEqual(["scenes"]);
+      expect((issue as { maximum?: number }).maximum).toBe(
+        STORYBOARD_LIMITS.shots,
+      );
+    }
+    const atLimit = storyboardWriteSchema.safeParse({
+      ...baseInput,
+      scenes: scenes.slice(0, 3),
+    });
+    expect(atLimit.success).toBe(true);
   });
 });

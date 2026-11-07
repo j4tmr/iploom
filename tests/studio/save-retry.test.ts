@@ -63,3 +63,17 @@ test("retrySave stops when a newer save superseded it", async () => {
   ).rejects.toThrow("stale");
   expect(calls).toBe(1);
 });
+
+test("retrySave uses its default timer sleep between attempts", async () => {
+  let calls = 0;
+  const result = await retrySave(
+    async () => {
+      calls += 1;
+      if (calls < 2) throw new Error("transient");
+      return "saved";
+    },
+    { delayMs: 1 },
+  );
+  expect(result).toBe("saved");
+  expect(calls).toBe(2);
+});

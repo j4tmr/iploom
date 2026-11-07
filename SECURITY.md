@@ -26,7 +26,10 @@ The application:
 - validates IPC senders and payloads;
 - denies browser permission requests;
 - opens only credential-free HTTP(S) links externally;
-- limits “open folder” to known workspace/export paths;
+- limits “open folder” to locations the main process created (the workspace directory and its `snapshots` directory), resolving real paths so symlinks cannot escape, and refuses application bundles such as `.app`, `.pkg` and `.bundle`;
+- never derives “open folder” locations from renderer-writable export records, which a compromised renderer could otherwise turn into an arbitrary-path or app-launch primitive;
+- confines MCP exports to the workspace `exports` directory plus explicit `--export-root` arguments, compared by real path;
+- validates every ArcReel bundle — identifiers, timestamp, SHA-256 digest, file paths, media types, file count and total size — before the first filesystem write, and requires the package directory to sit exactly one level below the selected destination;
 - checks export package paths against traversal.
 
 The application does not:
