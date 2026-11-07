@@ -619,7 +619,8 @@ function registerIpcHandlers(): void {
     // renderer may save once more right after this handler returns.
     const snapshotPath = await store.createSnapshot("before-reset-demo");
     const workspace = createDemoWorkspace(locale);
-    await store.save(workspace);
+    // The demo starts at a lower revision than the user workspace it replaces.
+    await store.save(workspace, { allowRollback: true });
     rememberFolders();
     return {
       workspace,

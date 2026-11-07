@@ -94,6 +94,7 @@ import { WorkflowView } from "./views/workflow-view.tsx";
 import { ProductionPanel } from "./components/production-panel.tsx";
 import { ManuscriptImport } from "./components/manuscript-import.tsx";
 import { mergeManuscriptImport } from "./core/manuscript.ts";
+import { prepareSnapshot } from "./snapshot-guard.ts";
 import { StoryObjectModal, TimelineEventModal } from "./components/timeline-forms.tsx";
 import { TimelineView } from "./views/timeline-view.tsx";
 import type { StandardCandidate } from "./core/standards.ts";
@@ -163,13 +164,17 @@ export function App() {
    */
   const snapshotBefore = async (reason: string): Promise<boolean> => {
     try {
-      await state.saveNow();
-      await bridge.createSnapshot(reason);
-      return true;
+      const prepared = await prepareSnapshot(
+        state.saveNow,
+        (target) => bridge.createSnapshot(target),
+        reason,
+      );
+      if (prepared) return true;
     } catch {
-      notify(t("snapshotFailed"));
-      return false;
+      // A throw and a null snapshot both leave no recoverable copy.
     }
+    notify(t("snapshotFailed"));
+    return false;
   };
 
   const theme = workspace?.settings.theme ?? "system";
@@ -1064,11 +1069,18 @@ export function App() {
       />
 
       {modal?.kind === "import" ? <ManuscriptImport locale={locale} t={t} onClose={() => setModal(null)} onImport={async (imported) => {
-        if (!(await snapshotBefore("before-import-novel"))) return;
-        // Validate the combined snapshot before scheduling the mutation.
-        mergeManuscriptImport(workspace, imported);
-        mutate((draft) => Object.assign(draft, mergeManuscriptImport(draft, imported)));
-        navigate({ name: "work", workId: imported.works[0]!.id });
+        if (!(await snapshotBefore("before-import-novel"))) return false;
+        try {
+          // Validate the combined snapshot before scheduling the mutation.
+          mergeManuscriptImport(workspace, imported);
+          mutate((draft) => Object.assign(draft, mergeManuscriptImport(draft, imported)));
+          navigate({ name: "work", workId: imported.works[0]!.id });
+          return true;
+        } catch (error) {
+          // Keep the dialog (and its pasted manuscript) open.
+          notify(error instanceof Error ? error.message : String(error));
+          return false;
+        }
       }} /> : null}
       {modal?.kind === "world" ? (
         <UniverseModal

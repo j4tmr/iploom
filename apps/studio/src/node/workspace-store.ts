@@ -34,6 +34,30 @@ export interface LoadedWorkspace {
   rejectedReason?: string | null;
 }
 
+/**
+ * The desktop app and the MCP server are separate processes sharing one
+ * workspace file. Saving an older revision after another process wrote a
+ * newer one would roll the workspace back, so the write is refused instead
+ * (and marked non-retryable: retrying cannot help).
+ */
+export class StaleWorkspaceError extends Error {
+  readonly retryable = false;
+
+  constructor(
+    readonly path: string,
+    readonly storedRevision: number,
+    readonly incomingRevision: number,
+  ) {
+    super(
+      `Refusing to overwrite ${path} revision ${storedRevision} with older ` +
+        `revision ${incomingRevision}. Another process (for example the MCP ` +
+        `server) changed the workspace. Reload the workspace to continue from ` +
+        `the newer file; the file was left untouched.`,
+    );
+    this.name = "StaleWorkspaceError";
+  }
+}
+
 export class NewerWorkspaceVersionError extends Error {
   readonly path: string;
   readonly foundVersion: number;
@@ -136,6 +160,11 @@ function formatValidationError(path: string, error: unknown): string {
         ? error.message
         : String(error)
   }`;
+}
+
+export interface WorkspaceSaveOptions {
+  /** Snapshot restore and demo reset intentionally move the workspace backwards. */
+  allowRollback?: boolean;
 }
 
 export interface WrittenBundle {
@@ -316,9 +345,14 @@ export class WorkspaceStore {
     );
   }
 
-  async save(workspace: StudioWorkspace): Promise<void> {
+  async save(
+    workspace: StudioWorkspace,
+    options: WorkspaceSaveOptions = {},
+  ): Promise<void> {
     const valid = validateWorkspace(workspace);
-    const pending = this.saveQueue.then(() => this.writeWorkspace(valid));
+    const pending = this.saveQueue.then(() =>
+      this.writeWorkspace(valid, options),
+    );
     this.saveQueue = pending.catch(() => undefined);
     return pending;
   }
@@ -346,7 +380,10 @@ export class WorkspaceStore {
     return pending;
   }
 
-  private async writeWorkspace(workspace: StudioWorkspace): Promise<void> {
+  private async writeWorkspace(
+    workspace: StudioWorkspace,
+    options: WorkspaceSaveOptions,
+  ): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
     const temp = `${this.filePath}.tmp-${process.pid}-${Date.now()}-${Math.random()
       .toString(36)
@@ -357,20 +394,30 @@ export class WorkspaceStore {
       await writeFileDurable(temp, content);
       if (await exists(this.filePath)) {
         const previous = await readFile(this.filePath, "utf8");
-        let healthy = false;
+        let current: StudioWorkspace | null = null;
         try {
-          validateWorkspace(migrateWorkspace(JSON.parse(previous)));
-          healthy = true;
+          current = validateWorkspace(migrateWorkspace(JSON.parse(previous)));
         } catch {
           // Saving over an unreadable primary file would destroy data that a
           // later build (or a manual repair) could still recover. `load()`
           // quarantines such files before returning the backup; reaching this
           // branch means the file changed after that check.
         }
-        if (!healthy) {
+        if (current === null) {
           throw new Error(
             `Refusing to overwrite unreadable workspace file ${this.filePath}. ` +
               `Reload the workspace so the file can be quarantined first.`,
+          );
+        }
+        // The editor keeps the whole workspace in memory and autosaves it
+        // without reloading while another process (the MCP server) may have
+        // written a newer revision. Refusing here keeps that change instead of
+        // silently rolling the file back.
+        if (!options.allowRollback && current.revision > workspace.revision) {
+          throw new StaleWorkspaceError(
+            this.filePath,
+            current.revision,
+            workspace.revision,
           );
         }
         // Renaming the previous primary keeps the `.bak` byte-identical to the
@@ -490,7 +537,7 @@ export class WorkspaceStore {
     const raw = await readFile(target, "utf8");
     const workspace = validateWorkspace(migrateWorkspace(JSON.parse(raw)));
     await this.createSnapshot("before-restore");
-    await this.save(workspace);
+    await this.save(workspace, { allowRollback: true });
     return {
       workspace,
       path: this.filePath,

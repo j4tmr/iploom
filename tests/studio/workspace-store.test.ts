@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import { deleteUniverseFromDraft } from "../../apps/studio/src/core/integrity.ts";
-import { WorkspaceStore } from "../../apps/studio/src/node/workspace-store.ts";
+import {
+  StaleWorkspaceError,
+  WorkspaceStore,
+} from "../../apps/studio/src/node/workspace-store.ts";
 
 const NOW = "2026-11-07T00:00:00.000Z";
 
@@ -109,4 +112,80 @@ test("a corrupt workspace file never replaces a good snapshot", async () => {
   await writeFile(store.filePath, "{broken", "utf8");
   expect(await store.createSnapshot("before-delete-world")).toBeNull();
   expect(await store.listSnapshots()).toHaveLength(0);
+});
+
+test("an older revision cannot overwrite a newer workspace file", async () => {
+  const store = await storeInTemp();
+  const newer = workspaceTitled("MCP 更新");
+  newer.revision = 13;
+  await store.save(newer);
+  const before = await readFile(store.filePath, "utf8");
+
+  const stale = workspaceTitled("编辑器旧稿");
+  stale.revision = 12;
+  const error: unknown = await store.save(stale).catch((reason) => reason);
+
+  expect(error).toBeInstanceOf(StaleWorkspaceError);
+  expect((error as StaleWorkspaceError).storedRevision).toBe(13);
+  expect((error as StaleWorkspaceError).incomingRevision).toBe(12);
+  expect((error as StaleWorkspaceError).retryable).toBe(false);
+  expect((error as Error).message).toContain("revision 13");
+  expect((error as Error).message).toContain("revision 12");
+  expect((error as Error).message).toMatch(/reload/i);
+  // The rejected save must not rotate the newer workspace into `.bak` either.
+  expect(await readFile(store.filePath, "utf8")).toBe(before);
+});
+
+test("equal and newer revisions still save", async () => {
+  const store = await storeInTemp();
+  const base = workspaceTitled("base");
+  base.revision = 13;
+  await store.save(base);
+
+  const equal = workspaceTitled("equal");
+  equal.revision = 13;
+  await store.save(equal);
+  expect(await storedTitle(store.filePath)).toBe("equal");
+
+  const newer = workspaceTitled("newer");
+  newer.revision = 14;
+  await store.save(newer);
+  expect(await storedTitle(store.filePath)).toBe("newer");
+});
+
+test("allowRollback lets an intentional restore move the revision backwards", async () => {
+  const store = await storeInTemp();
+  const current = workspaceTitled("current");
+  current.revision = 20;
+  await store.save(current);
+
+  const restored = workspaceTitled("restored");
+  restored.revision = 12;
+  await store.save(restored, { allowRollback: true });
+  expect(await storedTitle(store.filePath)).toBe("restored");
+});
+
+test("update still performs a serialized read-modify-write", async () => {
+  const store = await storeInTemp();
+  const base = workspaceTitled("base");
+  base.revision = 5;
+  await store.save(base);
+
+  const updated = await store.update((workspace) => {
+    workspace.name = "via update";
+  });
+
+  expect(updated.revision).toBe(6);
+  const loaded = await store.load();
+  expect(loaded.workspace.name).toBe("via update");
+  expect(loaded.workspace.revision).toBe(6);
+});
+
+test("ensure writes a primary file so a new workspace can snapshot", async () => {
+  const store = await storeInTemp();
+  const loaded = await store.ensure();
+
+  expect(loaded.path).toBe(store.filePath);
+  expect((await readFile(store.filePath, "utf8")).length).toBeGreaterThan(0);
+  expect(await store.createSnapshot("before-delete-world")).not.toBeNull();
 });

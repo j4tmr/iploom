@@ -555,6 +555,7 @@ const zh = {
   importFailure: "第 {chapter} 章第 {part} 块失败：{message} 已完成 {done}/{total} 块。可重试失败片段（不会重发已完成片段），或跳过失败片段继续。",
   importReady: "分析完成。请审阅人物名、关系方向、场景及原文依据，再确认导入。",
   importDiscardConfirm: "这次导入的原文或分析尚未导入，关闭后会丢失。确定关闭？",
+  importFailed: "导入未完成，原文和分析已保留。请处理问题后重试。",
   scenesTitle: "场景与制作镜头",
   scenesLead: "为章节维护场景地点、出场人物与镜头提示词。AI 草案先在制作台审阅，再将确认的设计填入这里。",
   scenesShots: "{count} 镜头",
@@ -1291,6 +1292,8 @@ const en: Record<MessageKey, string> = {
     "Analysis ready. Review names, directional relationships, scenes and source quotations before importing.",
   importDiscardConfirm:
     "This import has text or analysis that has not been imported. Close anyway?",
+  importFailed:
+    "The import did not finish; your manuscript and analysis were kept. Fix the problem and try again.",
   scenesTitle: "Scenes and production shots",
   scenesLead:
     "Keep scene locations, cast and shot prompts per chapter. Review AI drafts in the production panel, then carry the approved design here.",
