@@ -55,7 +55,11 @@ export function ManuscriptImport({ locale, onClose, onImport }: { locale: UiLoca
       }, { previous, skip: nextSkipped, continueOnFailure, shouldStop: () => canceled.current });
       setResults(run.results);
       setFailures(run.failures);
-      if (run.results.length) setAnalysis(JSON.stringify(run.results, null, 2));
+      // A retry can complete segments the user never saw; rewritten JSON must be reviewed again.
+      if (run.results.some((value) => !previous.some((item) => sameChunk(item, value)))) {
+        setAnalysis(JSON.stringify(run.results, null, 2));
+        setReviewed(false);
+      }
       if (canceled.current) {
         setMessage(en ? `Analysis canceled. ${run.results.length} finished segments were kept.` : `分析已取消；已保留 ${run.results.length} 个完成片段。`);
         return;
