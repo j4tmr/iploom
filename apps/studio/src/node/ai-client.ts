@@ -7,7 +7,15 @@ export const aiConfigSchema = z.object({
   model: z.string().trim().min(1).max(200),
   apiKey: z.string().trim().max(4096),
 }).strict().superRefine((config, ctx) => {
-  const url = new URL(config.endpoint);
+  // Refinements still run after .url() fails in zod 4, so an empty or scheme-less endpoint
+  // must not reach the URL constructor and surface as a raw TypeError over IPC.
+  let url: URL;
+  try {
+    url = new URL(config.endpoint);
+  } catch {
+    ctx.addIssue({ code: "custom", message: "Enter a valid URL such as https://host/v1." });
+    return;
+  }
   if (url.username || url.password || url.search || url.hash ||
       (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))) {
     ctx.addIssue({ code: "custom", message: "Use HTTPS or loopback HTTP; no URL credentials, query or fragment." });
