@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AiConfigInfo } from "../core/ai.ts";
+import { MCP_TOOL_NAMES, mcpToolsNote } from "../core/mcp-tools.ts";
 import type {
   StudioWorkspace,
   ThemeMode,
@@ -25,23 +26,6 @@ import {
   Select,
   Toast,
 } from "../components/ui.tsx";
-
-const mcpTools = [
-  "list_story_worlds",
-  "get_story_world",
-  "list_novels",
-  "get_novel",
-  "get_chapter",
-  "search_ip",
-  "get_relationship_graph",
-  "list_workflow_tasks",
-  "get_workflow_brief",
-  "list_standards",
-  "get_standard",
-  "create_standard",
-  "update_standard",
-  "export_arcreel_bundle",
-];
 
 export function SettingsView({
   workspace,
@@ -109,20 +93,7 @@ export function SettingsView({
     }
   };
 
-  const config = info
-    ? JSON.stringify(info.mcp, null, 2)
-    : JSON.stringify(
-        {
-          mcpServers: {
-            "iploom-studio": {
-              command: "iploom-mcp",
-              args: ["--workspace", path],
-            },
-          },
-        },
-        null,
-        2,
-      );
+  const config = info?.mcp ? JSON.stringify(info.mcp, null, 2) : "";
 
   return (
     <div className="view settings-view">
@@ -211,25 +182,37 @@ export function SettingsView({
           </div>
           <p>{t("mcpLead")}</p>
           <div className="tool-pills">
-            {mcpTools.map((tool) => <code key={tool}>{tool}</code>)}
+            {MCP_TOOL_NAMES.map((tool) => <code key={tool}>{tool}</code>)}
           </div>
-          <div className="code-block">
-            <div className="code-block-head">
-              <span>{t("mcpConfig")}</span>
-              <Button
-                variant="ghost"
-                icon="copy"
-                onClick={async () => {
-                  await bridge.copyText(config);
-                  notify(t("copied"));
-                }}
-              >
-                {t("copyConfig")}
-              </Button>
+          {info && !info.desktop ? (
+            <p className="muted small">{t("browserPreview")}</p>
+          ) : info?.desktop && !info.mcp ? (
+            <div className="mcp-missing">
+              <h3>{t("mcpMissingTitle")}</h3>
+              <p>{t("mcpMissingLead")}</p>
+              {info.mcpError ? (
+                <p className="muted small">{info.mcpError}</p>
+              ) : null}
             </div>
-            <pre>{config}</pre>
-          </div>
-          <p className="muted small">{t("mcpToolsNote")}</p>
+          ) : config ? (
+            <div className="code-block">
+              <div className="code-block-head">
+                <span>{t("mcpConfig")}</span>
+                <Button
+                  variant="ghost"
+                  icon="copy"
+                  onClick={async () => {
+                    await bridge.copyText(config);
+                    notify(t("copied"));
+                  }}
+                >
+                  {t("copyConfig")}
+                </Button>
+              </div>
+              <pre>{config}</pre>
+            </div>
+          ) : null}
+          <p className="muted small">{mcpToolsNote(locale)}</p>
         </section>
 
         <section className="settings-panel">

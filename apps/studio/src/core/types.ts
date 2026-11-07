@@ -470,6 +470,11 @@ export interface SearchHit {
     | "timeline";
   id: string;
   universeId: string;
+  /**
+   * Every universe a character belongs to. `universeId` keeps the first entry
+   * for records that only read one world; filtering uses this list when set.
+   */
+  universeIds?: string[];
   workId?: string;
   chapterId?: string;
   title: string;

@@ -34,7 +34,7 @@ describe("word count scripts", () => {
 describe("workspace search normalization", () => {
   test("matches multi-word queries across entities", () => {
     const workspace = createDemoWorkspace("zh-CN", NOW);
-    const hits = searchWorkspace(workspace, "林舟 钟楼", "zh-CN");
+    const hits = searchWorkspace(workspace, "林舟 钟楼", "zh-CN").hits;
     expect(hits.length).toBeGreaterThan(0);
     expect(hits.some((hit) => hit.id === "char_lin")).toBe(true);
     expect(hits.some((hit) => hit.id === "loc_old_tower")).toBe(true);
@@ -45,10 +45,10 @@ describe("workspace search normalization", () => {
     const lin = workspace.characters.find(
       (character) => character.id === "char_lin",
     )!;
-    const english = searchWorkspace(workspace, lin.name.en, "zh-CN").find(
+    const english = searchWorkspace(workspace, lin.name.en, "zh-CN").hits.find(
       (hit) => hit.id === "char_lin",
     );
-    const chinese = searchWorkspace(workspace, lin.name.zh, "zh-CN").find(
+    const chinese = searchWorkspace(workspace, lin.name.zh, "zh-CN").hits.find(
       (hit) => hit.id === "char_lin",
     );
     expect(english).toBeDefined();
@@ -61,15 +61,15 @@ describe("workspace search normalization", () => {
 
   test("folds full-width letters and collapses whitespace", () => {
     const workspace = createDemoWorkspace("en", NOW);
-    const halfWidth = searchWorkspace(workspace, "lin", "en");
-    const fullWidth = searchWorkspace(workspace, "Ｌｉｎ", "en");
+    const halfWidth = searchWorkspace(workspace, "lin", "en").hits;
+    const fullWidth = searchWorkspace(workspace, "Ｌｉｎ", "en").hits;
     expect(fullWidth.length).toBeGreaterThan(0);
     expect(fullWidth.map((hit) => [hit.id, hit.score])).toEqual(
       halfWidth.map((hit) => [hit.id, hit.score]),
     );
 
-    const doubled = searchWorkspace(workspace, "lin  zhou", "en");
-    const ideographic = searchWorkspace(workspace, "lin　zhou", "en");
+    const doubled = searchWorkspace(workspace, "lin  zhou", "en").hits;
+    const ideographic = searchWorkspace(workspace, "lin　zhou", "en").hits;
     expect(doubled.length).toBeGreaterThan(0);
     expect(doubled.map((hit) => hit.id)).toEqual(
       ideographic.map((hit) => hit.id),

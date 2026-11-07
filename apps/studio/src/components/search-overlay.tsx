@@ -50,7 +50,7 @@ export function SearchOverlay({
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const results = useMemo(
-    () => searchWorkspace(workspace, query, locale, 36),
+    () => searchWorkspace(workspace, query, locale, { limit: 36 }).hits,
     [locale, query, workspace],
   );
 

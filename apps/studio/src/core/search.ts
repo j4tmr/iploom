@@ -102,21 +102,63 @@ function score(fields: Field[], terms: string[]): number {
   return total;
 }
 
+export interface SearchOptions {
+  limit?: number;
+  offset?: number;
+  /** Keep only hits inside this story world. Characters match any membership. */
+  universeId?: string;
+  kind?: SearchHit["kind"];
+}
+
+export interface SearchResults {
+  hits: SearchHit[];
+  /** Number of in-scope hits before the offset/limit window is applied. */
+  total: number;
+  /** True when hits exist after the returned window. */
+  truncated: boolean;
+}
+
+/**
+ * A total order, not just a score: paginating a ties-only score would let the
+ * same record land on two pages (or none) when the sort order shifts.
+ */
+function compareHits(a: SearchHit, b: SearchHit): number {
+  if (b.score !== a.score) return b.score - a.score;
+  if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
+ * The scope filters run while hits are collected, before the ranking window,
+ * so a hit from another world or kind can never crowd an in-scope hit out of
+ * the first page.
+ */
 export function searchWorkspace(
   workspace: StudioWorkspace,
   query: string,
   locale: UiLocale,
-  limit = 40,
-): SearchHit[] {
+  options: SearchOptions = {},
+): SearchResults {
   const terms = queryTerms(query);
-  if (!terms.length) return [];
+  const hits: SearchHit[] = [];
+  const inScope = (hit: SearchHit): boolean => {
+    if (options.kind && hit.kind !== options.kind) return false;
+    if (options.universeId) {
+      const universes = hit.universeIds ?? [hit.universeId];
+      if (!universes.includes(options.universeId)) return false;
+    }
+    return true;
+  };
+  const add = (hit: SearchHit): void => {
+    if (inScope(hit)) hits.push(hit);
+  };
+  if (!terms.length) return { hits, total: 0, truncated: false };
   const universeNames = new Map(
     workspace.universes.map((universe) => [
       universe.id,
       displayText(universe.name, locale),
     ]),
   );
-  const hits: SearchHit[] = [];
 
   for (const universe of workspace.universes) {
     const title = displayText(universe.name, locale);
@@ -134,7 +176,7 @@ export function searchWorkspace(
       terms,
     );
     if (rank)
-      hits.push({
+      add({
         kind: "universe",
         id: universe.id,
         universeId: universe.id,
@@ -173,7 +215,7 @@ export function searchWorkspace(
         0,
       );
     if (rank)
-      hits.push({
+      add({
         kind: "work",
         id: work.id,
         universeId: work.universeId,
@@ -200,7 +242,7 @@ export function searchWorkspace(
         terms,
       );
       if (rank)
-        hits.push({
+        add({
           kind: "chapter",
           id: chapter.id,
           universeId: work.universeId,
@@ -239,10 +281,11 @@ export function searchWorkspace(
       terms,
     );
     if (rank)
-      hits.push({
+      add({
         kind: "character",
         id: character.id,
         universeId: character.universeIds[0] ?? "",
+        universeIds: [...character.universeIds],
         title,
         subtitle: displayText(character.role, locale),
         excerpt: excerpt(
@@ -267,7 +310,7 @@ export function searchWorkspace(
       terms,
     );
     if (rank)
-      hits.push({
+      add({
         kind: "location",
         id: location.id,
         universeId: location.universeId,
@@ -295,7 +338,7 @@ export function searchWorkspace(
       terms,
     );
     if (rank)
-      hits.push({
+      add({
         kind: "faction",
         id: faction.id,
         universeId: faction.universeId,
@@ -320,7 +363,7 @@ export function searchWorkspace(
       terms,
     );
     if (rank)
-      hits.push({
+      add({
         kind: "lore",
         id: lore.id,
         universeId: lore.universeId,
@@ -345,7 +388,7 @@ export function searchWorkspace(
       terms,
     );
     if (rank)
-      hits.push({
+      add({
         kind: "object",
         id: object.id,
         universeId: object.universeId,
@@ -378,7 +421,7 @@ export function searchWorkspace(
       terms,
     );
     if (rank)
-      hits.push({
+      add({
         kind: "timeline",
         id: event.id,
         universeId: event.universeId,
@@ -394,5 +437,13 @@ export function searchWorkspace(
       });
   }
 
-  return hits.sort((a, b) => b.score - a.score).slice(0, limit);
+  const limit = Math.max(0, Math.trunc(options.limit ?? 40));
+  const offset = Math.max(0, Math.trunc(options.offset ?? 0));
+  hits.sort(compareHits);
+  const page = hits.slice(offset, offset + limit);
+  return {
+    hits: page,
+    total: hits.length,
+    truncated: offset + page.length < hits.length,
+  };
 }
