@@ -13,8 +13,8 @@ import { constants } from "node:fs";
 import { basename, dirname, join, normalize, resolve, sep } from "node:path";
 import { arcReelSlug } from "../core/arcreel.ts";
 import { createEmptyWorkspace } from "../core/factory.ts";
+import { loadWorkspace } from "../core/integrity.ts";
 import { validateWorkspace, WorkspaceValidationError } from "../core/validate.ts";
-import { migrateWorkspace } from "../core/migrations.ts";
 import {
   WORKSPACE_SCHEMA_VERSION,
   type ArcReelBundle,
@@ -236,7 +236,7 @@ export class WorkspaceStore {
       if (version !== null && version > WORKSPACE_SCHEMA_VERSION)
         throw new NewerWorkspaceVersionError(candidate, version);
       try {
-        const workspace = validateWorkspace(migrateWorkspace(parsed));
+        const workspace = loadWorkspace(parsed);
         if (fromBackup && primaryError !== null) {
           const rejectedPath = await this.quarantinePrimary(primaryError);
           return {
@@ -359,7 +359,7 @@ export class WorkspaceStore {
         const previous = await readFile(this.filePath, "utf8");
         let healthy = false;
         try {
-          validateWorkspace(migrateWorkspace(JSON.parse(previous)));
+          loadWorkspace(JSON.parse(previous));
           healthy = true;
         } catch {
           // Saving over an unreadable primary file would destroy data that a
@@ -420,7 +420,7 @@ export class WorkspaceStore {
     if (!(await exists(this.filePath))) return null;
     const raw = await readFile(this.filePath, "utf8");
     try {
-      validateWorkspace(migrateWorkspace(JSON.parse(raw)));
+      loadWorkspace(JSON.parse(raw));
     } catch {
       return null;
     }
@@ -488,7 +488,7 @@ export class WorkspaceStore {
     )
       throw new Error(`Not a workspace snapshot: ${snapshotPath}`);
     const raw = await readFile(target, "utf8");
-    const workspace = validateWorkspace(migrateWorkspace(JSON.parse(raw)));
+    const workspace = loadWorkspace(JSON.parse(raw));
     await this.createSnapshot("before-restore");
     await this.save(workspace);
     return {

@@ -1,4 +1,5 @@
 import { createDemoWorkspace } from "./core/factory.ts";
+import { loadWorkspace } from "./core/integrity.ts";
 import { validateWorkspace } from "./core/validate.ts";
 import type { StudioWorkspace, UiLocale } from "./core/types.ts";
 
@@ -11,7 +12,7 @@ export function loadBrowserWorkspace(storage: WorkspaceStorage, locale: UiLocale
   return {
     workspace: raw === null
       ? createDemoWorkspace(locale)
-      : validateWorkspace(JSON.parse(raw)),
+      : loadWorkspace(JSON.parse(raw)),
     path: "Browser localStorage",
     recoveredFromBackup: false,
   };
@@ -51,7 +52,7 @@ export function saveBrowserWorkspace(
   if (raw !== null && !options.allowRollback) {
     let storedRevision: number | null = null;
     try {
-      storedRevision = validateWorkspace(JSON.parse(raw)).revision;
+      storedRevision = loadWorkspace(JSON.parse(raw)).revision;
     } catch {
       // Unreadable stored data must stay replaceable by a healthy workspace.
       storedRevision = null;
@@ -71,7 +72,7 @@ export function saveBrowserSnapshot(storage: WorkspaceStorage): string | null {
   const raw = storage.getItem(browserWorkspaceKey);
   if (raw === null) return null;
   try {
-    validateWorkspace(JSON.parse(raw));
+    loadWorkspace(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -84,7 +85,7 @@ export function loadBrowserSnapshot(storage: WorkspaceStorage) {
   return raw === null
     ? null
     : {
-        workspace: validateWorkspace(JSON.parse(raw)),
+        workspace: loadWorkspace(JSON.parse(raw)),
         path: "Browser localStorage",
         recoveredFromBackup: false,
       };

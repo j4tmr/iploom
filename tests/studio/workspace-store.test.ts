@@ -110,3 +110,45 @@ test("a corrupt workspace file never replaces a good snapshot", async () => {
   expect(await store.createSnapshot("before-delete-world")).toBeNull();
   expect(await store.listSnapshots()).toHaveLength(0);
 });
+
+test("a legacy workspace with cross-universe refs loads repaired and saves", async () => {
+  const store = await storeInTemp();
+  const legacy = createDemoWorkspace("en", NOW);
+  const legacyChapter = legacy.works.find(
+    (work) => work.id === "work_last_train",
+  )!.chapters[0]!;
+  legacyChapter.characterIds = ["char_echo", "char_lin"];
+  legacyChapter.locationId = "loc_old_tower";
+  await writeFile(
+    store.filePath,
+    `${JSON.stringify(legacy, null, 2)}\n`,
+    "utf8",
+  );
+
+  const loaded = await store.load();
+  expect(loaded.recoveredFromBackup).toBe(false);
+  expect(loaded.workspace.revision).toBe(legacy.revision);
+  const repairedChapter = loaded.workspace.works.find(
+    (work) => work.id === "work_last_train",
+  )!.chapters[0]!;
+  expect(repairedChapter.characterIds).toEqual(["char_echo"]);
+  expect(repairedChapter.locationId).toBeUndefined();
+  // Snapshotting must accept the legacy primary file as healthy.
+  expect(await store.createSnapshot("legacy")).not.toBeNull();
+
+  loaded.workspace.revision += 1;
+  await store.save(loaded.workspace);
+  const stored = JSON.parse(await readFile(store.filePath, "utf8")) as {
+    revision: number;
+    works: {
+      id: string;
+      chapters: { characterIds: string[]; locationId?: string }[];
+    }[];
+  };
+  expect(stored.revision).toBe(loaded.workspace.revision);
+  const storedChapter = stored.works.find(
+    (work) => work.id === "work_last_train",
+  )!.chapters[0]!;
+  expect(storedChapter.characterIds).toEqual(["char_echo"]);
+  expect("locationId" in storedChapter).toBe(false);
+});

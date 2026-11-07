@@ -494,7 +494,8 @@ export const workspaceSchema = z
           );
         chapterNumbers.add(chapter.number);
         for (const characterId of chapter.characterIds) {
-          if (!characters.has(characterId))
+          const character = charactersById.get(characterId);
+          if (!character)
             issue(
               [
                 "works",
@@ -505,28 +506,64 @@ export const workspaceSchema = z
               ],
               `unknown character: ${characterId}`,
             );
-        }
-        if (chapter.locationId && !locations.has(chapter.locationId))
-          issue(
-            ["works", workIndex, "chapters", chapterIndex, "locationId"],
-            "unknown location",
-          );
-        for (const [sceneIndex, scene] of chapter.scenes.entries()) {
-          if (scene.locationId && !locations.has(scene.locationId))
+          else if (!character.universeIds.includes(work.universeId))
             issue(
               [
                 "works",
                 workIndex,
                 "chapters",
                 chapterIndex,
-                "scenes",
-                sceneIndex,
-                "locationId",
+                "characterIds",
               ],
+              "character belongs to another universe",
+            );
+        }
+        if (chapter.locationId) {
+          const location = locationsById.get(chapter.locationId);
+          if (!location)
+            issue(
+              ["works", workIndex, "chapters", chapterIndex, "locationId"],
               "unknown location",
             );
+          else if (location.universeId !== work.universeId)
+            issue(
+              ["works", workIndex, "chapters", chapterIndex, "locationId"],
+              "location belongs to another universe",
+            );
+        }
+        for (const [sceneIndex, scene] of chapter.scenes.entries()) {
+          if (scene.locationId) {
+            const location = locationsById.get(scene.locationId);
+            if (!location)
+              issue(
+                [
+                  "works",
+                  workIndex,
+                  "chapters",
+                  chapterIndex,
+                  "scenes",
+                  sceneIndex,
+                  "locationId",
+                ],
+                "unknown location",
+              );
+            else if (location.universeId !== work.universeId)
+              issue(
+                [
+                  "works",
+                  workIndex,
+                  "chapters",
+                  chapterIndex,
+                  "scenes",
+                  sceneIndex,
+                  "locationId",
+                ],
+                "location belongs to another universe",
+              );
+          }
           for (const characterId of scene.characterIds) {
-            if (!characters.has(characterId))
+            const character = charactersById.get(characterId);
+            if (!character)
               issue(
                 [
                   "works",
@@ -538,6 +575,19 @@ export const workspaceSchema = z
                   "characterIds",
                 ],
                 `unknown character: ${characterId}`,
+              );
+            else if (!character.universeIds.includes(work.universeId))
+              issue(
+                [
+                  "works",
+                  workIndex,
+                  "chapters",
+                  chapterIndex,
+                  "scenes",
+                  sceneIndex,
+                  "characterIds",
+                ],
+                "character belongs to another universe",
               );
           }
         }
