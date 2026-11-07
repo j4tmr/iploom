@@ -331,7 +331,11 @@ export function TimelineView({
               </article>
             ))}
             {!objects.length ? (
-              <button className="timeline-object-empty" onClick={() => onNewObject(universeId)}>
+              <button
+                className="timeline-object-empty"
+                disabled={!universeId}
+                onClick={() => onNewObject(universeId)}
+              >
                 <Icon name="package" size={24} />
                 <span>{t("timelineAddFirstProp")}</span>
               </button>
