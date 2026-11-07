@@ -155,6 +155,22 @@ export function App() {
     window.setTimeout(() => setToast(null), 2600);
   };
 
+  /**
+   * Persist pending edits, then store a snapshot outside the rotating `.bak`
+   * slot. Destructive actions abort when this fails: without a snapshot the
+   * deleted content would have no recoverable copy.
+   */
+  const snapshotBefore = async (reason: string): Promise<boolean> => {
+    try {
+      await state.saveNow();
+      await bridge.createSnapshot(reason);
+      return true;
+    } catch {
+      notify(t("snapshotFailed"));
+      return false;
+    }
+  };
+
   const theme = workspace?.settings.theme ?? "system";
   useEffect(() => {
     applyTheme(theme);
@@ -282,8 +298,9 @@ export function App() {
     return true;
   };
 
-  const deleteUniverse = (target: StoryUniverse) => {
+  const deleteUniverse = async (target: StoryUniverse) => {
     if (!window.confirm(t("confirmDeleteWorld"))) return;
+    if (!(await snapshotBefore("before-delete-world"))) return;
     if (!mutateChecked((draft) => deleteUniverseFromDraft(draft, target.id)))
       return;
     replaceRoute({ name: "dashboard" });
@@ -291,8 +308,9 @@ export function App() {
     notify(t("saved"));
   };
 
-  const deleteNovel = (target: StoryWork) => {
+  const deleteNovel = async (target: StoryWork) => {
     if (!window.confirm(t("confirmDeleteNovel"))) return;
+    if (!(await snapshotBefore("before-delete-novel"))) return;
     if (!mutateChecked((draft) => deleteWorkFromDraft(draft, target.id)))
       return;
     replaceRoute({ name: "universe", id: target.universeId, tab: "stories" });
@@ -594,8 +612,9 @@ export function App() {
     });
   };
 
-  const deleteChapter = (workId: string, chapter: Chapter) => {
+  const deleteChapter = async (workId: string, chapter: Chapter) => {
     if (!window.confirm(t("confirmDelete"))) return;
+    if (!(await snapshotBefore("before-delete-chapter"))) return;
     mutateChecked((draft) => {
       deleteChapterFromDraft(draft, workId, chapter.id);
       const target = draft.works.find((item) => item.id === workId);
@@ -679,7 +698,19 @@ export function App() {
     state.replaceWorkspace(loaded.workspace);
     setRoute({ name: "dashboard" });
     setHistory([]);
-    notify(t("saved"));
+    notify(
+      loaded.snapshotPath
+        ? t("snapshotSaved", { path: loaded.snapshotPath })
+        : t("saved"),
+    );
+  };
+
+  const restoreSnapshot = async (snapshotPath: string) => {
+    const loaded = await bridge.restoreSnapshot(snapshotPath);
+    state.replaceWorkspace(loaded.workspace);
+    setRoute({ name: "dashboard" });
+    setHistory([]);
+    notify(t("snapshotRestored"));
   };
 
   const selectSearchHit = (hit: SearchHit) => {
@@ -1000,6 +1031,7 @@ export function App() {
               onAiConfigured={setAiInfo}
               onUpdateSettings={updateSettings}
               onResetDemo={resetDemo}
+              onRestoreSnapshot={restoreSnapshot}
             />
           ) : null}
 
@@ -1026,7 +1058,8 @@ export function App() {
         onSelect={selectSearchHit}
       />
 
-      {modal?.kind === "import" ? <ManuscriptImport locale={locale} onClose={() => setModal(null)} onImport={(imported) => {
+      {modal?.kind === "import" ? <ManuscriptImport locale={locale} onClose={() => setModal(null)} onImport={async (imported) => {
+        if (!(await snapshotBefore("before-import-novel"))) return;
         // Validate the combined snapshot before scheduling the mutation.
         mergeManuscriptImport(workspace, imported);
         mutate((draft) => Object.assign(draft, mergeManuscriptImport(draft, imported)));
