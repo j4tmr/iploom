@@ -1,44 +1,103 @@
 import { countWords, displayText } from "./factory.ts";
 import { timelineAnchorLabel } from "./timeline.ts";
 import type {
+  LocalizedText,
   SearchHit,
   StudioWorkspace,
   UiLocale,
 } from "./types.ts";
 
-function clean(value: string, locale: UiLocale): string {
-  void locale;
+interface Field {
+  value: string;
+  weight: number;
+}
+
+/**
+ * NFKC folds full-width letters, digits and spaces onto their ASCII forms, so
+ * `Ｌｉｎ` reaches the same field text as `lin`. Collapsing whitespace makes
+ * `lin  zhou` split into the same terms as `lin zhou`, and case folding keeps
+ * the tiers case-insensitive.
+ */
+function normalize(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function clean(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 240);
 }
 
-function bilingual(value: { zh: string; en: string }): string {
-  return `${value.zh} ${value.en}`.trim();
+/**
+ * Chinese and English are separate fields so each language can reach the exact
+ * and prefix tiers on its own; a combined `zh en` string could only ever match
+ * it as a substring.
+ */
+function localized(value: LocalizedText, weight: number): Field[] {
+  return [
+    { value: normalize(value.zh), weight },
+    { value: normalize(value.en), weight },
+  ];
 }
 
-function excerpt(value: string, query: string): string {
+function queryTerms(query: string): string[] {
+  const normalized = normalize(query);
+  return normalized ? normalized.split(" ") : [];
+}
+
+function firstMatch(haystack: string, terms: string[]): number {
+  let index = -1;
+  for (const term of terms) {
+    const found = haystack.indexOf(term);
+    if (found >= 0 && (index < 0 || found < index)) index = found;
+  }
+  return index;
+}
+
+function excerpt(value: string, terms: string[]): string {
   const compact = value.replace(/\s+/g, " ").trim();
   if (!compact) return "";
-  const lower = compact.toLocaleLowerCase();
-  const index = lower.indexOf(query.toLocaleLowerCase());
-  if (index < 0) return clean(compact, "zh-CN");
+  // Case folding alone locates the term in the original text, which keeps the
+  // excerpt readable. Only a query that needs NFKC (e.g. `Ｌｉｎ`) falls back to
+  // the normalized string; NFKC is length-preserving for full-width forms.
+  let index = firstMatch(compact.toLocaleLowerCase(), terms);
+  if (index < 0) index = firstMatch(normalize(compact), terms);
+  if (index < 0) return clean(compact);
   const start = Math.max(0, index - 70);
   return `${start ? "…" : ""}${compact.slice(start, start + 190)}${
     start + 190 < compact.length ? "…" : ""
   }`;
 }
 
-function score(
-  fields: Array<{ value: string; weight: number }>,
-  query: string,
-): number {
-  const needle = query.toLocaleLowerCase();
+function tier(value: string, needle: string): number {
+  if (value === needle) return 8;
+  if (value.startsWith(needle)) return 5;
+  if (value.includes(needle)) return 2;
+  return 0;
+}
+
+/**
+ * The whole query is scored as a phrase, so a multi-word value such as the
+ * English name `Lin Zhou` still reaches the exact tier. Each term then
+ * scores on its own as well, letting a multi-word query span entities: `林舟 钟楼`
+ * matches the character and the tower even though no single record contains
+ * both. A field takes the stronger of the two so one match is never double
+ * counted.
+ */
+function score(fields: Field[], terms: string[]): number {
+  const phrase = terms.join(" ");
   let total = 0;
   for (const field of fields) {
-    const value = field.value.toLocaleLowerCase();
-    if (!value) continue;
-    if (value === needle) total += field.weight * 8;
-    else if (value.startsWith(needle)) total += field.weight * 5;
-    else if (value.includes(needle)) total += field.weight * 2;
+    if (!field.value) continue;
+    let best = tier(field.value, phrase);
+    if (terms.length > 1) {
+      let termScore = 0;
+      for (const term of terms) termScore += tier(field.value, term);
+      if (termScore > best) best = termScore;
+    }
+    total += best * field.weight;
   }
   return total;
 }
@@ -49,8 +108,8 @@ export function searchWorkspace(
   locale: UiLocale,
   limit = 40,
 ): SearchHit[] {
-  const needle = query.trim();
-  if (!needle) return [];
+  const terms = queryTerms(query);
+  if (!terms.length) return [];
   const universeNames = new Map(
     workspace.universes.map((universe) => [
       universe.id,
@@ -64,17 +123,15 @@ export function searchWorkspace(
     const summary = displayText(universe.summary, locale);
     const rank = score(
       [
-        { value: bilingual(universe.name), weight: 6 },
+        ...localized(universe.name, 6),
+        ...localized(universe.tagline, 3),
+        ...localized(universe.summary, 3),
         {
-          value: `${bilingual(universe.tagline)} ${displayText(
-            universe.summary,
-            locale,
-          )} ${universe.summary.zh} ${universe.summary.en}`,
-          weight: 3,
+          value: normalize([...universe.genres, ...universe.themes].join(" ")),
+          weight: 2,
         },
-        { value: [...universe.genres, ...universe.themes].join(" "), weight: 2 },
       ],
-      needle,
+      terms,
     );
     if (rank)
       hits.push({
@@ -83,7 +140,7 @@ export function searchWorkspace(
         universeId: universe.id,
         title,
         subtitle: displayText(universe.tagline, locale),
-        excerpt: excerpt(summary, needle),
+        excerpt: excerpt(summary, terms),
         score: rank,
       });
   }
@@ -93,24 +150,24 @@ export function searchWorkspace(
     const rank =
       score(
         [
-          { value: bilingual(work.title), weight: 6 },
-          { value: bilingual(work.logline), weight: 3 },
-          { value: work.synopsis, weight: 2 },
-          { value: work.themes.join(" "), weight: 2 },
+          ...localized(work.title, 6),
+          ...localized(work.logline, 3),
+          { value: normalize(work.synopsis), weight: 2 },
+          { value: normalize(work.themes.join(" ")), weight: 2 },
         ],
-        needle,
+        terms,
       ) +
       work.chapters.reduce(
         (sum, chapter) =>
           sum +
           score(
             [
-              { value: chapter.title, weight: 3 },
-              { value: chapter.titleEn, weight: 3 },
-              { value: chapter.summary, weight: 2 },
-              { value: chapter.content, weight: 1 },
+              { value: normalize(chapter.title), weight: 3 },
+              { value: normalize(chapter.titleEn), weight: 3 },
+              { value: normalize(chapter.summary), weight: 2 },
+              { value: normalize(chapter.content), weight: 1 },
             ],
-            needle,
+            terms,
           ) /
             10,
         0,
@@ -125,7 +182,7 @@ export function searchWorkspace(
         subtitle: universeNames.get(work.universeId) ?? "",
         excerpt: excerpt(
           `${displayText(work.logline, locale)} ${work.synopsis}`,
-          needle,
+          terms,
         ),
         score: rank,
       });
@@ -133,14 +190,14 @@ export function searchWorkspace(
     for (const chapter of work.chapters) {
       const rank = score(
         [
-          { value: chapter.title, weight: 5 },
-          { value: chapter.titleEn, weight: 5 },
-          { value: chapter.summary, weight: 3 },
-          { value: chapter.outline, weight: 2 },
-          { value: chapter.content, weight: 1.5 },
-          { value: chapter.beats.join(" "), weight: 2 },
+          { value: normalize(chapter.title), weight: 5 },
+          { value: normalize(chapter.titleEn), weight: 5 },
+          { value: normalize(chapter.summary), weight: 3 },
+          { value: normalize(chapter.outline), weight: 2 },
+          { value: normalize(chapter.content), weight: 1.5 },
+          { value: normalize(chapter.beats.join(" ")), weight: 2 },
         ],
-        needle,
+        terms,
       );
       if (rank)
         hits.push({
@@ -153,7 +210,7 @@ export function searchWorkspace(
           subtitle: `${title} · ${countWords(chapter.content)} words`,
           excerpt: excerpt(
             chapter.content || chapter.summary || chapter.outline,
-            needle,
+            terms,
           ),
           score: rank,
         });
@@ -164,23 +221,22 @@ export function searchWorkspace(
     const title = displayText(character.name, locale);
     const rank = score(
       [
-        { value: bilingual(character.name), weight: 6 },
-        { value: bilingual(character.role), weight: 3 },
+        ...localized(character.name, 6),
+        ...localized(character.role, 3),
+        ...localized(character.summary, 2),
+        { value: normalize(character.appearance), weight: 2 },
         {
-          value: `${bilingual(character.summary)} ${character.appearance}`,
-          weight: 2,
-        },
-        {
-          value: [
-            character.appearance,
-            character.personality,
-            character.motivation,
-            character.tags.join(" "),
-          ].join(" "),
+          value: normalize(
+            [
+              character.personality,
+              character.motivation,
+              character.tags.join(" "),
+            ].join(" "),
+          ),
           weight: 2,
         },
       ],
-      needle,
+      terms,
     );
     if (rank)
       hits.push({
@@ -191,7 +247,7 @@ export function searchWorkspace(
         subtitle: displayText(character.role, locale),
         excerpt: excerpt(
           `${displayText(character.summary, locale)} ${character.tags.join(" ")}`,
-          needle,
+          terms,
         ),
         score: rank,
       });
@@ -201,11 +257,14 @@ export function searchWorkspace(
     const title = displayText(location.name, locale);
     const rank = score(
       [
-        { value: bilingual(location.name), weight: 6 },
-        { value: bilingual(location.summary), weight: 2 },
-        { value: `${location.atmosphere} ${location.visualPrompt}`, weight: 2 },
+        ...localized(location.name, 6),
+        ...localized(location.summary, 2),
+        {
+          value: normalize(`${location.atmosphere} ${location.visualPrompt}`),
+          weight: 2,
+        },
       ],
-      needle,
+      terms,
     );
     if (rank)
       hits.push({
@@ -216,7 +275,7 @@ export function searchWorkspace(
         subtitle: universeNames.get(location.universeId) ?? "",
         excerpt: excerpt(
           `${location.atmosphere} ${displayText(location.summary, locale)}`,
-          needle,
+          terms,
         ),
         score: rank,
       });
@@ -226,11 +285,14 @@ export function searchWorkspace(
     const title = displayText(faction.name, locale);
     const rank = score(
       [
-        { value: bilingual(faction.name), weight: 6 },
-        { value: bilingual(faction.summary), weight: 2 },
-        { value: `${faction.goal} ${faction.visualMotif}`, weight: 2 },
+        ...localized(faction.name, 6),
+        ...localized(faction.summary, 2),
+        {
+          value: normalize(`${faction.goal} ${faction.visualMotif}`),
+          weight: 2,
+        },
       ],
-      needle,
+      terms,
     );
     if (rank)
       hits.push({
@@ -241,7 +303,7 @@ export function searchWorkspace(
         subtitle: universeNames.get(faction.universeId) ?? "",
         excerpt: excerpt(
           `${faction.goal} ${displayText(faction.summary, locale)}`,
-          needle,
+          terms,
         ),
         score: rank,
       });
@@ -251,11 +313,11 @@ export function searchWorkspace(
     const title = displayText(lore.title, locale);
     const rank = score(
       [
-        { value: bilingual(lore.title), weight: 6 },
-        { value: lore.body, weight: 2 },
-        { value: lore.category, weight: 1 },
+        ...localized(lore.title, 6),
+        { value: normalize(lore.body), weight: 2 },
+        { value: normalize(lore.category), weight: 1 },
       ],
-      needle,
+      terms,
     );
     if (rank)
       hits.push({
@@ -264,7 +326,7 @@ export function searchWorkspace(
         universeId: lore.universeId,
         title,
         subtitle: `${universeNames.get(lore.universeId) ?? ""} · ${lore.category}`,
-        excerpt: excerpt(lore.body, needle),
+        excerpt: excerpt(lore.body, terms),
         score: rank,
       });
   }
@@ -273,11 +335,14 @@ export function searchWorkspace(
     const title = displayText(object.name, locale);
     const rank = score(
       [
-        { value: bilingual(object.name), weight: 6 },
-        { value: bilingual(object.summary), weight: 3 },
-        { value: `${object.visualPrompt} ${object.sourceNotes}`, weight: 2 },
+        ...localized(object.name, 6),
+        ...localized(object.summary, 3),
+        {
+          value: normalize(`${object.visualPrompt} ${object.sourceNotes}`),
+          weight: 2,
+        },
       ],
-      needle,
+      terms,
     );
     if (rank)
       hits.push({
@@ -288,7 +353,7 @@ export function searchWorkspace(
         subtitle: `${universeNames.get(object.universeId) ?? ""} · ${displayText(object.category, locale)}`,
         excerpt: excerpt(
           `${displayText(object.summary, locale)} ${object.sourceNotes}`,
-          needle,
+          terms,
         ),
         score: rank,
       });
@@ -298,11 +363,19 @@ export function searchWorkspace(
     const title = displayText(event.title, locale);
     const rank = score(
       [
-        { value: bilingual(event.title), weight: 6 },
-        { value: `${event.storyTime} ${event.stateBefore} ${event.stateAfter}`, weight: 3 },
-        { value: `${event.evidence} ${event.productionPrompt}`, weight: 2 },
+        ...localized(event.title, 6),
+        {
+          value: normalize(
+            `${event.storyTime} ${event.stateBefore} ${event.stateAfter}`,
+          ),
+          weight: 3,
+        },
+        {
+          value: normalize(`${event.evidence} ${event.productionPrompt}`),
+          weight: 2,
+        },
       ],
-      needle,
+      terms,
     );
     if (rank)
       hits.push({
@@ -315,7 +388,7 @@ export function searchWorkspace(
         subtitle: `${universeNames.get(event.universeId) ?? ""} · ${timelineAnchorLabel(workspace, event, locale)}`,
         excerpt: excerpt(
           `${event.stateBefore} → ${event.stateAfter} ${event.evidence}`,
-          needle,
+          terms,
         ),
         score: rank,
       });

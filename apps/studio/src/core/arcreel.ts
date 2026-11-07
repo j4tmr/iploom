@@ -35,8 +35,10 @@ export interface BuildArcReelOptions {
 function slug(value: string): string {
   const normalized = value
     .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .normalize("NFC")
     .toLocaleLowerCase()
-    .replace(/[^a-z0-9\u3400-\u9fff]+/g, "-")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "");
   return normalized.slice(0, 48) || "untitled";
 }
