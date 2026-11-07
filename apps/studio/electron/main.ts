@@ -31,9 +31,10 @@ import type {
 import {
   WorkspaceStore,
   type LoadedWorkspace,
+  type WorkspaceSnapshot,
 } from "../src/node/workspace-store.ts";
 import { createElectronMcpConfig } from "../src/node/mcp-config.ts";
-import { aiConfigSchema, aiRequestSchema, runCompletion } from "../src/node/ai-client.ts";
+import { AI_CANCELED_MESSAGE, aiConfigSchema, aiRequestSchema, isReportableAiError, runCompletion } from "../src/node/ai-client.ts";
 import type { AiConfig } from "../src/core/ai.ts";
 import type {
   AppInfo,
@@ -268,6 +269,7 @@ async function exists(path: string): Promise<boolean> {
 function rememberFolders(workspace: StudioWorkspace): void {
   const store = requireStore();
   allowedFolders.add(canonicalFolder(dirname(store.filePath)));
+  allowedFolders.add(canonicalFolder(store.snapshotDirectory));
   for (const record of workspace.exports) {
     if (record.outputPath)
       allowedFolders.add(canonicalFolder(record.outputPath));
@@ -412,7 +414,6 @@ function registerIpcHandlers(): void {
     if (!aiInfo().configured) throw new Error("Configure the model API in Settings first.");
     const controller = new AbortController();
     aiRuns.set(request.id, controller);
-    const timeout = setTimeout(() => controller.abort(), 180_000);
     let lastSent = 0;
     try {
       return await runCompletion(aiConfig, request, controller.signal, (text) => {
@@ -422,10 +423,10 @@ function registerIpcHandlers(): void {
         }
       });
     } catch (error) {
-      if (controller.signal.aborted) throw new Error("AI task canceled or timed out; no result was applied.");
+      if (controller.signal.aborted) throw new Error(AI_CANCELED_MESSAGE);
       // Never echo provider payloads or credential-bearing fetch errors into IPC/logs.
-      throw new Error(error instanceof Error && /^(Model |Incomplete |Configure )/.test(error.message) ? error.message : "Model request failed. Check configuration and retry.");
-    } finally { clearTimeout(timeout); aiRuns.delete(request.id); }
+      throw new Error(isReportableAiError(error) ? error.message : "Model request failed. Check configuration and retry.");
+    } finally { aiRuns.delete(request.id); }
   });
   ipcMain.handle("iploom:load", async (event) => {
     assertTrustedSender(event);
@@ -468,6 +469,7 @@ function registerIpcHandlers(): void {
       version: app.getVersion(),
       platform: process.platform,
       workspacePath: requireStore().filePath,
+      snapshotDirectory: requireStore().snapshotDirectory,
       desktop: true,
       mcp: mcpClientConfig(),
       mcpBinary: resolveMcpBinary(),
@@ -491,7 +493,7 @@ function registerIpcHandlers(): void {
       throw new Error("Folder path must be a string");
     }
     const folder = canonicalFolder(value);
-    if (!allowedFolders.has(folder)) {
+    if (![...allowedFolders].some((allowed) => isWithin(allowed, folder))) {
       throw new Error("Folder is outside this workspace's export history");
     }
     const info = await stat(value);
@@ -506,18 +508,55 @@ function registerIpcHandlers(): void {
     await openExternalSafely(value);
   });
 
+  ipcMain.handle(
+    "iploom:create-snapshot",
+    async (event, reason: string): Promise<string | null> => {
+      assertTrustedSender(event);
+      if (typeof reason !== "string") {
+        throw new Error("Snapshot reason must be a string");
+      }
+      return requireStore().createSnapshot(reason);
+    },
+  );
+
+  ipcMain.handle(
+    "iploom:list-snapshots",
+    async (event): Promise<WorkspaceSnapshot[]> => {
+      assertTrustedSender(event);
+      return requireStore().listSnapshots();
+    },
+  );
+
+  ipcMain.handle(
+    "iploom:restore-snapshot",
+    async (event, snapshotPath: string): Promise<LoadedWorkspace> => {
+      assertTrustedSender(event);
+      if (typeof snapshotPath !== "string") {
+        throw new Error("Snapshot path must be a string");
+      }
+      const loaded = await requireStore().restoreSnapshot(snapshotPath);
+      rememberFolders(loaded.workspace);
+      return loaded;
+    },
+  );
+
   ipcMain.handle("iploom:reset-demo", async (event, locale: UiLocale) => {
     assertTrustedSender(event);
     if (locale !== "zh-CN" && locale !== "en") {
       throw new Error("Unsupported locale");
     }
+    const store = requireStore();
+    // Keep the pre-reset workspace out of reach of the `.bak` rotation: the
+    // renderer may save once more right after this handler returns.
+    const snapshotPath = await store.createSnapshot("before-reset-demo");
     const workspace = createDemoWorkspace(locale);
-    await requireStore().save(workspace);
+    await store.save(workspace);
     rememberFolders(workspace);
     return {
       workspace,
-      path: requireStore().filePath,
+      path: store.filePath,
       recoveredFromBackup: false,
+      snapshotPath,
     } satisfies LoadedWorkspace;
   });
 }

@@ -8,7 +8,11 @@ import type {
 } from "../core/types.ts";
 import { APP_VERSION } from "../core/version.ts";
 import type { Translate } from "../i18n.ts";
-import { bridge, type AppInfo } from "../platform.ts";
+import {
+  bridge,
+  type AppInfo,
+  type WorkspaceSnapshotInfo,
+} from "../platform.ts";
 import { Icon } from "../components/icon.tsx";
 import { AiSettings } from "../components/ai-settings.tsx";
 import { UpdateSettings } from "../components/update-settings.tsx";
@@ -47,6 +51,7 @@ export function SettingsView({
   onAiConfigured,
   onUpdateSettings,
   onResetDemo,
+  onRestoreSnapshot,
 }: {
   workspace: StudioWorkspace;
   locale: UiLocale;
@@ -56,14 +61,52 @@ export function SettingsView({
   onAiConfigured: (info: AiConfigInfo) => void;
   onUpdateSettings: (change: Partial<WorkspaceSettings>) => void;
   onResetDemo: () => Promise<void>;
+  onRestoreSnapshot: (snapshotPath: string) => Promise<void>;
 }) {
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [snapshots, setSnapshots] = useState<WorkspaceSnapshotInfo[]>([]);
+  const [snapshotBusy, setSnapshotBusy] = useState(false);
 
   useEffect(() => {
     bridge.appInfo().then(setInfo).catch(() => setInfo(null));
   }, []);
+
+  const refreshSnapshots = async () => {
+    try {
+      setSnapshots(await bridge.listSnapshots());
+    } catch {
+      setSnapshots([]);
+    }
+  };
+
+  useEffect(() => {
+    void refreshSnapshots();
+  }, []);
+
+  const snapshotReason = (reason: string) =>
+    reason === "before-reset-demo" ? t("snapshotReasonResetDemo")
+    : reason === "before-delete-world" ? t("snapshotReasonDeleteWorld")
+    : reason === "before-delete-novel" ? t("snapshotReasonDeleteNovel")
+    : reason === "before-delete-chapter" ? t("snapshotReasonDeleteChapter")
+    : reason === "before-import-novel" ? t("snapshotReasonImport")
+    : reason === "before-restore" ? t("snapshotReasonRestore")
+    : reason;
+
+  const restoreSnapshot = async (snapshot: WorkspaceSnapshotInfo) => {
+    if (!window.confirm(t("snapshotRestoreConfirm"))) return;
+    setSnapshotBusy(true);
+    try {
+      await onRestoreSnapshot(snapshot.path);
+      notify(t("snapshotRestored"));
+      await refreshSnapshots();
+    } catch (reason) {
+      notify(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSnapshotBusy(false);
+    }
+  };
 
   const config = info
     ? JSON.stringify(info.mcp, null, 2)
@@ -216,7 +259,7 @@ export function SettingsView({
                 setBusy(true);
                 try {
                   await onResetDemo();
-                  notify(t("saved"));
+                  await refreshSnapshots();
                 } finally {
                   setBusy(false);
                 }
@@ -226,6 +269,49 @@ export function SettingsView({
             </Button>
           </div>
         </section>
+
+        {info?.desktop ? (
+          <section className="settings-panel">
+            <SectionTitle title={t("snapshotsTitle")} />
+            <p className="muted small">{t("snapshotsNote")}</p>
+            {snapshots.length === 0 ? (
+              <p className="muted small">{t("snapshotsEmpty")}</p>
+            ) : (
+              <ul className="snapshot-list">
+                {snapshots.map((snapshot) => (
+                  <li key={snapshot.path}>
+                    <div>
+                      <strong>{snapshotReason(snapshot.reason)}</strong>
+                      <small>
+                        {new Date(snapshot.createdAt).toLocaleString(locale)}
+                        {" · "}
+                        {Math.max(1, Math.round(snapshot.bytes / 1024))} KB
+                      </small>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      disabled={snapshotBusy}
+                      onClick={() => void restoreSnapshot(snapshot)}
+                    >
+                      {t("snapshotRestore")}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="data-path">
+              <Icon name="folder" size={19} />
+              <code>{info.snapshotDirectory}</code>
+              <Button
+                variant="ghost"
+                icon="external"
+                onClick={() => void bridge.openFolder(info.snapshotDirectory)}
+              >
+                {t("openFolder")}
+              </Button>
+            </div>
+          </section>
+        ) : null}
 
         <section className="settings-panel about-card">
           <div className="about-mark">界</div>

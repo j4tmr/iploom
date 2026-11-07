@@ -1,10 +1,10 @@
-import { expect, test } from "bun:test";
+import { expect, jest, test } from "bun:test";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 import { buildManuscriptImport, manuscriptChunks, mergeManuscriptImport, parseAnalysis, splitManuscript, type ManuscriptAnalysis } from "../../apps/studio/src/core/manuscript.ts";
 import { buildProductionPrompt, createProductionTasks, resolveProductionScope, taskProductionPrompt } from "../../apps/studio/src/core/production.ts";
 import { setWorkflowTaskResult } from "../../apps/studio/src/core/workflow.ts";
-import { aiConfigSchema, runCompletion } from "../../apps/studio/src/node/ai-client.ts";
+import { AI_CANCELED_MESSAGE, aiConfigSchema, isReportableAiError, runCompletion } from "../../apps/studio/src/node/ai-client.ts";
 import { buildArcReelBundle } from "../../apps/studio/src/core/arcreel.ts";
 
 const source = "前言\r\n第1章 灯塔\r\n阿青在灯塔遇到导师白舟。\r\n第2章 归途\r\n阿青离开灯塔。\r\n";
@@ -180,13 +180,184 @@ test("handoff includes hashed approved designs only for the exported work and ch
   expect(manifest.files.find((file: { path: string }) => file.path === "production/approved-designs.json").sha256).toHaveLength(64);
 });
 
-test("model cancellation is propagated to the request", async () => {
+const fetchError = (status: number, body: string, headers: Record<string, string> = {}) =>
+  (async (_url: unknown, init?: RequestInit) => {
+    expect(init?.redirect).toBe("error");
+    return new Response(body, { status, headers });
+  }) as typeof fetch;
+
+const rejectionMessage = async (promise: Promise<unknown>): Promise<string> => {
+  const error = await promise.then(() => undefined, (reason: unknown) => reason);
+  if (!(error instanceof Error)) throw new Error(`Expected an Error rejection, received ${String(error)}`);
+  return error.message;
+};
+
+const sseContent = (content: string) =>
+  `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content }, finish_reason: null }] })}\n\n`;
+const sseDone = () =>
+  `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`;
+
+function controlledStream() {
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({ start(value) { controller = value; } });
+  const encoder = new TextEncoder();
+  const fetcher = (async (_url: unknown, init?: RequestInit) => {
+    init!.signal!.addEventListener("abort", () => {
+      try { controller.error(new Error("request aborted")); } catch { /* already closed */ }
+    }, { once: true });
+    return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+  }) as typeof fetch;
+  return { fetcher, send: (text: string) => controller.enqueue(encoder.encode(text)) };
+}
+
+// Native setImmediate, captured before any test installs fake timers, lets the stream machinery
+// deliver a chunk and the read loop observe it without advancing the fake clock.
+const realSetImmediate = setImmediate;
+const settle = async (): Promise<void> => {
+  for (let index = 0; index < 12; index += 1) await Promise.resolve();
+  await new Promise<void>((resolve) => realSetImmediate(resolve));
+  for (let index = 0; index < 12; index += 1) await Promise.resolve();
+};
+
+test("model client surfaces sanitized provider HTTP errors with actionable status hints", async () => {
+  const apiKey = config.apiKey;
+  const contextLength = JSON.stringify({ error: {
+    message: `This model's maximum context length is 8192 tokens. The supplied key ${apiKey} was also rejected.`,
+    type: "invalid_request_error",
+    code: "context_length_exceeded",
+  } });
+  const badRequest = await rejectionMessage(
+    runCompletion(config, request, new AbortController().signal, () => {}, fetchError(400, contextLength)),
+  );
+  expect(badRequest).toContain("Model API HTTP 400");
+  expect(badRequest).toContain("context_length_exceeded");
+  expect(badRequest).toContain("maximum context length is 8192 tokens");
+  expect(badRequest).toMatch(/prompt length/i);
+  expect(badRequest).toContain("[redacted]");
+  expect(badRequest).not.toContain(apiKey);
+
+  const unauthorized = await rejectionMessage(runCompletion(
+    config, request, new AbortController().signal, () => {},
+    fetchError(401, JSON.stringify({ error: { message: "Incorrect API key provided", code: "invalid_api_key" } })),
+  ));
+  const rateLimited = await rejectionMessage(runCompletion(
+    config, request, new AbortController().signal, () => {},
+    fetchError(429, JSON.stringify({ error: { message: "Rate limit reached for requests", code: "rate_limit_exceeded" } }), { "Retry-After": "7" }),
+  ));
+  expect(unauthorized).toContain("401");
+  expect(unauthorized).toMatch(/API key was rejected/i);
+  expect(rateLimited).toContain("429");
+  expect(rateLimited).toMatch(/retry after 7 seconds/i);
+  expect(unauthorized).not.toBe(rateLimited);
+  expect(unauthorized).not.toContain(apiKey);
+  expect(rateLimited).not.toContain(apiKey);
+  expect(isReportableAiError(new Error(badRequest))).toBe(true);
+  expect(isReportableAiError(new Error(unauthorized))).toBe(true);
+  expect(isReportableAiError(new Error("fetch failed"))).toBe(false);
+
+  for (const [status, hint] of [[403, /access was denied/i], [404, /endpoint URL/i], [413, /too large/i], [500, /provider failed/i]] as const) {
+    const message = await rejectionMessage(runCompletion(
+      config, request, new AbortController().signal, () => {}, fetchError(status, "{}"),
+    ));
+    expect(message).toContain(`HTTP ${status}`);
+    expect(message).toMatch(hint);
+  }
+});
+
+test("model client bounds and cleans oversized or non-JSON error bodies", async () => {
+  const huge = `{"error":{"message":"${"x".repeat(5_000)}TAIL-${config.apiKey}"}}`;
+  const truncated = await rejectionMessage(runCompletion(
+    config, request, new AbortController().signal, () => {}, fetchError(500, huge),
+  ));
+  expect(truncated).not.toContain("TAIL-");
+  expect(truncated).not.toContain(config.apiKey);
+  expect(truncated.length).toBeLessThan(500);
+
+  const plain = await rejectionMessage(runCompletion(
+    config, request, new AbortController().signal, () => {},
+    fetchError(502, `Bad gateway: ${config.apiKey} leaked by upstream proxy`),
+  ));
+  expect(plain).toContain("Bad gateway");
+  expect(plain).not.toContain(config.apiKey);
+});
+
+test("model client parses SSE without a correct content type and ignores non-JSON data lines", async () => {
+  const body = `: keep-alive\n\ndata: not-json\n\ndata: {"choices":[{"index":0,"delta":{"content":"a"},"finish_reason":null}]}\n\ndata: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n`;
+  expect(await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, ""))).toBe("a");
+  expect(await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, "application/json"))).toBe("a");
+  const noContentType = (async () => new Response(new Blob([body]))) as unknown as typeof fetch;
+  expect(await runCompletion(config, request, new AbortController().signal, () => {}, noContentType)).toBe("a");
+  await expect(runCompletion(
+    config, request, new AbortController().signal, () => {}, fetchResponse("not json", "application/json"),
+  )).rejects.toThrow(/unreadable response/);
+});
+
+test("model client keeps a streaming request alive well past 180 seconds while data keeps arriving", async () => {
+  jest.useFakeTimers();
+  try {
+    const { fetcher, send } = controlledStream();
+    const updates: string[] = [];
+    const pending = runCompletion(config, request, new AbortController().signal, (text) => updates.push(text), fetcher);
+    // Claim the rejection up front: an idle timeout may fire between assertions, and Bun fails a
+    // test on any rejection that is momentarily unhandled.
+    void pending.catch(() => undefined);
+    await settle();
+    let expected = "";
+    for (const content of ["A", "B", "C", "D", "E"]) {
+      send(sseContent(content));
+      expected += content;
+      await settle();
+      jest.advanceTimersByTime(50_000);
+      await settle();
+    }
+    send(sseDone());
+    await settle();
+    await expect(pending).resolves.toBe(expected);
+    expect(updates.at(-1)).toBe(expected);
+  } finally { jest.useRealTimers(); }
+});
+
+test("model client reports a distinct idle timeout when an active stream stalls", async () => {
+  jest.useFakeTimers();
+  try {
+    const { fetcher, send } = controlledStream();
+    const pending = runCompletion(config, request, new AbortController().signal, () => {}, fetcher);
+    void pending.catch(() => undefined);
+    await settle();
+    send(sseContent("partial"));
+    await settle();
+    jest.advanceTimersByTime(59_000);
+    await settle();
+    send(sseContent("more"));
+    await settle();
+    jest.advanceTimersByTime(60_000);
+    await settle();
+    await expect(pending).rejects.toThrow(/stopped sending data for 60 seconds/);
+  } finally { jest.useRealTimers(); }
+});
+
+test("model client reports a first-byte timeout when the provider never sends data", async () => {
+  jest.useFakeTimers();
+  try {
+    const { fetcher } = controlledStream();
+    const pending = runCompletion(config, request, new AbortController().signal, () => {}, fetcher);
+    void pending.catch(() => undefined);
+    await settle();
+    jest.advanceTimersByTime(120_000);
+    await settle();
+    await expect(pending).rejects.toThrow(/sent no data for 120 seconds/);
+  } finally { jest.useRealTimers(); }
+});
+
+test("model cancellation is reported separately from timeouts", async () => {
   const controller = new AbortController();
   const fetcher = (async (_url: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-    expect(init?.signal).toBe(controller.signal);
     init!.signal!.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
   })) as typeof fetch;
   const pending = runCompletion(config, request, controller.signal, () => {}, fetcher);
+  await settle();
   controller.abort();
-  await expect(pending).rejects.toThrow("aborted");
+  await expect(pending).rejects.toThrow(AI_CANCELED_MESSAGE);
+  expect(isReportableAiError(new Error(AI_CANCELED_MESSAGE))).toBe(true);
+  expect(AI_CANCELED_MESSAGE).not.toMatch(/timed out|no data/);
 });

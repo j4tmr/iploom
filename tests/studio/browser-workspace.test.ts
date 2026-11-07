@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { browserWorkspaceKey, loadBrowserWorkspace, saveBrowserWorkspace } from "../../apps/studio/src/browser-workspace.ts";
+import {
+  browserSnapshotKey,
+  browserWorkspaceKey,
+  loadBrowserSnapshot,
+  loadBrowserWorkspace,
+  saveBrowserSnapshot,
+  saveBrowserWorkspace,
+} from "../../apps/studio/src/browser-workspace.ts";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 
 function storageWith(raw: string | null = null) {
@@ -48,4 +55,25 @@ test("invalid saves cannot overwrite a valid manuscript", () => {
   workspace.works[0]!.universeId = "missing";
   expect(() => saveBrowserWorkspace(storage, workspace)).toThrow();
   expect(storage.getItem(browserWorkspaceKey)).toBe(original);
+});
+
+test("browser demo reset keeps the previous workspace in one snapshot slot", () => {
+  const workspace = createDemoWorkspace("en");
+  const storage = storageWith(JSON.stringify(workspace));
+  expect(saveBrowserSnapshot(storage)).toBe(browserSnapshotKey);
+  const demo = createDemoWorkspace("zh-CN");
+  saveBrowserWorkspace(storage, demo);
+  expect(loadBrowserSnapshot(storage)?.workspace).toEqual(workspace);
+  expect(
+    JSON.parse(storage.getItem(browserWorkspaceKey)!).settings.locale,
+  ).toBe("zh-CN");
+});
+
+test("browser never replaces a healthy snapshot with corrupt data", () => {
+  const workspace = createDemoWorkspace("en");
+  const storage = storageWith(JSON.stringify(workspace));
+  saveBrowserSnapshot(storage);
+  storage.setItem(browserWorkspaceKey, "{broken");
+  expect(saveBrowserSnapshot(storage)).toBeNull();
+  expect(loadBrowserSnapshot(storage)?.workspace).toEqual(workspace);
 });
