@@ -5,13 +5,28 @@ import {
   type UpdateCheckResult,
 } from "./core/updates.ts";
 import { APP_VERSION } from "./core/version.ts";
-import { loadBrowserWorkspace, saveBrowserWorkspace } from "./browser-workspace.ts";
+import {
+  loadBrowserSnapshot,
+  loadBrowserWorkspace,
+  saveBrowserSnapshot,
+  saveBrowserWorkspace,
+} from "./browser-workspace.ts";
 import type { AiConfig, AiConfigInfo, AiProgress, AiRequest } from "./core/ai.ts";
 
 export interface LoadedWorkspace {
   workspace: StudioWorkspace;
   path: string;
   recoveredFromBackup: boolean;
+  /** Present when the operation stored a recoverable pre-change snapshot. */
+  snapshotPath?: string | null;
+}
+
+export interface WorkspaceSnapshotInfo {
+  path: string;
+  name: string;
+  createdAt: string;
+  bytes: number;
+  reason: string;
 }
 
 export interface WrittenBundle {
@@ -35,6 +50,7 @@ export interface AppInfo {
   version: string;
   platform: string;
   workspacePath: string;
+  snapshotDirectory: string;
   desktop: boolean;
   mcp: McpClientConfig;
   mcpBinary: string;
@@ -48,6 +64,9 @@ export interface StudioBridge {
   onAiProgress(listener: (progress: AiProgress) => void): () => void;
   load(): Promise<LoadedWorkspace>;
   save(workspace: StudioWorkspace): Promise<{ savedAt: string }>;
+  createSnapshot(reason: string): Promise<string | null>;
+  listSnapshots(): Promise<WorkspaceSnapshotInfo[]>;
+  restoreSnapshot(path: string): Promise<LoadedWorkspace>;
   onFlushRequest(listener: (requestId: string) => void): () => void;
   flushComplete(requestId: string, error?: string): Promise<void>;
   exportArcReel(bundle: ArcReelBundle): Promise<WrittenBundle>;
@@ -97,6 +116,19 @@ export const browserFallback: StudioBridge = {
     saveBrowserWorkspace(localStorage, workspace);
     return { savedAt: new Date().toISOString() };
   },
+  async createSnapshot() {
+    return saveBrowserSnapshot(localStorage);
+  },
+  async listSnapshots() {
+    return [];
+  },
+  async restoreSnapshot() {
+    const snapshot = loadBrowserSnapshot(localStorage);
+    if (!snapshot) throw new Error("No browser snapshot is available.");
+    const snapshotPath = saveBrowserSnapshot(localStorage);
+    saveBrowserWorkspace(localStorage, snapshot.workspace);
+    return { ...snapshot, snapshotPath };
+  },
   onFlushRequest() {
     return () => undefined;
   },
@@ -128,6 +160,7 @@ export const browserFallback: StudioBridge = {
       version: APP_VERSION,
       platform: navigator.platform,
       workspacePath: "Browser localStorage",
+      snapshotDirectory: "Browser localStorage",
       desktop: false,
       mcp: browserMcpConfig(),
       mcpBinary: "iploom-mcp",
@@ -148,9 +181,15 @@ export const browserFallback: StudioBridge = {
     window.open(url, "_blank", "noopener,noreferrer");
   },
   async resetDemo(locale) {
+    const snapshotPath = saveBrowserSnapshot(localStorage);
     const workspace = createDemoWorkspace(locale);
     saveBrowserWorkspace(localStorage, workspace);
-    return { workspace, path: "Browser localStorage", recoveredFromBackup: false };
+    return {
+      workspace,
+      path: "Browser localStorage",
+      recoveredFromBackup: false,
+      snapshotPath,
+    };
   },
 };
 

@@ -142,7 +142,12 @@ export function useStudioWorkspace(): StudioWorkspaceState {
   const replaceWorkspace = useCallback((next: StudioWorkspace) => {
     workspaceRef.current = next;
     setWorkspace(next);
-    savedRevision.current = -1;
+    // Callers only replace the workspace after it has been written to disk
+    // (demo reset, snapshot restore). Marking it saved avoids a redundant
+    // autosave ~450ms later that would rotate the user's only `.bak` away.
+    savedRevision.current = next.revision;
+    setSaveState("saved");
+    setError(null);
   }, []);
 
   const saveNow = useCallback(async () => {

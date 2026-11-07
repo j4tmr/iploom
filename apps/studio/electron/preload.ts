@@ -13,6 +13,11 @@ const api: StudioBridge = {
   },
   load: () => ipcRenderer.invoke("iploom:load"),
   save: (workspace) => ipcRenderer.invoke("iploom:save", workspace),
+  createSnapshot: (reason) =>
+    ipcRenderer.invoke("iploom:create-snapshot", reason),
+  listSnapshots: () => ipcRenderer.invoke("iploom:list-snapshots"),
+  restoreSnapshot: (path) =>
+    ipcRenderer.invoke("iploom:restore-snapshot", path),
   onFlushRequest: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, requestId: string) => {
       if (typeof requestId === "string") listener(requestId);

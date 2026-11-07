@@ -3963,6 +3963,39 @@ select.input {
   font-size: 8.5px;
 }
 
+.snapshot-list {
+  display: grid;
+  gap: 7px;
+  margin: 13px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.snapshot-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.snapshot-list li > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.snapshot-list strong {
+  font-size: 10px;
+}
+
+.snapshot-list small {
+  color: var(--muted);
+  font-size: 8px;
+}
+
 .about-card {
   display: flex;
   align-items: flex-start;

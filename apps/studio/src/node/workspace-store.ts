@@ -1,13 +1,15 @@
 import {
   access,
   mkdir,
+  readdir,
   readFile,
   rename,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { constants } from "node:fs";
-import { dirname, join, normalize, resolve, sep } from "node:path";
+import { basename, dirname, join, normalize, resolve, sep } from "node:path";
 import { createEmptyWorkspace } from "../core/factory.ts";
 import { validateWorkspace, WorkspaceValidationError } from "../core/validate.ts";
 import { migrateWorkspace } from "../core/migrations.ts";
@@ -17,6 +19,8 @@ export interface LoadedWorkspace {
   workspace: StudioWorkspace;
   path: string;
   recoveredFromBackup: boolean;
+  /** Present when the operation stored a recoverable pre-change snapshot. */
+  snapshotPath?: string | null;
 }
 
 export interface WrittenBundle {
@@ -24,6 +28,26 @@ export interface WrittenBundle {
   files: number;
   bytes: number;
 }
+
+export interface WorkspaceSnapshot {
+  path: string;
+  name: string;
+  createdAt: string;
+  bytes: number;
+  reason: string;
+}
+
+/**
+ * Snapshots are deliberately not rotated into `workspace.json.bak`: the single
+ * `.bak` slot belongs to the last successful save, which is exactly what the
+ * demo reset and renderer autosave overwrite. Snapshots live in their own
+ * directory and are pruned by age and count instead.
+ */
+const SNAPSHOT_NAME = /^workspace-(\d+)-(\d+)-([a-z0-9-]{1,40})\.json$/;
+const SNAPSHOT_REASON = /^[a-z0-9-]{1,40}$/;
+const MAX_SNAPSHOTS = 20;
+const SNAPSHOT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+let snapshotSequence = 0;
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -64,11 +88,13 @@ function slug(value: string): string {
 
 export class WorkspaceStore {
   readonly filePath: string;
+  readonly snapshotDirectory: string;
   private saveQueue: Promise<void> = Promise.resolve();
   private updateQueue: Promise<void> = Promise.resolve();
 
   constructor(filePath: string) {
     this.filePath = resolve(filePath);
+    this.snapshotDirectory = join(dirname(this.filePath), "snapshots");
   }
 
   async ensure(): Promise<LoadedWorkspace> {
@@ -169,6 +195,109 @@ export class WorkspaceStore {
     } finally {
       await Promise.all([temp, backupTemp].map((path) => rm(path, { force: true })));
     }
+  }
+
+  /**
+   * Copy the current workspace file into the snapshot directory. Returns null
+   * when there is nothing healthy to snapshot, so a corrupted file can never
+   * displace a good snapshot or block the caller.
+   */
+  async createSnapshot(reason = "manual"): Promise<string | null> {
+    if (!SNAPSHOT_REASON.test(reason))
+      throw new Error(`Unsafe snapshot reason: ${reason}`);
+    await this.saveQueue;
+    if (!(await exists(this.filePath))) return null;
+    const raw = await readFile(this.filePath, "utf8");
+    try {
+      validateWorkspace(migrateWorkspace(JSON.parse(raw)));
+    } catch {
+      return null;
+    }
+    await mkdir(this.snapshotDirectory, { recursive: true });
+    for (;;) {
+      const target = join(
+        this.snapshotDirectory,
+        `workspace-${Date.now()}-${snapshotSequence++}-${reason}.json`,
+      );
+      try {
+        await writeFile(target, raw, {
+          encoding: "utf8",
+          mode: 0o600,
+          flag: "wx",
+        });
+        await this.pruneSnapshots();
+        return target;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      }
+    }
+  }
+
+  async listSnapshots(): Promise<WorkspaceSnapshot[]> {
+    if (!(await exists(this.snapshotDirectory))) return [];
+    const entries = await readdir(this.snapshotDirectory, {
+      withFileTypes: true,
+    });
+    const snapshots: {
+      snapshot: WorkspaceSnapshot;
+      time: number;
+      sequence: number;
+    }[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const match = SNAPSHOT_NAME.exec(entry.name);
+      if (!match) continue;
+      const path = join(this.snapshotDirectory, entry.name);
+      snapshots.push({
+        snapshot: {
+          path,
+          name: entry.name,
+          createdAt: new Date(Number(match[1])).toISOString(),
+          bytes: (await stat(path)).size,
+          reason: match[3]!,
+        },
+        time: Number(match[1]),
+        sequence: Number(match[2]),
+      });
+    }
+    return snapshots
+      .sort(
+        (left, right) =>
+          right.time - left.time || right.sequence - left.sequence,
+      )
+      .map((item) => item.snapshot);
+  }
+
+  /** Restore a snapshot, keeping the pre-restore state as another snapshot. */
+  async restoreSnapshot(snapshotPath: string): Promise<LoadedWorkspace> {
+    const target = resolve(snapshotPath);
+    if (
+      dirname(target) !== resolve(this.snapshotDirectory) ||
+      !SNAPSHOT_NAME.test(basename(target))
+    )
+      throw new Error(`Not a workspace snapshot: ${snapshotPath}`);
+    const raw = await readFile(target, "utf8");
+    const workspace = validateWorkspace(migrateWorkspace(JSON.parse(raw)));
+    await this.createSnapshot("before-restore");
+    await this.save(workspace);
+    return {
+      workspace,
+      path: this.filePath,
+      recoveredFromBackup: false,
+    };
+  }
+
+  private async pruneSnapshots(): Promise<void> {
+    const snapshots = await this.listSnapshots();
+    const cutoff = Date.now() - SNAPSHOT_MAX_AGE_MS;
+    await Promise.all(
+      snapshots
+        .filter(
+          (snapshot, index) =>
+            index >= MAX_SNAPSHOTS || Date.parse(snapshot.createdAt) < cutoff,
+        )
+        .map((snapshot) => rm(snapshot.path, { force: true })),
+    );
   }
 
   async exportArcReel(
