@@ -71,8 +71,12 @@ export function CastLibrary({
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <Select value={universeId} onChange={(event) => setUniverseId(event.target.value)}>
-          <option value="all">{t("filterWorld")}</option>
+        <Select
+          value={universeId}
+          aria-label={t("filterWorld")}
+          onChange={(event) => setUniverseId(event.target.value)}
+        >
+          <option value="all">{t("allWorlds")}</option>
           {workspace.universes.map((universe) => (
             <option value={universe.id} key={universe.id}>
               {displayText(universe.name, locale)}

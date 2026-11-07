@@ -184,7 +184,7 @@ export function CharacterModal({
         <Field label={t("color")}>
           <input className="color-input" type="color" value={color} onChange={(event) => setColor(event.target.value)} />
         </Field>
-        <Field label={t("linkedWorlds")} wide>
+        <Field label={t("linkedWorlds")} group wide>
           <div className="check-grid">
             {workspace.universes.map((universe) => (
               <label className="check-card" key={universe.id}>
@@ -804,7 +804,7 @@ export function WorkflowTaskModal({
             ))}
           </Select>
         </Field>
-        <Field label={t("workflowCast")} wide>
+        <Field label={t("workflowCast")} group wide>
           <div className="check-grid">
             {characters.map((character) => (
               <label className="check-card" key={character.id}>
@@ -825,7 +825,7 @@ export function WorkflowTaskModal({
             ))}
           </div>
         </Field>
-        <Field label={t("workflowDependencies")} hint={t("workflowDependenciesHint")} wide>
+        <Field label={t("workflowDependencies")} hint={t("workflowDependenciesHint")} group wide>
           <div className="check-grid">
             {eligibleDependencies.map((task) => (
               <label className="check-card" key={task.id}>

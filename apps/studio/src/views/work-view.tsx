@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { buildArcReelBundle } from "../core/arcreel.ts";
 import { countChapterWords, displayText, workWords } from "../core/factory.ts";
 import { CHAPTER_LIMITS } from "../core/types.ts";
@@ -76,12 +76,19 @@ export function WorkView({
   ) => void;
 }) {
   const [tab, setTab] = useState<WorkTab>("manuscript");
+  // Chapters render in story order; the stored array follows creation order,
+  // which drifts when chapters are added out of sequence.
+  const chapters = useMemo(
+    () => [...work.chapters].sort((a, b) => a.number - b.number),
+    [work.chapters],
+  );
   const [selectedId, setSelectedId] = useState(
-    work.chapters[0]?.id ?? "",
+    chapters[0]?.id ?? "",
   );
   const [titleDraft, setTitleDraft] = useState(
-    work.chapters[0]?.title ?? "",
+    chapters[0]?.title ?? "",
   );
+  const proseEditorId = useId();
   const universe = workspace.universes.find((item) => item.id === work.universeId);
   const characters = workspace.characters.filter((character) =>
     character.universeIds.includes(work.universeId),
@@ -90,13 +97,13 @@ export function WorkView({
     (location) => location.universeId === work.universeId,
   );
   const lore = workspace.lore.filter((entry) => entry.universeId === work.universeId);
-  const selected = work.chapters.find((chapter) => chapter.id === selectedId);
+  const selected = chapters.find((chapter) => chapter.id === selectedId);
   const words = workWords(work);
 
   useEffect(() => {
-    if (!work.chapters.some((chapter) => chapter.id === selectedId))
-      setSelectedId(work.chapters[0]?.id ?? "");
-  }, [selectedId, work.chapters]);
+    if (!chapters.some((chapter) => chapter.id === selectedId))
+      setSelectedId(chapters[0]?.id ?? "");
+  }, [selectedId, chapters]);
 
   useEffect(() => {
     setTitleDraft(selected?.title ?? "");
@@ -120,9 +127,9 @@ export function WorkView({
   const chapterCast = useMemo(
     () =>
       new Set(
-        work.chapters.flatMap((chapter) => chapter.characterIds),
+        chapters.flatMap((chapter) => chapter.characterIds),
       ),
-    [work.chapters],
+    [chapters],
   );
 
   return (
@@ -145,7 +152,7 @@ export function WorkView({
             <Badge tone={work.status === "complete" ? "green" : "neutral"}>
               {statusLabels[locale][work.status]}
             </Badge>
-            <span>{work.chapters.length} {t("chapters")}</span>
+            <span>{chapters.length} {t("chapters")}</span>
             <span>{formatNumber(words, locale)} {t("words")}</span>
             <span>{formatDate(work.updatedAt, locale)}</span>
           </div>
@@ -165,7 +172,7 @@ export function WorkView({
 
       <nav className="tab-bar">
         <button className={`tab-button ${tab === "manuscript" ? "active" : ""}`} onClick={() => setTab("manuscript")}>
-          {t("manuscript")}<span>{work.chapters.length}</span>
+          {t("manuscript")}<span>{chapters.length}</span>
         </button>
         <button className={`tab-button ${tab === "bible" ? "active" : ""}`} onClick={() => setTab("bible")}>
           {t("storyBible")}<span>{characters.length}</span>
@@ -183,7 +190,7 @@ export function WorkView({
               <IconButton label={t("addChapterTitle")} icon="plus" onClick={onAddChapter} />
             </div>
             <div className="chapter-list">
-              {work.chapters.map((chapter) => (
+              {chapters.map((chapter) => (
                 <button
                   key={chapter.id}
                   className={`chapter-list-item ${selectedId === chapter.id ? "active" : ""}`}
@@ -197,7 +204,7 @@ export function WorkView({
                 </button>
               ))}
             </div>
-            {!work.chapters.length ? (
+            {!chapters.length ? (
               <div className="chapter-list-empty">
                 <p>{t("noChapters")}</p>
                 <Button variant="primary" icon="plus" onClick={onAddChapter}>{t("createFirstChapter")}</Button>
@@ -264,11 +271,12 @@ export function WorkView({
 
               <div className="chapter-split">
                 <div className="chapter-prose-column">
-                  <label className="prose-editor-label">
+                  <label className="prose-editor-label" htmlFor={proseEditorId}>
                     <span>{t("chapterBody")}</span>
                     <small>{formatNumber(countChapterWords(selected), locale)} {t("words")}</small>
                   </label>
                   <textarea
+                    id={proseEditorId}
                     className="prose-editor"
                     value={selected.content}
                     maxLength={CHAPTER_LIMITS.content}
@@ -345,7 +353,7 @@ export function WorkView({
                       ))}
                     </Select>
                   </Field>
-                  <Field label={t("sceneCast")}>
+                  <Field label={t("sceneCast")} group>
                     <div className="cast-check-list">
                       {characters.map((character) => (
                         <label key={character.id} className="cast-check">
@@ -466,8 +474,14 @@ function AdaptationPanel({
   t: Translate;
   onRecordExport: (bundle: ArcReelBundle, directory: string, files: number, bytes: number) => void;
 }) {
+  // Same story order as the chapter list; the stored array follows creation
+  // order and can drift when chapters are added out of sequence.
+  const chapters = useMemo(
+    () => [...work.chapters].sort((a, b) => a.number - b.number),
+    [work.chapters],
+  );
   const [selected, setSelected] = useState<string[]>(
-    work.chapters.map((chapter) => chapter.id),
+    chapters.map((chapter) => chapter.id),
   );
   const [approvedOnly, setApprovedOnly] = useState(
     workspace.settings.exportApprovedOnly,
@@ -542,7 +556,7 @@ function AdaptationPanel({
           <span>{t("selected", { n: selected.length })}</span>
         </div>
         <div className="chapter-select-list">
-          {work.chapters.map((chapter) => (
+          {chapters.map((chapter) => (
             <label className="chapter-select-row" key={chapter.id}>
               <input
                 type="checkbox"

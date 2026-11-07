@@ -5,6 +5,7 @@ import type {
   StudioWorkspace,
   UiLocale,
   WorkflowTask,
+  WorkflowTaskKind,
   WorkflowTaskStatus,
 } from "../core/types.ts";
 import {
@@ -48,6 +49,17 @@ export function statusText(t: Translate, status: WorkflowTaskStatus): string {
     review: t("taskStatus_review"),
     done: t("taskStatus_done"),
   }[status];
+}
+
+export function taskKindText(t: Translate, kind: WorkflowTaskKind): string {
+  return {
+    world: t("taskKind_world"),
+    novel: t("taskKind_novel"),
+    chapter: t("taskKind_chapter"),
+    character: t("taskKind_character"),
+    review: t("taskKind_review"),
+    adaptation: t("taskKind_adaptation"),
+  }[kind];
 }
 
 export function WorkflowView({
@@ -365,7 +377,7 @@ export function WorkflowView({
               <div className="workflow-detail-head">
                 <div>
                   <span className="eyebrow">
-                    {selected.kind} / {selected.id}
+                    {taskKindText(t, selected.kind)} / {selected.id}
                   </span>
                   <h2>{displayText(selected.title, locale)}</h2>
                 </div>
