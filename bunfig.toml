@@ -22,6 +22,7 @@ coveragePathIgnorePatterns = [
   # their happy-dom tests cover the extractable logic in dedicated modules.
   "apps/studio/src/components/forms.tsx",
   "apps/studio/src/components/manuscript-import.tsx",
+  "apps/studio/src/components/production-panel.tsx",
   "apps/studio/src/components/search-overlay.tsx",
   "apps/studio/src/components/ui.tsx",
   "apps/studio/src/views/workflow-view.tsx",
