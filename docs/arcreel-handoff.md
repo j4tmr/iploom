@@ -110,6 +110,29 @@ Every shot prompt includes:
 - dialogue, camera direction, aspect ratio and safe-area instruction;
 - a negative prompt that rejects live action and photorealistic output.
 
+## Approved designs
+
+`production/approved-designs.json` collects the author-approved text designs and reusable prompts that are not tied to a single episode, such as character, costume, location and relationship specifications. It is not rendered media and is never applied automatically to storyboard shots.
+
+```json
+{
+  "schema": "iploom.production-designs/v1",
+  "source_workspace_revision": 7,
+  "work_id": "work_tide_clock",
+  "note": "Author-reviewed text specifications and reusable prompts. Not rendered media or automatically applied storyboard data.",
+  "tasks": []
+}
+```
+
+Each entry in `tasks` is the workflow task record: title, brief, bilingual result, scope references, pinned standard versions and model run metadata. A task is included only when all of these hold:
+
+- its status is `done`;
+- it is scoped to the exported work, or, when it has no work scope, to the exported work's universe;
+- when it is pinned to a chapter, that chapter is part of the exported package; tasks without a chapter are included;
+- its reviewable result contains non-empty Chinese or English text.
+
+Pending, running and unreviewed designs are excluded. The file is listed in `manifest.json` and hashed like every other package file, so a recipient can detect edits after export.
+
 ## Visual contract
 
 The default direction is:
