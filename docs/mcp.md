@@ -50,7 +50,7 @@ bun run studio:mcp --workspace /absolute/path/workspace.json \
   --export-root /absolute/path/other-exports
 ```
 
-Each root is resolved and compared by real path, and the default workspace `exports` directory stays available. Every bundle is validated in full before the first filesystem write: identifiers, timestamp, SHA-256 digest, file paths, media types, file count and total size are checked, so a tampered `output_dir`, `manifestSha256` or timestamp cannot escape the selected destination.
+Each root is resolved and compared by real path, and the default workspace `exports` directory stays available. Every bundle's schema is validated in full before the first filesystem write — identifiers, timestamp, SHA-256 digest, media types, file count and total size — so a tampered `output_dir`, `manifestSha256` or timestamp cannot choose the package location. File paths are normalized and checked for traversal and destination escape while the package is written into a staging directory, which is renamed into place only after every file is written.
 
 ## Example prompts
 
@@ -107,5 +107,7 @@ bun run studio:verify-mcp
 ## Safety
 
 The server reads the workspace on every call. It only changes local state through `create_standard`, `update_standard` and `export_arcreel_bundle`. It does not call a model, network service or cloud API. MCP clients can still read all text in the active workspace, so only connect clients you trust.
+
+That text includes imported manuscripts and lore, which are third-party content. `get_chapter` returns full prose, and the world and search tools return lore and asset text verbatim. Treat imported content as a prompt-injection surface: an MCP agent may read instructions embedded in it, and neither the server nor the app can prevent the client's model from acting on them. Expose the workspace only to agents whose behavior and permissions you accept, and treat their conclusions as proposals that need author review.
 
 Every response that carries workspace metadata includes `workspace.recovered_from_backup`. When it is `true`, the primary `workspace.json` was unreadable and the server loaded the `.bak` copy instead; the response also carries `workspace.rejected_primary_file` and `workspace.rejected_primary_reason` naming the quarantined file. Treat such a response as recovery data rather than the newest state, and inspect the quarantined file before relying on the reported revision.
