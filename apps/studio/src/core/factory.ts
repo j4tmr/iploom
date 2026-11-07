@@ -31,9 +31,52 @@ export function countWords(value: string): number {
   return wordCount(value);
 }
 
+interface CachedChapterWords {
+  revision: number;
+  content: string;
+  words: number;
+}
+
+/**
+ * Word counts for chapters seen since the app started, keyed by chapter id.
+ * The count only depends on the chapter content: `revision` fast-paths the
+ * common unchanged case, and comparing the content as well keeps direct edits
+ * (imports, MCP writes, tests) correct when they do not bump the revision.
+ *
+ * A long manuscript has hundreds of chapters, and the status bar, sidebar and
+ * work view all ask for counts on every keystroke. Without this cache each
+ * keystroke rescanned the whole manuscript.
+ */
+const chapterWordCache = new Map<string, CachedChapterWords>();
+const CHAPTER_WORD_CACHE_LIMIT = 4096;
+
+/** Count one chapter, reusing the cached count while its content is unchanged. */
+export function countChapterWords(
+  chapter: Pick<Chapter, "id" | "revision" | "content">,
+): number {
+  const cached = chapterWordCache.get(chapter.id);
+  if (
+    cached &&
+    cached.revision === chapter.revision &&
+    cached.content === chapter.content
+  )
+    return cached.words;
+  const words = wordCount(chapter.content);
+  if (!cached && chapterWordCache.size >= CHAPTER_WORD_CACHE_LIMIT) {
+    const oldest = chapterWordCache.keys().next().value;
+    if (oldest !== undefined) chapterWordCache.delete(oldest);
+  }
+  chapterWordCache.set(chapter.id, {
+    revision: chapter.revision,
+    content: chapter.content,
+    words,
+  });
+  return words;
+}
+
 export function workWords(work: StoryWork): number {
   return work.chapters.reduce(
-    (sum, chapter) => sum + countWords(chapter.content),
+    (sum, chapter) => sum + countChapterWords(chapter),
     0,
   );
 }
@@ -50,10 +93,7 @@ export function workspaceStats(workspace: StudioWorkspace): WorkspaceStats {
     chapters: chapters.length,
     approvedChapters: chapters.filter((chapter) => chapter.status === "approved")
       .length,
-    words: chapters.reduce(
-      (sum, chapter) => sum + countWords(chapter.content),
-      0,
-    ),
+    words: workspace.works.reduce((sum, work) => sum + workWords(work), 0),
     characters: workspace.characters.length,
     storyObjects: workspace.storyObjects.length,
     relationships: workspace.relationships.length,
