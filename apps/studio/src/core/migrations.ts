@@ -1,5 +1,14 @@
-import { PRODUCTION_TASK_DELIVERABLE, productionTemplates, type ProductionTemplate } from "./production.ts";
-import { WORKSPACE_SCHEMA_VERSION } from "./types.ts";
+import {
+  inferProductionTemplate,
+  PRODUCTION_TASK_DELIVERABLE,
+  productionTemplates,
+  type ProductionTemplate,
+} from "./production.ts";
+import {
+  WORKFLOW_TASK_TEMPLATES,
+  WORKSPACE_SCHEMA_VERSION,
+  type WorkflowTaskTemplate,
+} from "./types.ts";
 
 function record(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -51,6 +60,17 @@ export function migrateWorkspace(value: unknown): unknown {
   }
   if (value.schema_version === 5) {
     const repaired = repairWorkflowTaskTexts(value);
+    return migrateWorkspace({
+      ...repaired,
+      schema_version: 6,
+      revision:
+        typeof repaired.revision === "number"
+          ? repaired.revision + 1
+          : repaired.revision,
+    });
+  }
+  if (value.schema_version === 6) {
+    const repaired = inferWorkflowTaskTemplates(value);
     return {
       ...repaired,
       schema_version: WORKSPACE_SCHEMA_VERSION,
@@ -178,6 +198,40 @@ function repairWorkflowTaskTexts(
     if (pollutedEn) nextBrief.en = fallbackBrief;
     const next: Record<string, unknown> = { ...task, brief: nextBrief };
     if (staleDeliverable) next.deliverable = { ...PRODUCTION_TASK_DELIVERABLE };
+    return next;
+  });
+  return { ...value, workflowTasks: tasks };
+}
+
+function isWorkflowTaskTemplate(value: unknown): value is WorkflowTaskTemplate {
+  return (
+    typeof value === "string" &&
+    (WORKFLOW_TASK_TEMPLATES as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * v6 stored stage instructions only in the task's English title. Pin the
+ * template explicitly so later title edits cannot switch instructions. Keep a
+ * template that is already valid; infer one for legacy tasks, and drop invalid
+ * values that the strict schema would reject.
+ */
+function inferWorkflowTaskTemplates(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!Array.isArray(value.workflowTasks)) return value;
+  const tasks = value.workflowTasks.map((task) => {
+    if (!record(task)) return task;
+    if (isWorkflowTaskTemplate(task.template)) return task;
+    const template = inferProductionTemplate({
+      title: task.title,
+      brief: task.brief,
+      kind: task.kind,
+    });
+    if (template) return { ...task, template };
+    if (!("template" in task)) return task;
+    const next = { ...task };
+    delete next.template;
     return next;
   });
   return { ...value, workflowTasks: tasks };

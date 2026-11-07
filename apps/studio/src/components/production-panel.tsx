@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { bridge } from "../platform.ts";
-import type { AiConfigInfo } from "../core/ai.ts";
+import type { AiConfigInfo, AiUsage } from "../core/ai.ts";
 import { createId, displayText } from "../core/factory.ts";
 import { sha256Text } from "../core/hash.ts";
-import { buildProductionPrompt, createProductionTasks, productionTemplates, resolveProductionScope, taskProductionPrompt, type ProductionScope, type ProductionTemplate } from "../core/production.ts";
+import { buildProductionPrompt, createProductionTasks, effectiveProductionTemplate, productionTemplates, resolveProductionScope, taskProductionPrompt, type ProductionScope, type ProductionTemplate } from "../core/production.ts";
 import { standardRefsFor } from "../core/standards.ts";
 import { MAX_AI_PROMPT_LENGTH, MAX_WORKFLOW_RESULT_LENGTH } from "../core/types.ts";
 import type { StudioWorkspace, UiLocale, WorkflowTask, WorkflowTaskRunMeta } from "../core/types.ts";
@@ -26,6 +26,7 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
   const [taskId, setTaskId] = useState("");
   const [prompt, setPrompt] = useState("");
   const [output, setOutput] = useState("");
+  const [usage, setUsage] = useState<AiUsage>();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -40,8 +41,21 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
   useEffect(() => { if (!activeId.current) { setScope(context); setPrompt(""); setTaskId(""); } }, [context.universeId, context.workId, context.chapterId, context.characterId]);
   useEffect(() => bridge.onAiProgress((progress) => { if (progress.id === activeId.current) setOutput(progress.text); }), []);
   useEffect(() => () => { if (activeId.current) void bridge.cancelAi(activeId.current); }, []);
-  const reset = () => { setPrompt(""); setMessage(""); };
+  const reset = () => { setPrompt(""); setMessage(""); setUsage(undefined); };
   const compose = () => { setPrompt(task ? taskProductionPrompt(workspace, task, locale) : buildProductionPrompt(workspace, template, scope, locale)); setMessage(""); };
+  const usageInput = usage?.prompt_tokens ?? usage?.input_tokens;
+  const usageOutput = usage?.completion_tokens ?? usage?.output_tokens;
+  const usageTotal = usage?.total_tokens ??
+    (typeof usageInput === "number" && typeof usageOutput === "number" ? usageInput + usageOutput : undefined);
+  const usageValues = {
+    input: typeof usageInput === "number" ? formatNumber(usageInput, locale) : "—",
+    output: typeof usageOutput === "number" ? formatNumber(usageOutput, locale) : "—",
+  };
+  const usageMessage = usage
+    ? typeof usageTotal === "number"
+      ? t("productionUsageTotal", { ...usageValues, total: formatNumber(usageTotal, locale) })
+      : t("productionUsage", usageValues)
+    : "";
   return <details className="production-panel" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
     <summary>{en ? "AI production desk · prompts, live output and review" : "AI 制作台 · 提示词、实时工作与结果审阅"}{busy ? ` · ${en ? "Working" : "正在工作"}` : ""}{aiInfo && !aiInfo.configured ? ` · ${t("modelSetupTitle")}` : ""}</summary>
     {aiInfo && !aiInfo.configured ? <div className="production-model missing">
@@ -68,6 +82,7 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
       <Button data-testid="production-compose" onClick={compose}>{en ? "Compose prompt" : "生成对应提示词"}</Button>
       {!task ? <Button disabled={!universeId} onClick={() => { try { const created = createProductionTasks(workspace, scope, locale); setMessage(onTasks(created) ? (en ? "Six dependent production tasks added to Workflow." : "已在工作流中建立六个有依赖关系的制作任务。") : (en ? "The production tasks were not saved." : "制作任务未能保存。")); } catch (error) { setMessage(String(error)); } }}>{en ? "Create production workflow" : "建立制作工作流"}</Button> : null}
     </fieldset>
+    {task ? <p>{t("productionEffectiveTemplate")}: <b>{productionTemplates[effectiveProductionTemplate(task)][en ? 1 : 0]}</b></p> : null}
     {prompt ? <Field label={en ? "Prompt sent to model (editable)" : "将发送给模型的提示词（可编辑）"}><TextArea rows={8} value={prompt} disabled={busy} onChange={(e) => setPrompt(e.target.value)} /></Field> : null}
     {blocked ? <p role="status">{en ? "Approve dependency results before running this task." : "请先审阅并完成前置任务，再执行此任务。"}</p> : null}
     <div className="production-actions">
@@ -78,7 +93,7 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
         if (!window.confirm(en ? `Send this prompt to ${info.endpoint} using ${info.model}? Provider charges may apply.` : `将此提示词发送至 ${info.endpoint}，使用 ${info.model}？服务商可能计费。`)) return;
         if (task && workflowResultReplaceConfirm(task) && !window.confirm(en ? `Running again replaces the reviewed result on “${displayText(task.title, locale)}”. The previous result stays recoverable, and done tasks that depend on this output will be flagged for re-review. Continue?` : `再次运行将替换“${displayText(task.title, locale)}”已审阅的结果。旧结果仍可找回，依赖此产出的已完成任务会标记需复审。继续吗？`)) return;
         const runMeta: WorkflowTaskRunMeta = { model: info.model, promptSha256: await sha256Text(prompt), sourceRevision: workspace.revision, at: new Date().toISOString() };
-        const id = createId("ai"); activeId.current = id; setBusy(true); setOutput(""); setCompletedTask(null);
+        const id = createId("ai"); activeId.current = id; setBusy(true); setOutput(""); setUsage(undefined); setCompletedTask(null);
         const label = task ? displayText(task.title, locale) : productionTemplates[template][en ? 1 : 0];
         setMessage(`${en ? "Working on" : "正在执行"}：${label}`);
         if (task && !workspaceRef.current.workflowTasks.some((item) => item.id === task.id)) {
@@ -88,7 +103,9 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
         }
         if (task) onStatus(task, "active");
         try {
-          const text = await bridge.runAi({ id, prompt, label });
+          const completion = await bridge.runAi({ id, prompt, label });
+          const text = completion.text;
+          setUsage(completion.usage);
           setOutput(text);
           const current = workspaceRef.current;
           const resolved = resolveProductionScope(current, scope);
@@ -99,7 +116,7 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
             throw new Error(en ? "The target was removed while running. Copy the result; it was not saved." : "执行期间目标已被删除，请复制结果保留，本次没有写入。");
           }
           if (text.length > MAX_WORKFLOW_RESULT_LENGTH) throw new Error(en ? "Output exceeds the saved-result limit; copy it before continuing." : "输出超过保存长度，请先复制保留。");
-          const resultTask = task ?? { id: createId("task"), title: { zh: productionTemplates[template][0], en: productionTemplates[template][1] }, brief: { zh: productionTemplates[template][2], en: productionTemplates[template][2] }, deliverable: { zh: "设计稿与提示词", en: "Design and prompts" }, result: { zh: "", en: "" }, kind: "adaptation" as const, status: "review" as const, universeId: resolved.universeId, workId: resolved.workId, chapterId: resolved.chapterId, characterIds: resolved.characterIds ?? [], dependsOnIds: [], standardRefs: standardRefsFor(current, resolved.universeId), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+          const resultTask = task ?? { id: createId("task"), title: { zh: productionTemplates[template][0], en: productionTemplates[template][1] }, brief: { zh: productionTemplates[template][2], en: productionTemplates[template][2] }, deliverable: { zh: "设计稿与提示词", en: "Design and prompts" }, result: { zh: "", en: "" }, kind: "adaptation" as const, template, status: "review" as const, universeId: resolved.universeId, workId: resolved.workId, chapterId: resolved.chapterId, characterIds: resolved.characterIds ?? [], dependsOnIds: [], standardRefs: standardRefsFor(current, resolved.universeId), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
           if (!task && !onTasks([resultTask])) throw new Error(en ? "The result could not be saved to Workflow. Copy it before continuing." : "结果未能写入工作流，请先复制保留。");
           if (!onResult(resultTask, text, runMeta)) throw new Error(en ? "The result was not saved; copy it before continuing." : "结果未能保存，请先复制保留。");
           onStatus(resultTask, "review"); setCompletedTask(resultTask);
@@ -110,6 +127,7 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
       {busy ? <Button onClick={() => void bridge.cancelAi(activeId.current)}>{en ? "Cancel" : "取消"}</Button> : null}
     </div>
     <p role="status" aria-live="polite">{message}</p>
+    {usageMessage ? <p>{usageMessage}</p> : null}
     {prompt.length > MAX_AI_PROMPT_LENGTH ? <p role="alert">{en ? `Prompt exceeds ${formatNumber(MAX_AI_PROMPT_LENGTH, locale)} characters. Narrow its scope or edit it before sending.` : `提示词超过 ${formatNumber(MAX_AI_PROMPT_LENGTH, locale)} 字符，请缩小范围或编辑后发送。`}</p> : null}
     {output ? <><Field label={en ? "Live draft / reviewed result" : "实时产出 / 待审结果"}><TextArea data-testid="production-output" rows={10} value={output} readOnly={busy} onChange={(e) => setOutput(e.target.value)} /></Field><Button onClick={() => void bridge.copyText(output)}>{en ? "Copy result" : "复制结果"}</Button>{completedTask && !busy ? <Button disabled={output.length > MAX_WORKFLOW_RESULT_LENGTH} onClick={() => { setMessage(onResult(completedTask, output) ? (en ? "Reviewed edits saved. Mark the task done in Workflow when ready." : "审阅修改已保存，确认后可在工作流标记完成。") : (en ? "The reviewed edits were not saved." : "审阅修改未能保存。")); }}>{en ? "Save reviewed edits" : "保存审阅修改"}</Button> : null}</> : null}
   </details>;

@@ -51,7 +51,7 @@ export function ManuscriptImport({ locale, onClose, onImport }: { locale: UiLoca
         const index = chunks.findIndex((value) => sameChunk(value, chunk));
         const label = `${en ? "Analyzing chapter" : "正在分析章节"} ${chunk.chapter} · ${index + 1}/${chunks.length}`;
         setMessage(label); setOutput("");
-        return bridge.runAi({ id, label, prompt: analysisPrompt(chunk, locale) });
+        return (await bridge.runAi({ id, label, prompt: analysisPrompt(chunk, locale) })).text;
       }, { previous, skip: nextSkipped, continueOnFailure, shouldStop: () => canceled.current });
       setResults(run.results);
       setFailures(run.failures);

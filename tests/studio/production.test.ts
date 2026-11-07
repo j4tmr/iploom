@@ -2,9 +2,9 @@ import { expect, jest, test } from "bun:test";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 import { analyzeManuscriptChunks, buildManuscriptImport, manuscriptChunks, mergeManuscriptImport, parseAnalysis, planManuscriptAnalysis, splitManuscript, type ManuscriptAnalysis } from "../../apps/studio/src/core/manuscript.ts";
-import { CHAPTER_LIMITS } from "../../apps/studio/src/core/types.ts";
-import { buildProductionPrompt, createProductionTasks, resolveProductionScope, taskProductionPrompt } from "../../apps/studio/src/core/production.ts";
-import { setWorkflowTaskResult } from "../../apps/studio/src/core/workflow.ts";
+import { CHAPTER_LIMITS, MAX_AI_PROMPT_LENGTH } from "../../apps/studio/src/core/types.ts";
+import { buildProductionPrompt, createProductionTasks, effectiveProductionTemplate, productionTemplates, resolveProductionScope, taskProductionPrompt } from "../../apps/studio/src/core/production.ts";
+import { buildWorkflowBrief, setWorkflowTaskResult } from "../../apps/studio/src/core/workflow.ts";
 import { AI_CANCELED_MESSAGE, aiConfigSchema, isReportableAiError, runCompletion } from "../../apps/studio/src/node/ai-client.ts";
 import { buildArcReelBundle } from "../../apps/studio/src/core/arcreel.ts";
 
@@ -227,6 +227,86 @@ test("production workflow carries scope, dependencies, long results and costume 
   expect(context.chapter.content).toBe(work.chapters[0]!.content);
 });
 
+test("production tasks without a chosen character inherit the chapter cast anchors", () => {
+  const workspace = createDemoWorkspace("en");
+  const work = workspace.works[0]!;
+  const chapter = work.chapters[0]!;
+  const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: chapter.id }, "en");
+  workspace.workflowTasks.push(...tasks);
+  expect(tasks.every((task) => task.characterIds.length === 0)).toBe(true);
+  const chapterCast = workspace.characters.filter((item) => chapter.characterIds.includes(item.id));
+  expect(chapterCast.length).toBeGreaterThan(0);
+  for (const task of tasks) {
+    const prompt = taskProductionPrompt(workspace, task, "en");
+    for (const character of chapterCast) {
+      expect(prompt).toContain(`**${character.name.en}**`);
+    }
+  }
+
+  const universeTasks = createProductionTasks(workspace, { workId: work.id }, "en");
+  workspace.workflowTasks.push(...universeTasks);
+  const universeCast = workspace.characters.filter((item) => item.universeIds.includes(work.universeId));
+  expect(universeCast.length).toBeGreaterThan(chapterCast.length);
+  for (const character of universeCast) {
+    expect(taskProductionPrompt(workspace, universeTasks[0]!, "en")).toContain(`**${character.name.en}**`);
+  }
+});
+
+test("assembled prompts restore chapter, cast, location, object and relationship anchors", () => {
+  const workspace = createDemoWorkspace("en");
+  const work = workspace.works[0]!;
+  const chapter = work.chapters[2]!;
+  chapter.scenes.push({
+    id: "scene_test_21",
+    title: "Tower interior",
+    summary: "The clock stops mid-chime.",
+    locationId: "loc_old_tower",
+    characterIds: ["char_lin"],
+    shots: [{
+      id: "shot_test_21",
+      shotType: "wide",
+      camera: "slow push",
+      description: "Pendulums swing through fog",
+      dialogue: "",
+      durationMs: 3_000,
+      visualPrompt: "",
+    }],
+  });
+  const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: chapter.id }, "en");
+  workspace.workflowTasks.push(...tasks);
+  const prompt = taskProductionPrompt(workspace, tasks[0]!, "en");
+
+  const lin = workspace.characters.find((item) => item.id === "char_lin")!;
+  const gu = workspace.characters.find((item) => item.id === "char_gu")!;
+  const tower = workspace.locations.find((item) => item.id === "loc_old_tower")!;
+  const key = workspace.storyObjects.find((item) => item.id === "object_brass_key")!;
+  const guild = workspace.factions.find((item) => item.id === "fac_tide_guild")!;
+  const relationship = workspace.relationships.find((item) => item.id === "rel_lin_gu")!;
+
+  expect(prompt).toContain(`POV: ${chapter.pov}`);
+  expect(prompt).toContain(`Location: \`${chapter.locationId}\``);
+  expect(prompt).toContain(`Adaptation notes**: ${chapter.adaptationNotes}`);
+  expect(prompt).toContain("**Scenes**:");
+  expect(prompt).toContain("- 1. Tower interior (`scene_test_21`): The clock stops mid-chime.");
+  expect(prompt).toContain("Shot 1 (wide · slow push): Pendulums swing through fog");
+
+  expect(prompt).toContain(`- **${lin.name.en}** (${lin.role.en}; \`char_lin\`)`);
+  expect(prompt).toContain(`Look: ${lin.appearance}`);
+  expect(prompt).toContain(`Personality: ${lin.personality}`);
+  expect(prompt).toContain(`Voice: ${lin.voice}`);
+  expect(prompt).toContain(`Secret (continuity only; never state it outright): ${lin.secret}`);
+  expect(prompt).toContain(`**${tower.name.en}** (\`loc_old_tower\`)`);
+  expect(prompt).toContain(`Atmosphere: ${tower.atmosphere}`);
+  expect(prompt).toContain(`Visual anchor: ${tower.visualPrompt}`);
+  expect(prompt).toContain(`**${key.name.en}** (\`object_brass_key\`, ${key.category.en})`);
+  expect(prompt).toContain(`Visual anchor: ${key.visualPrompt}`);
+  expect(prompt).toContain(`Visual motif: ${guild.visualMotif}`);
+  expect(prompt).toContain(
+    `${lin.name.en} → ${gu.name.en}: ${relationship.label.en} ` +
+    `[${relationship.type}, ${relationship.status}, ${relationship.strength}/5, one-way] — ${relationship.notes}`,
+  );
+});
+
 test("running a task keeps its brief, deliverable and composed prompt stable", () => {
   const workspace = createDemoWorkspace("en");
   const tasks = createProductionTasks(workspace, { workId: workspace.works[0]!.id }, "en");
@@ -253,6 +333,209 @@ test("running a task keeps its brief, deliverable and composed prompt stable", (
     sourceRevision: workspace.revision,
     at: "2026-11-07T00:00:00.000Z",
   });
+});
+
+test("renaming a production task keeps its stage template instructions", () => {
+  const workspace = createDemoWorkspace("en");
+  const tasks = createProductionTasks(workspace, { workId: workspace.works[0]!.id }, "en");
+  workspace.workflowTasks.push(...tasks);
+  const costume = tasks[2]!;
+  expect(costume.template).toBe("costume");
+  const instruction = (prompt: string) =>
+    prompt.split("\n").find((line) => line.startsWith("Task: "));
+  const before = taskProductionPrompt(workspace, costume, "en");
+  expect(instruction(before)).toBe(`Task: ${productionTemplates.costume[2]}`);
+
+  costume.title = { zh: "人物服装 v2", en: "Costume design v2" };
+  const after = taskProductionPrompt(workspace, costume, "en");
+  expect(instruction(after)).toBe(instruction(before));
+  expect(after).toContain("Design named costume variants");
+  expect(after).not.toContain(productionTemplates.review[2]);
+  expect(effectiveProductionTemplate(costume)).toBe("costume");
+});
+
+test("legacy workspaces without templates still validate and infer each stage", () => {
+  const workspace = createDemoWorkspace("en");
+  const tasks = createProductionTasks(workspace, { workId: workspace.works[0]!.id }, "en");
+  for (const task of tasks) task.dependsOnIds = [];
+
+  // The English title was the original signal, so it outranks copied brief text.
+  tasks[2]!.title = { zh: "服装设计 v1", en: productionTemplates.costume[1] };
+  tasks[2]!.brief = { zh: productionTemplates.scene[2], en: productionTemplates.scene[2] };
+  tasks[2]!.kind = "character";
+  // Copied brief text distinguishes stages whose kinds are identical.
+  tasks[3]!.title = { zh: "场景草案", en: "Scene draft" };
+  tasks[3]!.brief = { zh: productionTemplates.scene[2], en: productionTemplates.scene[2] };
+  tasks[3]!.kind = "character";
+  tasks[4]!.title = { zh: "分镜草案", en: "Board draft" };
+  tasks[4]!.brief = { zh: productionTemplates.storyboard[2], en: productionTemplates.storyboard[2] };
+  tasks[4]!.kind = "adaptation";
+  tasks[5]!.title = { zh: "审查草案", en: "Review draft" };
+  tasks[5]!.brief = { zh: "人工撰写的审查说明。", en: "Hand-written review notes." };
+  tasks[5]!.kind = "review";
+  const ambiguous = structuredClone(tasks[1]!);
+  ambiguous.id = "task_ambiguous_legacy";
+  ambiguous.title = { zh: "未知阶段", en: "Unknown stage" };
+  ambiguous.brief = { zh: "没有阶段说明。", en: "No stage hint." };
+  ambiguous.kind = "adaptation";
+  delete ambiguous.template;
+  for (const task of tasks) delete task.template;
+  workspace.workflowTasks = [...tasks, ambiguous];
+  workspace.revision = 40;
+  const legacy = structuredClone(workspace) as unknown as Record<string, unknown>;
+  legacy.schema_version = 6;
+
+  const migrated = validateWorkspace(legacy);
+  expect(migrated.schema_version).toBe(7);
+  expect(migrated.revision).toBe(41);
+  expect(migrated.workflowTasks.map((task) => task.template)).toEqual([
+    "world",
+    "character",
+    "costume",
+    "scene",
+    "storyboard",
+    "review",
+    undefined,
+  ]);
+});
+
+test("approved ancestors reach downstream prompts and unfinished outputs stay out", () => {
+  const workspace = createDemoWorkspace("en");
+  const work = workspace.works[0]!;
+  const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: work.chapters[0]!.id }, "en");
+  workspace.workflowTasks.push(...tasks);
+  const markers = [
+    "WORLD_RESULT_21",
+    "CHARACTER_RESULT_21",
+    "COSTUME_RESULT_21",
+    "SCENE_RESULT_21",
+    "STORYBOARD_RESULT_21",
+  ];
+  tasks.slice(0, 5).forEach((task, index) => {
+    task.status = "done";
+    task.result = { zh: markers[index]!, en: markers[index]! };
+  });
+
+  const review = taskProductionPrompt(workspace, tasks[5]!, "en");
+  for (const marker of markers) {
+    expect(review.split(marker)).toHaveLength(2);
+  }
+  const order = markers.map((marker) => review.indexOf(marker));
+  expect(order).toEqual([...order].sort((left, right) => left - right));
+  expect(review).toContain("APPROVED DEPENDENCY OUTPUTS");
+  expect(review).toContain("### Costume design");
+
+  tasks[3]!.status = "active";
+  const storyboard = taskProductionPrompt(workspace, tasks[4]!, "en");
+  for (const marker of markers.slice(0, 3)) {
+    expect(storyboard.split(marker)).toHaveLength(2);
+  }
+  expect(storyboard).not.toContain(markers[3]!);
+  expect(storyboard).not.toContain(markers[4]!);
+
+  for (const locale of ["en", "zh-CN"] as const) {
+    const demo = createDemoWorkspace(locale);
+    for (const demoWork of demo.works) {
+      const demoTasks = createProductionTasks(demo, { workId: demoWork.id }, locale);
+      demo.workflowTasks.push(...demoTasks);
+      for (const task of [...demo.workflowTasks]) {
+        expect(taskProductionPrompt(demo, task, locale).length).toBeLessThan(100_000);
+      }
+    }
+  }
+});
+
+test("brief dependency wording follows blockers and only queued tasks show readiness", () => {
+  const workspace = createDemoWorkspace("en");
+  const chapter = workspace.workflowTasks.find((task) => task.id === "task_chapter_three")!;
+  const world = workspace.workflowTasks.find((task) => task.id === "task_world_rules")!;
+
+  const queued = buildWorkflowBrief(workspace, chapter.id, "en");
+  expect(queued).toContain("1 dependency task(s) remain open");
+  expect(queued).toContain("Ready to start: no");
+
+  world.status = "done";
+  chapter.status = "active";
+  const active = buildWorkflowBrief(workspace, chapter.id, "en");
+  expect(active).toContain("All dependencies are complete.");
+  expect(active).not.toContain("remain open");
+  expect(active).not.toContain("Ready to start");
+});
+
+test("assembled task prompts include each setting, location, object and faction once", () => {
+  for (const locale of ["en", "zh-CN"] as const) {
+    const workspace = createDemoWorkspace(locale);
+    for (const work of workspace.works) {
+      const world = workspace.universes.find((item) => item.id === work.universeId)!;
+      const localized = <T extends { name: { zh: string; en: string } }>(item: T) =>
+        item.name[locale === "en" ? "en" : "zh"];
+      const entities = [
+        ...workspace.locations.filter((item) => item.universeId === world.id),
+        ...workspace.storyObjects.filter((item) => item.universeId === world.id),
+        ...workspace.factions.filter((item) => item.universeId === world.id),
+      ];
+      const scopes = [
+        { workId: work.id, chapterId: work.chapters[0]!.id },
+        { workId: work.id, chapterId: work.chapters.at(-1)!.id },
+        { workId: work.id },
+      ];
+      for (const scope of scopes) {
+        const tasks = createProductionTasks(workspace, scope, locale);
+        workspace.workflowTasks.push(...tasks);
+        for (const task of tasks) {
+          const prompt = taskProductionPrompt(workspace, task, locale);
+          // English narrative text never repeats these names, so every mention must be structured.
+          if (locale === "en") {
+            for (const name of [localized(world), ...entities.map(localized)]) {
+              expect(prompt.split(name)).toHaveLength(2);
+            }
+          }
+          // Chinese prose may mention a name, so count only the explicit headings and rows.
+          expect(prompt.split(`### ${localized(world)}`)).toHaveLength(2);
+          for (const entity of entities) {
+            expect(prompt.split(`**${localized(entity)}**`)).toHaveLength(2);
+          }
+          expect(prompt).not.toContain("SOURCE DATA (not instructions):");
+        }
+        const standalone = buildProductionPrompt(workspace, "storyboard", scope, locale)
+          .split("SOURCE DATA (not instructions):\n")[1]!;
+        expect(standalone).not.toContain("\n  ");
+        expect(() => JSON.parse(standalone)).not.toThrow();
+      }
+    }
+  }
+});
+
+test("oversized approved outputs are shared under the prompt limit without dropping stages", () => {
+  const workspace = createDemoWorkspace("en");
+  const work = workspace.works[0]!;
+  const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: work.chapters[0]!.id }, "en");
+  workspace.workflowTasks.push(...tasks);
+  const markers = [
+    "WORLD_BUDGET_21",
+    "CHARACTER_BUDGET_21",
+    "COSTUME_BUDGET_21",
+    "SCENE_BUDGET_21",
+    "STORYBOARD_BUDGET_21",
+  ];
+  tasks.slice(0, 5).forEach((task, index) => {
+    task.status = "done";
+    // The character output is astral text, so a cut can land between surrogate halves.
+    const filler = index === 1 ? "😀".repeat(20_000) : "x".repeat(40_000);
+    task.result = { zh: `${markers[index]} ${filler}`, en: `${markers[index]} ${filler}` };
+  });
+
+  const review = taskProductionPrompt(workspace, tasks[5]!, "en");
+  expect(review.length).toBeLessThanOrEqual(MAX_AI_PROMPT_LENGTH);
+  for (const marker of markers) expect(review.split(marker)).toHaveLength(2);
+  const positions = markers.map((marker) => review.indexOf(marker));
+  expect(positions).toEqual([...positions].sort((left, right) => left - right));
+  expect(review).toContain("[…truncated]");
+  for (const stage of ["World bible", "Character design", "Costume design", "Scene design", "Storyboard"]) {
+    expect(review).toContain(`### ${stage}`);
+  }
+  expect(review).toContain(`Task: ${productionTemplates.review[2]}`);
+  expect(review).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
 });
 
 test("production scope resolution drops stale cross-novel references", () => {
@@ -312,22 +595,77 @@ const config = { endpoint: "https://provider.example/v1", model: "test", apiKey:
 const request = { id: "test", label: "Costume", prompt: "Design costume" };
 const fetchResponse = (body: string, type = "text/event-stream") => (async (_url: unknown, init?: RequestInit) => {
   expect(init?.redirect).toBe("error");
-  expect(JSON.parse(String(init?.body)).stream).toBe(true);
+  const payload = JSON.parse(String(init?.body));
+  expect(payload.stream).toBe(true);
+  expect(payload.stream_options).toEqual({ include_usage: true });
   return new Response(body, { headers: { "Content-Type": type } });
 }) as typeof fetch;
 
 test("model client streams only public generated content and requires complete output", async () => {
   const updates: string[] = [];
   const body = 'data: {"choices":[{"index":0,"delta":{"content":"服装"},"finish_reason":null}]}\r\n\r\ndata: {"choices":[{"index":0,"delta":{"content":"设计"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
-  expect(await runCompletion(config, request, new AbortController().signal, (text) => updates.push(text), fetchResponse(body))).toBe("服装设计");
+  expect((await runCompletion(config, request, new AbortController().signal, (text) => updates.push(text), fetchResponse(body))).text).toBe("服装设计");
   expect(updates).toEqual(["服装", "服装设计"]);
   await expect(runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body.replace('"stop"', '"length"')))).rejects.toThrow(/Incomplete/);
   await expect(runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'))).rejects.toThrow(/interrupted/);
 });
 
+test("model client returns provider-reported usage from the stream", async () => {
+  const usage = { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 };
+  const body = [
+    `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "design" }, finish_reason: null }] })}`,
+    `data: ${JSON.stringify({ choices: [], usage })}`,
+    `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}`,
+    "data: [DONE]",
+    "",
+  ].join("\n\n");
+  await expect(
+    runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body)),
+  ).resolves.toEqual({ text: "design", usage });
+});
+
+test("model client retries once without stream_options only when the provider names the parameter", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  let calls = 0;
+  const fetcher = (async (_url: unknown, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    calls += 1;
+    if (calls === 1) {
+      return new Response(JSON.stringify({ error: {
+        message: "Unrecognized request argument supplied: stream_options",
+        type: "invalid_request_error",
+      } }), { status: 400, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(sseContent("retried") + sseDone(), { headers: { "Content-Type": "text/event-stream" } });
+  }) as typeof fetch;
+
+  await expect(
+    runCompletion(config, request, new AbortController().signal, () => {}, fetcher),
+  ).resolves.toEqual({ text: "retried" });
+  expect(bodies).toHaveLength(2);
+  expect(bodies[0]!.stream_options).toEqual({ include_usage: true });
+  expect(bodies[1]!.stream_options).toBeUndefined();
+  expect(bodies[1]!.messages).toEqual(bodies[0]!.messages);
+  expect(bodies[1]!.model).toBe(config.model);
+
+  let unrelatedCalls = 0;
+  const unrelated = (async (_url: unknown, _init?: RequestInit) => {
+    unrelatedCalls += 1;
+    return new Response(JSON.stringify({ error: {
+      message: "Unsupported model parameter",
+      code: "invalid_request_error",
+    } }), { status: 400, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  const message = await rejectionMessage(
+    runCompletion(config, request, new AbortController().signal, () => {}, unrelated),
+  );
+  expect(unrelatedCalls).toBe(1);
+  expect(message).toContain("HTTP 400");
+});
+
 test("model client accepts complete JSON fallback and validates endpoint configuration", async () => {
   const body = JSON.stringify({ choices: [{ message: { content: "design" }, finish_reason: "stop" }] });
-  expect(await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, "application/json"))).toBe("design");
+  expect((await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, "application/json"))).text).toBe("design");
   expect(aiConfigSchema.safeParse({ ...config, endpoint: "http://remote.example/v1" }).success).toBe(false);
   expect(aiConfigSchema.safeParse({ ...config, endpoint: "https://user:pass@provider.example/v1" }).success).toBe(false);
   expect(aiConfigSchema.safeParse({ ...config, endpoint: "http://localhost:1234/v1", apiKey: "" }).success).toBe(true);
@@ -451,10 +789,10 @@ test("model client bounds and cleans oversized or non-JSON error bodies", async 
 
 test("model client parses SSE without a correct content type and ignores non-JSON data lines", async () => {
   const body = `: keep-alive\n\ndata: not-json\n\ndata: {"choices":[{"index":0,"delta":{"content":"a"},"finish_reason":null}]}\n\ndata: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n`;
-  expect(await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, ""))).toBe("a");
-  expect(await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, "application/json"))).toBe("a");
+  expect((await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, ""))).text).toBe("a");
+  expect((await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, "application/json"))).text).toBe("a");
   const noContentType = (async () => new Response(new Blob([body]))) as unknown as typeof fetch;
-  expect(await runCompletion(config, request, new AbortController().signal, () => {}, noContentType)).toBe("a");
+  expect((await runCompletion(config, request, new AbortController().signal, () => {}, noContentType)).text).toBe("a");
   await expect(runCompletion(
     config, request, new AbortController().signal, () => {}, fetchResponse("not json", "application/json"),
   )).rejects.toThrow(/unreadable response/);
@@ -480,7 +818,7 @@ test("model client keeps a streaming request alive well past 180 seconds while d
     }
     send(sseDone());
     await settle();
-    await expect(pending).resolves.toBe(expected);
+    await expect(pending).resolves.toEqual({ text: expected });
     expect(updates.at(-1)).toBe(expected);
   } finally { jest.useRealTimers(); }
 });

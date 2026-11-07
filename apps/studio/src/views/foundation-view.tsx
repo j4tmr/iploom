@@ -233,7 +233,7 @@ export function FoundationView({
       ),
     );
     try {
-      const raw = await bridge.runAi({
+      const raw = (await bridge.runAi({
         id,
         prompt: buildStandardDraftPrompt(workspace, locale),
         label: local(
@@ -241,7 +241,7 @@ export function FoundationView({
           "起草项目基础规则",
           "Draft project foundation standards",
         ),
-      });
+      })).text;
       const parsed = parseStandardCandidates(raw);
       if (!parsed.length) {
         setDraftMessage(

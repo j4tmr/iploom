@@ -122,8 +122,8 @@ describe("studio domain", () => {
     delete legacy.storyObjects;
     delete legacy.timelineEvents;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(6);
-    expect(migrated.revision).toBe(45);
+    expect(migrated.schema_version).toBe(7);
+    expect(migrated.revision).toBe(46);
     expect(migrated.workflowTasks).toEqual([]);
     expect(migrated.storyObjects).toEqual([]);
     expect(migrated.timelineEvents).toEqual([]);
@@ -139,8 +139,8 @@ describe("studio domain", () => {
     delete legacy.storyObjects;
     delete legacy.timelineEvents;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(6);
-    expect(migrated.revision).toBe(14);
+    expect(migrated.schema_version).toBe(7);
+    expect(migrated.revision).toBe(15);
     expect(migrated.storyObjects).toEqual([]);
     expect(migrated.timelineEvents).toEqual([]);
   });
@@ -186,8 +186,8 @@ describe("studio domain", () => {
       { id: "export_broken", workId: 4 },
     ];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(6);
-    expect(migrated.revision).toBe(9);
+    expect(migrated.schema_version).toBe(7);
+    expect(migrated.revision).toBe(10);
     expect(migrated.lastOpenedWorkId).toBeUndefined();
     expect(migrated.exports.map((record) => record.id)).toEqual([
       "export_same",
@@ -217,8 +217,8 @@ describe("studio domain", () => {
     };
     const cleanBrief = JSON.stringify(tasks[2]!.brief);
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(6);
-    expect(migrated.revision).toBe(8);
+    expect(migrated.schema_version).toBe(7);
+    expect(migrated.revision).toBe(9);
     expect(migrated.workflowTasks[0]!.brief.zh).toBe("");
     expect(migrated.workflowTasks[0]!.brief.en).toBe("");
     expect(migrated.workflowTasks[0]!.deliverable).toEqual({
@@ -911,15 +911,15 @@ describe("workspace store", () => {
       await Bun.write(file, JSON.stringify(legacy));
       const store = new WorkspaceStore(file);
       const loaded = await store.load();
-      expect(loaded.workspace.schema_version).toBe(6);
+      expect(loaded.workspace.schema_version).toBe(7);
       expect(loaded.workspace.workflowTasks).toEqual([]);
-      expect(loaded.workspace.revision).toBe(8);
+      expect(loaded.workspace.revision).toBe(9);
       await store.save(loaded.workspace);
       const persisted = JSON.parse(readFileSync(file, "utf8")) as {
         schema_version: number;
         workflowTasks: unknown[];
       };
-      expect(persisted.schema_version).toBe(6);
+      expect(persisted.schema_version).toBe(7);
       expect(persisted.workflowTasks).toEqual([]);
     } finally {
       rmSync(root, { recursive: true, force: true });
