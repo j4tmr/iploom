@@ -47,6 +47,7 @@ export class StaleWorkspaceError extends Error {
     readonly path: string,
     readonly storedRevision: number,
     readonly incomingRevision: number,
+    readonly baseRevision?: number,
   ) {
     super(
       storedRevision === incomingRevision
@@ -54,7 +55,13 @@ export class StaleWorkspaceError extends Error {
             `content. Another process (for example the MCP server) changed the ` +
             `workspace. Reload the workspace to continue from the newer file; ` +
             `the file was left untouched.`
-        : `Refusing to overwrite ${path} revision ${storedRevision} with older ` +
+        : baseRevision != null && baseRevision < storedRevision
+          ? `Refusing to overwrite ${path} revision ${storedRevision} with a draft ` +
+            `based on revision ${baseRevision} (incoming revision ${incomingRevision}). ` +
+            `Another process (for example the MCP server) changed the workspace. ` +
+            `Reload the workspace to continue from the newer file; ` +
+            `the file was left untouched.`
+          : `Refusing to overwrite ${path} revision ${storedRevision} with older ` +
             `revision ${incomingRevision}. Another process (for example the MCP ` +
             `server) changed the workspace. Reload the workspace to continue from ` +
             `the newer file; the file was left untouched.`,
@@ -167,9 +174,27 @@ function formatValidationError(path: string, error: unknown): string {
   }`;
 }
 
+/**
+ * Both sides are `validateWorkspace` output, so the comparison is against the
+ * zod-canonical shape: unknown keys are stripped and defaults applied, meaning
+ * an honest idempotent re-save compares equal regardless of the transport.
+ */
+function sameWorkspaceContent(
+  left: StudioWorkspace,
+  right: StudioWorkspace,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export interface WorkspaceSaveOptions {
   /** Snapshot restore and demo reset intentionally move the workspace backwards. */
   allowRollback?: boolean;
+  /**
+   * Revision of the last state this writer knows was persisted (optimistic
+   * concurrency). An external writer may have advanced the file since then;
+   * saving over it is only safe when the content is identical.
+   */
+  baseRevision?: number;
 }
 
 export interface WrittenBundle {
@@ -286,7 +311,13 @@ export class WorkspaceStore {
         // Adopt the recovered copy as the new primary immediately. Without a
         // primary file the snapshot guard has nothing healthy to snapshot and
         // refuses every delete/import until an unrelated edit triggers a save.
-        await this.save(workspace);
+        // Best-effort: a read-only workspace directory must still hand the
+        // recovered workspace back to the editor.
+        try {
+          await this.save(workspace);
+        } catch {
+          // The next successful write path adopts the recovered state.
+        }
         return {
           workspace,
           path: this.filePath,
@@ -429,17 +460,25 @@ export class WorkspaceStore {
         // silently rolling the file back. An equal revision is not proof that
         // the content is the same: an editor that loaded R and bumped its
         // local copy to R+1 would otherwise silently overwrite the external
-        // writer's R+1. Only an identical re-save (idempotent retry) passes.
+        // writer's R+1. A `baseRevision` older than the file is the same
+        // situation after several local edits (draft R+2 over an external
+        // R+1), which revision ordering alone cannot detect. Only an identical
+        // re-save (idempotent retry, lost response) passes.
+        const identical = sameWorkspaceContent(current, workspace);
+        const advancedSinceBase =
+          options.baseRevision != null &&
+          options.baseRevision < current.revision;
         if (
           !options.allowRollback &&
           (current.revision > workspace.revision ||
-            (current.revision === workspace.revision &&
-              JSON.stringify(current) !== JSON.stringify(workspace)))
+            (!identical &&
+              (current.revision === workspace.revision || advancedSinceBase)))
         ) {
           throw new StaleWorkspaceError(
             this.filePath,
             current.revision,
             workspace.revision,
+            options.baseRevision,
           );
         }
         // Renaming the previous primary keeps the `.bak` byte-identical to the

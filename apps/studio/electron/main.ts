@@ -33,6 +33,7 @@ import {
 import {
   isStaleSaveError,
   markStaleWorkspaceMessage,
+  stripStaleWorkspaceMarker,
 } from "../src/save-errors.ts";
 import {
   canonicalPath,
@@ -293,7 +294,11 @@ async function closeAfterFlush(
         }
         return;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        // The flush handshake marks stale saves so reload can adopt the newer
+        // file; the close dialog must still show the human-readable message.
+        const message = stripStaleWorkspaceMarker(
+          error instanceof Error ? error.message : String(error),
+        );
         console.error("[IPloom Studio] close flush failed", error);
         if (smokeMode) {
           app.exit(1);
@@ -393,7 +398,12 @@ async function loadWorkspace(): Promise<LoadedWorkspace> {
   } catch (error) {
     if (await exists(store.filePath)) throw error;
     const workspace = createDemoWorkspace(defaultLocale());
-    await store.save(workspace);
+    try {
+      await store.save(workspace);
+    } catch {
+      // A read-only workspace directory must still open the demo in memory;
+      // the snapshot guard refuses destructive actions until a save succeeds.
+    }
     rememberFolders();
     return {
       workspace,
@@ -517,20 +527,33 @@ function registerIpcHandlers(): void {
     return loadWorkspace();
   });
 
-  ipcMain.handle("iploom:save", async (event, workspace: StudioWorkspace) => {
-    assertTrustedSender(event);
-    if (workspace && typeof workspace === "object") recoveryWorkspace = workspace;
-    try {
-      await requireStore().save(workspace);
-    } catch (error) {
-      // IPC keeps only the message, so the renderer's retry loop cannot see
-      // `retryable = false` unless the marker rides along in the message.
-      if (error instanceof StaleWorkspaceError)
-        throw new Error(markStaleWorkspaceMessage(error.message));
-      throw error;
-    }
-    return { savedAt: new Date().toISOString() };
-  });
+  ipcMain.handle(
+    "iploom:save",
+    async (event, workspace: StudioWorkspace, baseRevision?: unknown) => {
+      assertTrustedSender(event);
+      if (workspace && typeof workspace === "object")
+        recoveryWorkspace = workspace;
+      if (
+        baseRevision != null &&
+        (typeof baseRevision !== "number" || !Number.isFinite(baseRevision))
+      ) {
+        throw new Error("Base revision must be a finite number");
+      }
+      try {
+        await requireStore().save(
+          workspace,
+          baseRevision == null ? {} : { baseRevision },
+        );
+      } catch (error) {
+        // IPC keeps only the message, so the renderer's retry loop cannot see
+        // `retryable = false` unless the marker rides along in the message.
+        if (error instanceof StaleWorkspaceError)
+          throw new Error(markStaleWorkspaceMessage(error.message));
+        throw error;
+      }
+      return { savedAt: new Date().toISOString() };
+    },
+  );
 
   ipcMain.handle(
     "iploom:flush-complete",
@@ -539,6 +562,7 @@ function registerIpcHandlers(): void {
       requestId: string,
       error?: string,
       workspace?: StudioWorkspace,
+      stale?: boolean,
     ) => {
       assertTrustedSender(event);
       if (workspace && typeof workspace === "object") {
@@ -551,7 +575,12 @@ function registerIpcHandlers(): void {
       const waiter = flushWaiter;
       flushWaiter = undefined;
       clearTimeout(waiter.timer);
-      if (error) waiter.reject(new Error(error));
+      // The renderer sends the marker-free message; restore the marker in
+      // process memory so the reload handshake recognizes a stale save.
+      if (error)
+        waiter.reject(
+          new Error(stale === true ? markStaleWorkspaceMessage(error) : error),
+        );
       else waiter.resolve();
     },
   );

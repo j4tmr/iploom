@@ -1,5 +1,14 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, readdir, stat, utimes, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
@@ -89,6 +98,24 @@ test("recovering from the backup restores a primary file for snapshots", async (
   // delete/import until an unrelated edit happens to trigger a save.
   expect(JSON.parse(await readFile(store.filePath, "utf8")).name).toBe("older");
   expect(await store.createSnapshot("before-delete-world")).not.toBeNull();
+});
+
+test("a read-only directory still hands back a recovered backup", async () => {
+  const store = await storeInTemp();
+  await saveTwice(store);
+  await rm(store.filePath);
+  const directory = join(store.filePath, "..");
+  await chmod(directory, 0o555);
+  try {
+    // Adopting the recovered copy as the new primary is best-effort: the
+    // directory rejects the write, but the workspace must still be returned.
+    const loaded = await store.load();
+    expect(loaded.recoveredFromBackup).toBe(true);
+    expect(loaded.workspace.name).toBe("older");
+    expect(loaded.path).toBe(store.filePath);
+  } finally {
+    await chmod(directory, 0o755);
+  }
 });
 
 test("saving refuses to overwrite an unreadable primary file", async () => {

@@ -185,6 +185,103 @@ test("an equal-revision draft cannot overwrite an external writer's content", as
   );
 });
 
+test("a draft based on an older revision cannot overwrite an advanced file", async () => {
+  const store = await storeInTemp();
+  const base = workspaceTitled("base");
+  base.revision = 10;
+  await store.save(base);
+
+  // The MCP server writes revision 11 while the editor still holds revision 10.
+  const external = await store.update((workspace) => {
+    workspace.name = "MCP edit";
+  });
+  expect(external.revision).toBe(11);
+
+  // Two keystrokes later the editor's draft is revision 12 — newer than the
+  // file — so revision ordering alone would accept it.
+  const draft = workspaceTitled("editor draft");
+  draft.revision = 12;
+  const error: unknown = await store
+    .save(draft, { baseRevision: 10 })
+    .catch((reason) => reason);
+
+  expect(error).toBeInstanceOf(StaleWorkspaceError);
+  expect((error as StaleWorkspaceError).storedRevision).toBe(11);
+  expect((error as StaleWorkspaceError).incomingRevision).toBe(12);
+  expect((error as StaleWorkspaceError).baseRevision).toBe(10);
+  expect((error as StaleWorkspaceError).retryable).toBe(false);
+  expect((error as Error).message).toMatch(/based on revision 10/);
+  expect((error as Error).message).toMatch(/reload/i);
+  expect(JSON.parse(await readFile(store.filePath, "utf8")).name).toBe(
+    "MCP edit",
+  );
+});
+
+test("several edits from a base save over an unchanged file but not over an advanced one", async () => {
+  const unchanged = await storeInTemp();
+  const base = workspaceTitled("base");
+  base.revision = 10;
+  await unchanged.save(base);
+
+  const draft = workspaceTitled("editor draft with several edits");
+  draft.revision = 15;
+  await unchanged.save(draft, { baseRevision: 10 });
+  expect(await storedTitle(unchanged.filePath)).toBe(
+    "editor draft with several edits",
+  );
+
+  const advanced = await storeInTemp();
+  await advanced.save(structuredClone(base));
+  await advanced.update((workspace) => {
+    workspace.name = "MCP edit";
+  });
+  const rejected: unknown = await advanced
+    .save(structuredClone(draft), { baseRevision: 10 })
+    .catch((reason) => reason);
+  expect(rejected).toBeInstanceOf(StaleWorkspaceError);
+  expect(JSON.parse(await readFile(advanced.filePath, "utf8")).name).toBe(
+    "MCP edit",
+  );
+});
+
+test("a normal save with a base equal to the on-disk revision is accepted", async () => {
+  const store = await storeInTemp();
+  const base = workspaceTitled("base");
+  base.revision = 10;
+  await store.save(base);
+
+  const next = workspaceTitled("next");
+  next.revision = 11;
+  await store.save(next, { baseRevision: 10 });
+  expect(await storedTitle(store.filePath)).toBe("next");
+});
+
+test("idempotent same-content re-saves pass even when the base is older", async () => {
+  const store = await storeInTemp();
+  const base = workspaceTitled("base");
+  base.revision = 12;
+  await store.save(base);
+
+  // A lost response after this exact save: the retry still cites revision 10
+  // as its base, but the file already holds byte-identical content.
+  await store.save(structuredClone(base), { baseRevision: 10 });
+  expect(await storedTitle(store.filePath)).toBe("base");
+});
+
+test("baseRevision does not relax the guard against older incoming revisions", async () => {
+  const store = await storeInTemp();
+  const current = workspaceTitled("current");
+  current.revision = 20;
+  await store.save(current);
+
+  const older = workspaceTitled("older");
+  older.revision = 12;
+  const error: unknown = await store
+    .save(structuredClone(older), { baseRevision: 20 })
+    .catch((reason) => reason);
+  expect(error).toBeInstanceOf(StaleWorkspaceError);
+});
+
 test("allowRollback lets an intentional restore move the revision backwards", async () => {
   const store = await storeInTemp();
   const current = workspaceTitled("current");

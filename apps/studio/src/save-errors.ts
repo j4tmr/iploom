@@ -27,16 +27,28 @@ export class StaleWorkspaceSaveError extends Error {
   }
 }
 
+/** Remove the transport marker (and Electron's IPC prefix) from a message. */
+export function stripStaleWorkspaceMarker(message: string): string {
+  const marker = message.indexOf(STALE_WORKSPACE_MARKER);
+  return marker < 0
+    ? message
+    : message.slice(marker + STALE_WORKSPACE_MARKER.length).trim();
+}
+
 /**
  * Rebuild the stale-save error that `ipcRenderer.invoke` flattened into a
- * plain Error (it drops the name and custom fields). Unrelated errors pass
- * through untouched so `retrySave` keeps its transient-failure behavior.
+ * plain Error (it drops the name and custom fields). This runs in the renderer
+ * main world, because Electron's contextBridge recreates the Error on the way
+ * out of the preload world and keeps only `message`. The marker is stripped so
+ * the human-readable message can reach the UI. Unrelated errors pass through
+ * untouched so `retrySave` keeps its transient-failure behavior.
  */
 export function mapSaveErrorFromIpc(error: unknown): unknown {
   if (!(error instanceof Error) || !isStaleWorkspaceMessage(error.message))
     return error;
-  const marker = error.message.indexOf(STALE_WORKSPACE_MARKER);
-  return new StaleWorkspaceSaveError(error.message.slice(marker));
+  return new StaleWorkspaceSaveError(
+    stripStaleWorkspaceMarker(error.message),
+  );
 }
 
 /** True for the stale-save error on either side of the IPC boundary. */

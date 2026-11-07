@@ -44,9 +44,14 @@ export class StaleBrowserWorkspaceError extends Error {
   constructor(
     readonly storedRevision: number,
     readonly incomingRevision: number,
+    readonly baseRevision?: number,
   ) {
     super(
-      `Refusing to overwrite browser workspace revision ${storedRevision} with older revision ${incomingRevision}. Reload to continue from the newer workspace.`,
+      storedRevision === incomingRevision
+        ? `Refusing to overwrite browser workspace revision ${storedRevision} with different content. Reload to continue from the newer workspace.`
+        : baseRevision != null && baseRevision < storedRevision
+          ? `Refusing to save a browser workspace draft based on revision ${baseRevision} over revision ${storedRevision} (incoming revision ${incomingRevision}). Reload to continue from the newer workspace.`
+          : `Refusing to overwrite browser workspace revision ${storedRevision} with older revision ${incomingRevision}. Reload to continue from the newer workspace.`,
     );
     this.name = "StaleBrowserWorkspaceError";
   }
@@ -55,6 +60,8 @@ export class StaleBrowserWorkspaceError extends Error {
 export interface BrowserSaveOptions {
   /** Snapshot restore and demo reset intentionally move the workspace backwards. */
   allowRollback?: boolean;
+  /** Revision of the last state this tab knows was persisted. */
+  baseRevision?: number;
 }
 
 export function saveBrowserWorkspace(
@@ -65,15 +72,31 @@ export function saveBrowserWorkspace(
   const valid = validateWorkspace(workspace);
   const raw = storage.getItem(browserWorkspaceKey);
   if (raw !== null && !options.allowRollback) {
-    let storedRevision: number | null = null;
+    let stored: StudioWorkspace | null = null;
     try {
-      storedRevision = validateWorkspace(JSON.parse(raw)).revision;
+      stored = validateWorkspace(JSON.parse(raw));
     } catch {
       // Unreadable stored data must stay replaceable by a healthy workspace.
-      storedRevision = null;
+      stored = null;
     }
-    if (storedRevision !== null && storedRevision > valid.revision) {
-      throw new StaleBrowserWorkspaceError(storedRevision, valid.revision);
+    if (stored !== null) {
+      // Both sides are `validateWorkspace` output, so this is the same
+      // zod-canonical comparison the desktop store uses.
+      const identical = JSON.stringify(stored) === JSON.stringify(valid);
+      const advancedSinceBase =
+        options.baseRevision != null &&
+        options.baseRevision < stored.revision;
+      if (
+        stored.revision > valid.revision ||
+        (!identical &&
+          (stored.revision === valid.revision || advancedSinceBase))
+      ) {
+        throw new StaleBrowserWorkspaceError(
+          stored.revision,
+          valid.revision,
+          options.baseRevision,
+        );
+      }
     }
   }
   storage.setItem(browserWorkspaceKey, JSON.stringify(valid));

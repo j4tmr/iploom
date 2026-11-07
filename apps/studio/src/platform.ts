@@ -12,6 +12,7 @@ import {
   saveBrowserWorkspace,
 } from "./browser-workspace.ts";
 import type { AiCompletion, AiConfig, AiConfigInfo, AiProgress, AiRequest } from "./core/ai.ts";
+import { mapSaveErrorFromIpc } from "./save-errors.ts";
 
 export interface LoadedWorkspace {
   workspace: StudioWorkspace;
@@ -67,7 +68,10 @@ export interface StudioBridge {
   cancelAi(id: string): Promise<void>;
   onAiProgress(listener: (progress: AiProgress) => void): () => void;
   load(): Promise<LoadedWorkspace>;
-  save(workspace: StudioWorkspace): Promise<{ savedAt: string }>;
+  save(
+    workspace: StudioWorkspace,
+    baseRevision?: number,
+  ): Promise<{ savedAt: string }>;
   createSnapshot(reason: string): Promise<string | null>;
   listSnapshots(): Promise<WorkspaceSnapshotInfo[]>;
   restoreSnapshot(path: string): Promise<LoadedWorkspace>;
@@ -76,6 +80,7 @@ export interface StudioBridge {
     requestId: string,
     error?: string,
     workspace?: StudioWorkspace,
+    stale?: boolean,
   ): Promise<void>;
   exportArcReel(bundle: ArcReelBundle): Promise<WrittenBundle>;
   appInfo(): Promise<AppInfo>;
@@ -120,8 +125,8 @@ export const browserFallback: StudioBridge = {
   async load() {
     return browserLoad();
   },
-  async save(workspace) {
-    saveBrowserWorkspace(localStorage, workspace);
+  async save(workspace, baseRevision) {
+    saveBrowserWorkspace(localStorage, workspace, { baseRevision });
     return { savedAt: new Date().toISOString() };
   },
   async createSnapshot() {
@@ -201,7 +206,25 @@ export const browserFallback: StudioBridge = {
   },
 };
 
-export const bridge: StudioBridge = window.iploom ?? browserFallback;
+/**
+ * Electron's contextBridge recreates an Error crossing from the preload world
+ * into the main world with only `message`, dropping `name` and `retryable`.
+ * Rebuild the non-retryable stale-save error here, in the renderer main world,
+ * and strip the transport marker so it never reaches the UI.
+ */
+function withRendererSaveErrors(target: StudioBridge): StudioBridge {
+  return {
+    ...target,
+    save: (workspace, baseRevision) =>
+      target.save(workspace, baseRevision).catch((error: unknown) => {
+        throw mapSaveErrorFromIpc(error);
+      }),
+  };
+}
+
+export const bridge: StudioBridge = window.iploom
+  ? withRendererSaveErrors(window.iploom)
+  : browserFallback;
 
 export function newWorkspace(locale: UiLocale): StudioWorkspace {
   return createEmptyWorkspace(

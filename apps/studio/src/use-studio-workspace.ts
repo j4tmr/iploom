@@ -13,6 +13,7 @@ import {
 } from "./core/integrity.ts";
 import type { StudioWorkspace, UiLocale } from "./core/types.ts";
 import { retrySave } from "./save-retry.ts";
+import { isStaleSaveError } from "./save-errors.ts";
 
 export type SaveState = "loading" | "saved" | "pending" | "saving" | "error";
 
@@ -53,6 +54,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
   const savedRevision = useRef(-1);
   const pendingSave = useRef<Promise<void> | null>(null);
   const saveSequence = useRef(0);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const workspaceRef = useRef<StudioWorkspace | null>(null);
 
   useEffect(() => {
@@ -80,27 +82,42 @@ export function useStudioWorkspace(): StudioWorkspaceState {
     };
   }, []);
 
-  const persist = useCallback(async (next: StudioWorkspace) => {
+  const persist = useCallback((next: StudioWorkspace) => {
     const sequence = ++saveSequence.current;
     setSaveState("saving");
-    try {
-      await retrySave(() => bridge.save(next), {
-        isCurrent: () => sequence === saveSequence.current,
-        sleep: (milliseconds) =>
-          new Promise((resolve) => window.setTimeout(resolve, milliseconds)),
-      });
-      if (sequence === saveSequence.current) {
-        savedRevision.current = next.revision;
-        setSaveState("saved");
-        setError(null);
+    const attempt = async () => {
+      // Optimistic concurrency: the base is the revision this renderer last
+      // knew the file held. Serializing attempts guarantees the previous save
+      // has already refreshed the ref. retrySave deliberately re-sends this
+      // same base; an identical re-save is accepted when the response was lost
+      // after the file was written.
+      const baseRevision = savedRevision.current;
+      try {
+        await retrySave(() => bridge.save(next, baseRevision), {
+          isCurrent: () => sequence === saveSequence.current,
+          sleep: (milliseconds) =>
+            new Promise((resolve) => window.setTimeout(resolve, milliseconds)),
+        });
+        // The file now holds this revision even when a newer edit has already
+        // superseded the indicator update, so a queued save must base on it.
+        savedRevision.current = Math.max(savedRevision.current, next.revision);
+        if (sequence === saveSequence.current) {
+          setSaveState("saved");
+          setError(null);
+        }
+      } catch (reason) {
+        if (sequence === saveSequence.current) {
+          setSaveState("error");
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+        throw reason;
       }
-    } catch (reason) {
-      if (sequence === saveSequence.current) {
-        setSaveState("error");
-        setError(reason instanceof Error ? reason.message : String(reason));
-      }
-      throw reason;
-    }
+    };
+    // Overlapping autosaves (debounce plus Cmd+S or a close flush) must not
+    // race their base revisions against each other.
+    const pending = saveQueue.current.then(attempt);
+    saveQueue.current = pending.catch(() => undefined);
+    return pending;
   }, []);
 
   useEffect(() => {
@@ -180,6 +197,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
             requestId,
             reason instanceof Error ? reason.message : String(reason),
             workspaceRef.current ?? undefined,
+            isStaleSaveError(reason),
           )
           .catch(() => undefined);
       }

@@ -1,5 +1,4 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { mapSaveErrorFromIpc } from "../src/save-errors.ts";
 import type { StudioBridge } from "../src/platform.ts";
 
 const api: StudioBridge = {
@@ -13,11 +12,8 @@ const api: StudioBridge = {
     return () => ipcRenderer.removeListener("iploom:ai-progress", handler);
   },
   load: () => ipcRenderer.invoke("iploom:load"),
-  save: (workspace) =>
-    ipcRenderer.invoke("iploom:save", workspace).catch((error: unknown) => {
-      // Preserve the non-retryable stale marker across the IPC boundary.
-      throw mapSaveErrorFromIpc(error);
-    }),
+  save: (workspace, baseRevision) =>
+    ipcRenderer.invoke("iploom:save", workspace, baseRevision),
   createSnapshot: (reason) =>
     ipcRenderer.invoke("iploom:create-snapshot", reason),
   listSnapshots: () => ipcRenderer.invoke("iploom:list-snapshots"),
@@ -30,8 +26,14 @@ const api: StudioBridge = {
     ipcRenderer.on("iploom:flush-request", handler);
     return () => ipcRenderer.removeListener("iploom:flush-request", handler);
   },
-  flushComplete: (requestId, error, workspace) =>
-    ipcRenderer.invoke("iploom:flush-complete", requestId, error, workspace),
+  flushComplete: (requestId, error, workspace, stale) =>
+    ipcRenderer.invoke(
+      "iploom:flush-complete",
+      requestId,
+      error,
+      workspace,
+      stale,
+    ),
   exportArcReel: (bundle) =>
     ipcRenderer.invoke("iploom:export-arc-reel", bundle),
   appInfo: () => ipcRenderer.invoke("iploom:app-info"),
