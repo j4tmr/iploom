@@ -20,6 +20,7 @@ import {
 import { bridge } from "../platform.ts";
 import { Icon } from "../components/icon.tsx";
 import { SceneEditor } from "../components/scene-editor.tsx";
+import { useToast } from "../components/use-toast.ts";
 import {
   Badge,
   Button,
@@ -476,7 +477,7 @@ function AdaptationPanel({
   const [bundle, setBundle] = useState<ArcReelBundle | null>(null);
   const [bundleSignature, setBundleSignature] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const { toast, notify } = useToast();
   const [error, setError] = useState<string | null>(null);
   const currentSignature = JSON.stringify({
     workspaceRevision: workspace.revision,
@@ -513,11 +514,11 @@ function AdaptationPanel({
     try {
       const written = await bridge.exportArcReel(bundle);
       if (written.canceled) {
-        setToast(t("exportCanceled"));
+        notify(t("exportCanceled"));
         return;
       }
       onRecordExport(bundle, written.directory, written.files, written.bytes);
-      setToast(`${t("exportSuccess")} · ${written.directory}`);
+      notify(`${t("exportSuccess")} · ${written.directory}`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -647,7 +648,7 @@ function AdaptationPanel({
           </>
         )}
       </section>
-      {toast ? <Toast message={toast} /> : null}
+      {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}
     </div>
   );
 }

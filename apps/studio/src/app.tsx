@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AiConfigInfo } from "./core/ai.ts";
+import {
+  attachOverlayKeyboard,
+  isComposingEvent,
+  overlayStack,
+} from "./core/overlay-stack.ts";
 import { buildRelationshipGraph } from "./core/graph.ts";
 import { setWorkflowTaskResult, taskDescendantIds } from "./core/workflow.ts";
 import { removeSceneReferences } from "./core/timeline.ts";
@@ -70,6 +75,7 @@ import {
 } from "./components/forms.tsx";
 import { Icon } from "./components/icon.tsx";
 import { SearchOverlay } from "./components/search-overlay.tsx";
+import { useToast } from "./components/use-toast.ts";
 import {
   Button,
   Modal,
@@ -132,7 +138,7 @@ export function App() {
   const [history, setHistory] = useState<StudioRoute[]>([]);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const { toast, notify } = useToast();
   const [aiInfo, setAiInfo] = useState<AiConfigInfo | null>(null);
 
   const navigate = (next: StudioRoute) => {
@@ -148,11 +154,6 @@ export function App() {
       setRoute(previous);
       return current.slice(0, -1);
     });
-  };
-
-  const notify = (message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(null), 2600);
   };
 
   /**
@@ -185,8 +186,14 @@ export function App() {
     void bridge.aiConfig().then(setAiInfo).catch(() => setAiInfo(null));
   }, []);
 
+  // One capture-phase Escape listener for every overlay. Overlays register in
+  // open order, so Escape closes the palette before the dialog beneath it.
+  useEffect(() => attachOverlayKeyboard(overlayStack, window), []);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // Never steal shortcuts from an open IME composition.
+      if (isComposingEvent(event)) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {
         event.preventDefault();
         setSearchOpen(true);
@@ -1204,7 +1211,7 @@ export function App() {
           onSave={saveWorkflowTask}
         />
       ) : null}
-      {toast ? <Toast message={toast} /> : null}
+      {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}
     </div>
   );
 }

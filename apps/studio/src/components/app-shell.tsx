@@ -160,13 +160,19 @@ export function Topbar({
           <span>{t("searchShort")}</span>
           <kbd>{navigator.platform.includes("Mac") ? "⌘K" : "Ctrl K"}</kbd>
         </button>
-        <div className={`save-indicator ${saveState}`}>
+        <div
+          className={`save-indicator ${saveState}`}
+          role="status"
+          aria-live="polite"
+        >
           <span />
           {saveState === "saving"
             ? t("saving")
-            : saveState === "error"
-              ? t("errorTitle")
-              : t("saved")}
+            : saveState === "pending"
+              ? t("unsaved")
+              : saveState === "error"
+                ? t("errorTitle")
+                : t("saved")}
         </div>
         <div className="topbar-divider" />
         <IconButton

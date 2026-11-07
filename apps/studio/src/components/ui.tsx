@@ -1,6 +1,8 @@
 import {
+  useCallback,
   useEffect,
   useId,
+  useRef,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -8,7 +10,9 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import { createPortal } from "react-dom";
+import { overlayStack } from "../core/overlay-stack.ts";
 import { Icon, type IconName } from "./icon.tsx";
+import { useOverlayLayer } from "./use-overlay-layer.ts";
 
 export function Button({
   variant = "secondary",
@@ -193,26 +197,35 @@ export function Modal({
   wide?: boolean;
 }) {
   const titleId = useId();
+  // Escape and the backdrop both flow through the shared overlay stack, so a
+  // dialog that opened on top of this one (the command palette) keeps Escape
+  // for itself. The ref keeps the stable layer wired to the latest onClose.
+  const latestClose = useRef(onClose);
+  useEffect(() => {
+    latestClose.current = onClose;
+  });
+  const requestClose = useCallback(() => latestClose.current(), []);
+  const layer = useOverlayLayer(open, {
+    onEscape: requestClose,
+    onBackdrop: requestClose,
+  });
   useEffect(() => {
     if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = previous;
-      window.removeEventListener("keydown", onKey);
     };
-  }, [onClose, open]);
+  }, [open]);
   if (!open) return null;
   return createPortal(
     <div
       className="modal-backdrop"
       role="presentation"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) {
+          overlayStack.handleBackdrop(layer);
+        }
       }}
     >
       <section
@@ -226,7 +239,7 @@ export function Modal({
             <h2 id={titleId}>{title}</h2>
             {description ? <p>{description}</p> : null}
           </div>
-          <IconButton label="Close" icon="close" onClick={onClose} />
+          <IconButton label="Close" icon="close" onClick={requestClose} />
         </header>
         <div className="modal-body">{children}</div>
         {footer ? <footer className="modal-foot">{footer}</footer> : null}

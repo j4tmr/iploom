@@ -16,6 +16,7 @@ import {
 import { Icon } from "../components/icon.tsx";
 import { AiSettings } from "../components/ai-settings.tsx";
 import { UpdateSettings } from "../components/update-settings.tsx";
+import { useToast } from "../components/use-toast.ts";
 import {
   Button,
   Field,
@@ -64,7 +65,7 @@ export function SettingsView({
   onRestoreSnapshot: (snapshotPath: string) => Promise<void>;
 }) {
   const [info, setInfo] = useState<AppInfo | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const { toast, notify } = useToast(2400);
   const [busy, setBusy] = useState(false);
   const [snapshots, setSnapshots] = useState<WorkspaceSnapshotInfo[]>([]);
   const [snapshotBusy, setSnapshotBusy] = useState(false);
@@ -102,7 +103,7 @@ export function SettingsView({
       notify(t("snapshotRestored"));
       await refreshSnapshots();
     } catch (reason) {
-      notify(reason instanceof Error ? reason.message : String(reason));
+      notify(reason instanceof Error ? reason.message : String(reason), "error");
     } finally {
       setSnapshotBusy(false);
     }
@@ -122,11 +123,6 @@ export function SettingsView({
         null,
         2,
       );
-
-  const notify = (message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(null), 2400);
-  };
 
   return (
     <div className="view settings-view">
@@ -334,7 +330,7 @@ export function SettingsView({
 
         <UpdateSettings locale={locale} t={t} />
       </div>
-      {toast ? <Toast message={toast} /> : null}
+      {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}
     </div>
   );
 }

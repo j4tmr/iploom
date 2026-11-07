@@ -623,6 +623,15 @@ kbd {
   background: var(--accent);
 }
 
+.save-indicator.pending {
+  color: var(--gold);
+}
+
+.save-indicator.pending > span {
+  background: var(--gold);
+  opacity: 0.55;
+}
+
 .save-indicator.saving > span {
   background: var(--gold);
   animation: pulse-dot 1s ease infinite;

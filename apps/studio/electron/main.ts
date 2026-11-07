@@ -8,6 +8,7 @@ import {
   clipboard,
   dialog,
   ipcMain,
+  Menu,
   net,
   session,
   shell,
@@ -60,6 +61,7 @@ let closeApproved = false;
 let closeInFlight = false;
 let quitApproved = false;
 let quitInFlight = false;
+let reloadInFlight = false;
 let flushWaiter:
   | {
       requestId: string;
@@ -222,6 +224,40 @@ function requestRendererFlush(window: BrowserWindow): Promise<void> {
     flushWaiter = { requestId, resolve, reject, timer };
     window.webContents.send("iploom:flush-request", requestId);
   });
+}
+
+/**
+ * Cmd/Ctrl+R and F5 must not reload the renderer directly: the workspace lives
+ * in renderer memory until the debounced save lands, so an unguarded reload
+ * drops the last edit. Flush first, reload only once the disk confirms it.
+ */
+async function reloadAfterFlush(window: BrowserWindow): Promise<void> {
+  if (reloadInFlight || closeInFlight || quitInFlight) return;
+  if (window.isDestroyed() || window.webContents.isDestroyed()) return;
+  reloadInFlight = true;
+  try {
+    await requestRendererFlush(window);
+    if (window.isDestroyed() || window.webContents.isDestroyed()) return;
+    window.webContents.reload();
+  } catch (error) {
+    console.error("[IPloom Studio] reload flush failed", error);
+    if (smokeMode) {
+      app.exit(1);
+      return;
+    }
+    await showMessage(window, {
+      type: "error",
+      title: "Reload canceled",
+      message:
+        "The editor could not confirm its save, so the reload was canceled.",
+      detail: error instanceof Error ? error.message : String(error),
+      buttons: ["OK"],
+      defaultId: 0,
+      noLink: true,
+    });
+  } finally {
+    reloadInFlight = false;
+  }
 }
 
 function showMessage(
@@ -699,6 +735,28 @@ function configureSessionSecurity(): void {
   session.defaultSession.setPermissionCheckHandler(() => false);
 }
 
+/**
+ * Electron's stock menu ships Reload and Force Reload (CmdOrCtrl+R), which
+ * bypass the save handshake and drop unsaved edits. This menu keeps the roles
+ * the app actually needs (clipboard editing, quit, window controls, devtools
+ * when allowed) and omits every reload role; the shortcut is re-implemented as
+ * a flush-then-reload in `createWindow`.
+ */
+function configureApplicationMenu(): void {
+  const devToolsAllowed =
+    !app.isPackaged || process.env.IPLOOM_STUDIO_DEVTOOLS === "1";
+  const isMac = process.platform === "darwin";
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac ? [{ role: "appMenu" as const }] : []),
+    { role: "editMenu" },
+    ...(devToolsAllowed
+      ? [{ label: "View", submenu: [{ role: "toggleDevTools" as const }] }]
+      : []),
+    ...(isMac ? [{ role: "windowMenu" as const }] : []),
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1440,
@@ -725,6 +783,51 @@ function createWindow(): BrowserWindow {
 
   window.once("ready-to-show", () => {
     if (!smokeMode) window.show();
+  });
+  // The custom application menu has no reload accelerator, but a shortcut can
+  // still reach Chromium through other paths; intercept it here as well so the
+  // only way to reload is the save-then-reload path.
+  window.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    const key = input.key.toLocaleLowerCase();
+    const wantsReload =
+      key === "f5" || ((input.control || input.meta) && key === "r");
+    if (!wantsReload) return;
+    event.preventDefault();
+    void reloadAfterFlush(window);
+  });
+  window.webContents.on("render-process-gone", (_event, details) => {
+    console.error("[IPloom Studio] renderer process gone", details);
+    if (details.reason === "clean-exit") return;
+    if (window.isDestroyed()) return;
+    if (closeApproved || closeInFlight || quitApproved || quitInFlight) return;
+    if (smokeMode) {
+      app.exit(1);
+      return;
+    }
+    void (async () => {
+      const { response } = await showMessage(window, {
+        type: "error",
+        title: "IPloom Studio stopped responding",
+        message: `The editor process closed unexpectedly (${details.reason}).`,
+        detail:
+          "Reloading restores the last saved workspace. Edits made since the " +
+          "last successful save cannot be recovered.",
+        buttons: ["Reload", "Quit"],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      });
+      if (response === 0) {
+        if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+          window.webContents.reload();
+        }
+        return;
+      }
+      closeApproved = true;
+      quitApproved = true;
+      app.quit();
+    })();
   });
   window.on("close", (event) => {
     if (closeApproved || window.webContents.isDestroyed()) return;
@@ -957,6 +1060,7 @@ async function bootstrap(): Promise<void> {
     guardWebContents(contents);
   });
   registerIpcHandlers();
+  configureApplicationMenu();
   mainWindow = createWindow();
 }
 

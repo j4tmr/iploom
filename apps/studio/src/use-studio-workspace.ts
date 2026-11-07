@@ -6,7 +6,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { bridge } from "./platform.ts";
+import { bridge, browserFallback } from "./platform.ts";
 import {
   applyWorkspaceChange,
   type WorkspaceChangeResult,
@@ -14,7 +14,7 @@ import {
 import type { StudioWorkspace, UiLocale } from "./core/types.ts";
 import { retrySave } from "./save-retry.ts";
 
-export type SaveState = "loading" | "saved" | "saving" | "error";
+export type SaveState = "loading" | "saved" | "pending" | "saving" | "error";
 
 export interface StudioWorkspaceState {
   workspace: StudioWorkspace | null;
@@ -195,13 +195,32 @@ export function useStudioWorkspace(): StudioWorkspaceState {
     [mutate],
   );
 
+  // A revision the disk has not confirmed yet is "pending", not "saved":
+  // during a fast typing burst the indicator must never claim the workspace
+  // is safe while the 450 ms debounce is still counting down.
+  const dirty = workspace !== null && workspace.revision !== savedRevision.current;
+  const effectiveSaveState: SaveState =
+    saveState === "saved" && dirty ? "pending" : saveState;
+
+  useEffect(() => {
+    // The desktop app flushes through its own close handshake (and shows a
+    // real dialog); only a browser tab can disappear without one.
+    if (bridge !== browserFallback || !dirty) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
   return {
     workspace,
     setWorkspace,
     mutate,
     applyChange,
     replaceWorkspace,
-    saveState,
+    saveState: effectiveSaveState,
     error,
     path,
     recovered,

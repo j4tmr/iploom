@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { isComposingEvent, overlayStack } from "../core/overlay-stack.ts";
 import { searchWorkspace } from "../core/search.ts";
 import type { SearchHit, StudioWorkspace, UiLocale } from "../core/types.ts";
 import type { Translate } from "../i18n.ts";
 import { Icon } from "./icon.tsx";
+import { useOverlayLayer } from "./use-overlay-layer.ts";
 
 const kindLabels: Record<UiLocale, Record<SearchHit["kind"], string>> = {
   "zh-CN": {
@@ -52,6 +54,13 @@ export function SearchOverlay({
     [locale, query, workspace],
   );
 
+  // The palette sits on the shared overlay stack, so Escape only closes the
+  // palette even when a dialog opened below it stays mounted.
+  const layer = useOverlayLayer(open, {
+    onEscape: onClose,
+    onBackdrop: onClose,
+  });
+
   useEffect(() => {
     if (!open) {
       setQuery("");
@@ -59,15 +68,10 @@ export function SearchOverlay({
       return;
     }
     const timer = window.setTimeout(() => inputRef.current?.focus(), 30);
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
     return () => {
       window.clearTimeout(timer);
-      window.removeEventListener("keydown", onKey);
     };
-  }, [onClose, open]);
+  }, [open]);
 
   useEffect(() => setActive(0), [query]);
   if (!open) return null;
@@ -76,7 +80,9 @@ export function SearchOverlay({
     <div
       className="search-backdrop"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) {
+          overlayStack.handleBackdrop(layer);
+        }
       }}
     >
       <section className="command-palette" role="dialog" aria-modal="true">
@@ -89,6 +95,16 @@ export function SearchOverlay({
             aria-label={t("searchEverywhere")}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
+              // Enter while an IME candidate window is open commits the
+              // candidate; it must not also open the highlighted result.
+              if (
+                isComposingEvent({
+                  isComposing: event.nativeEvent.isComposing,
+                  keyCode: event.keyCode,
+                })
+              ) {
+                return;
+              }
               if (event.key === "ArrowDown") {
                 event.preventDefault();
                 setActive((current) => Math.min(results.length - 1, current + 1));
