@@ -7,7 +7,10 @@ const api: StudioBridge = {
   runAi: (request) => ipcRenderer.invoke("iploom:run-ai", request),
   cancelAi: (id) => ipcRenderer.invoke("iploom:cancel-ai", id),
   onAiProgress: (listener) => {
-    const handler = (_event: Electron.IpcRendererEvent, progress: Parameters<typeof listener>[0]) => listener(progress);
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      progress: Parameters<typeof listener>[0],
+    ) => listener(progress);
     ipcRenderer.on("iploom:ai-progress", handler);
     return () => ipcRenderer.removeListener("iploom:ai-progress", handler);
   },

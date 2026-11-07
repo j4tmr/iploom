@@ -59,9 +59,9 @@ describe("update check", () => {
     expect(compareSemver(older, newer)).toBe(-1);
     expect(compareSemver(newer, older)).toBe(1);
     expect(compareSemver(newer, parseSemver("0.10.0")!)).toBe(0);
-    expect(
-      compareSemver(parseSemver("1.0.0")!, parseSemver("0.99.99")!),
-    ).toBe(1);
+    expect(compareSemver(parseSemver("1.0.0")!, parseSemver("0.99.99")!)).toBe(
+      1,
+    );
   });
 
   test("allows only credential-free HTTPS release URLs in this repository", () => {

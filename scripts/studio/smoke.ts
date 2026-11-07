@@ -1,10 +1,6 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import {
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-} from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -13,11 +9,13 @@ import { packagedPaths } from "./packaged-paths.ts";
 interface SmokeOptions {
   packaged: boolean;
   appPath: string;
+  arch: string | null;
 }
 
 function parseOptions(args: string[]): SmokeOptions {
   let packaged = false;
   let appPath = "dist-studio/app";
+  let arch: string | null = null;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index]!;
     if (argument === "--packaged") packaged = true;
@@ -26,11 +24,25 @@ function parseOptions(args: string[]): SmokeOptions {
       if (!value) throw new Error("--app requires a path");
       appPath = value;
       index += 1;
+    } else if (argument === "--arch") {
+      const value = args[index + 1];
+      if (!value) throw new Error("--arch requires a value");
+      arch = value;
+      index += 1;
     } else {
       throw new Error(`Unknown smoke option: ${argument}`);
     }
   }
-  return { packaged, appPath: resolve(appPath) };
+  if (arch !== null) {
+    if (arch !== "x86_64" && arch !== "arm64") {
+      throw new Error(`Unsupported architecture: ${arch}`);
+    }
+    if (!packaged) throw new Error("--arch requires --packaged");
+    if (process.platform !== "darwin") {
+      throw new Error("--arch is only supported on macOS");
+    }
+  }
+  return { packaged, appPath: resolve(appPath), arch };
 }
 
 async function main(): Promise<void> {
@@ -41,16 +53,31 @@ async function main(): Promise<void> {
     : undefined;
   const saveMarker = "smoke-close-save-verified";
   const modelServer = createServer((request, response) => {
-    if (request.method !== "POST" || request.url !== "/v1/chat/completions") { response.writeHead(404).end(); return; }
+    if (request.method !== "POST" || request.url !== "/v1/chat/completions") {
+      response.writeHead(404).end();
+      return;
+    }
     request.resume();
     response.writeHead(200, { "Content-Type": "text/event-stream" });
-    const output = "Smoke production design: stylized 3D costume continuity. ".repeat(20);
-    response.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: output.slice(0, 80) }, finish_reason: null }] })}\n\n`);
-    setTimeout(() => response.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: output.slice(80) }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`), 150);
+    const output =
+      "Smoke production design: stylized 3D costume continuity. ".repeat(20);
+    response.write(
+      `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: output.slice(0, 80) }, finish_reason: null }] })}\n\n`,
+    );
+    setTimeout(
+      () =>
+        response.end(
+          `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: output.slice(80) }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`,
+        ),
+      150,
+    );
   });
-  await new Promise<void>((resolveServer) => modelServer.listen(0, "127.0.0.1", resolveServer));
+  await new Promise<void>((resolveServer) =>
+    modelServer.listen(0, "127.0.0.1", resolveServer),
+  );
   const modelAddress = modelServer.address();
-  if (!modelAddress || typeof modelAddress === "string") throw new Error("Mock model failed to start");
+  if (!modelAddress || typeof modelAddress === "string")
+    throw new Error("Mock model failed to start");
   const environment: NodeJS.ProcessEnv = {
     ...process.env,
     IPLOOM_STUDIO_SMOKE: "1",
@@ -65,9 +92,17 @@ async function main(): Promise<void> {
   let args: string[];
   if (options.packaged) {
     const { executable } = packagedPaths();
-    command = executable;
-    args = process.platform === "linux" ? ["--no-sandbox"] : [];
-    console.log(`[smoke] launching packaged ${executable}`);
+    if (options.arch) {
+      command = "/usr/bin/arch";
+      args = [`-${options.arch}`, executable];
+      console.log(
+        `[smoke] launching packaged ${executable} as ${options.arch}`,
+      );
+    } else {
+      command = executable;
+      args = process.platform === "linux" ? ["--no-sandbox"] : [];
+      console.log(`[smoke] launching packaged ${executable}`);
+    }
   } else {
     const require = createRequire(import.meta.url);
     command = require("electron") as string;
@@ -84,10 +119,13 @@ async function main(): Promise<void> {
         env: environment,
         stdio: "inherit",
       });
-      const timer = setTimeout(() => {
-        child.kill("SIGKILL");
-        reject(new Error("Desktop smoke test timed out"));
-      }, 60_000);
+      const timer = setTimeout(
+        () => {
+          child.kill("SIGKILL");
+          reject(new Error("Desktop smoke test timed out"));
+        },
+        options.arch ? 120_000 : 60_000,
+      );
       child.once("error", (error) => {
         clearTimeout(timer);
         reject(error);
@@ -99,20 +137,23 @@ async function main(): Promise<void> {
       });
     });
     if (exitCode !== 0) throw new Error(`Desktop smoke exited ${exitCode}`);
-    const persisted = readFileSync(
-      join(temporary, "workspace.json"),
-      "utf8",
-    );
+    const persisted = readFileSync(join(temporary, "workspace.json"), "utf8");
     if (!persisted.includes(saveMarker)) {
       throw new Error(
         "Desktop smoke did not persist the workflow result during close",
       );
     }
-    if (!persisted.includes("smoke-import-novel") || !persisted.includes("Smoke production design")) throw new Error("Import or streamed production result was not persisted");
+    if (
+      !persisted.includes("smoke-import-novel") ||
+      !persisted.includes("Smoke production design")
+    )
+      throw new Error("Import or streamed production result was not persisted");
     console.log("[smoke] close-time workspace save verified");
   } finally {
     modelServer.closeAllConnections();
-    await new Promise<void>((resolveClose) => modelServer.close(() => resolveClose()));
+    await new Promise<void>((resolveClose) =>
+      modelServer.close(() => resolveClose()),
+    );
     rmSync(temporary, { recursive: true, force: true });
   }
 }

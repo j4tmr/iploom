@@ -68,8 +68,6 @@ test("stored beats arriving from outside replace an idle field", () => {
   const field = view.getByRole("textbox") as HTMLTextAreaElement;
   expect(field.value).toBe("first");
 
-  view.rerender(
-    <BeatsInput value={["first", "second"]} onChange={() => {}} />,
-  );
+  view.rerender(<BeatsInput value={["first", "second"]} onChange={() => {}} />);
   expect(field.value).toBe("first\nsecond");
 });

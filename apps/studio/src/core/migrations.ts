@@ -23,7 +23,9 @@ export function migrateWorkspace(value: unknown): unknown {
       schema_version: 2,
       workflowTasks: [],
       revision:
-        typeof value.revision === "number" ? value.revision + 1 : value.revision,
+        typeof value.revision === "number"
+          ? value.revision + 1
+          : value.revision,
     });
   }
   if (value.schema_version === 2) {
@@ -35,7 +37,9 @@ export function migrateWorkspace(value: unknown): unknown {
         ? value.timelineEvents
         : [],
       revision:
-        typeof value.revision === "number" ? value.revision + 1 : value.revision,
+        typeof value.revision === "number"
+          ? value.revision + 1
+          : value.revision,
     });
   }
   if (value.schema_version === 3) {
@@ -44,7 +48,9 @@ export function migrateWorkspace(value: unknown): unknown {
       schema_version: 4,
       standards: Array.isArray(value.standards) ? value.standards : [],
       revision:
-        typeof value.revision === "number" ? value.revision + 1 : value.revision,
+        typeof value.revision === "number"
+          ? value.revision + 1
+          : value.revision,
     });
   }
   if (value.schema_version === 4) {
@@ -55,7 +61,9 @@ export function migrateWorkspace(value: unknown): unknown {
       lastOpenedWorkId: repaired.lastOpenedWorkId,
       exports: repaired.exports,
       revision:
-        typeof value.revision === "number" ? value.revision + 1 : value.revision,
+        typeof value.revision === "number"
+          ? value.revision + 1
+          : value.revision,
     });
   }
   if (value.schema_version === 5) {

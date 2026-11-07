@@ -13,10 +13,7 @@ import { buildWorkflowBrief } from "../../apps/studio/src/core/workflow.ts";
 
 describe("story timeline", () => {
   test("orders chapter anchors and in-world time deterministically", () => {
-    const workspace = createDemoWorkspace(
-      "en",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
     const sorted = sortTimelineEvents(workspace, workspace.timelineEvents);
     expect(sorted.map((event) => event.id)).toEqual([
       "timeline_rain_key_handoff",
@@ -223,7 +220,9 @@ describe("story timeline", () => {
       sharedChapterId,
       new Set(["scene_shared"]),
     );
-    expect(kept.some((event) => event.id === "timeline_tide_scene")).toBe(false);
+    expect(kept.some((event) => event.id === "timeline_tide_scene")).toBe(
+      false,
+    );
     const survivor = kept.find((event) => event.id === "timeline_train_scene");
     expect(survivor?.sceneId).toBe("scene_shared");
     expect(survivor?.workId).toBe(otherWork.id);

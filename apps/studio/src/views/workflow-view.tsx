@@ -229,7 +229,11 @@ export function WorkflowView({
 
   const filters: { id: WorkflowFilter; label: string; count: number }[] = [
     { id: "all", label: t("all"), count: workspace.workflowTasks.length },
-    { id: "ready", label: local(locale, "可开始", "Ready"), count: summary.ready },
+    {
+      id: "ready",
+      label: local(locale, "可开始", "Ready"),
+      count: summary.ready,
+    },
     {
       id: "waiting",
       label: local(locale, "等待中", "Waiting"),
@@ -280,6 +284,7 @@ export function WorkflowView({
           <div className="workflow-filters" role="tablist">
             {filters.map((item) => (
               <button
+                type="button"
                 key={item.id}
                 className={filter === item.id ? "active" : ""}
                 onClick={() => setFilter(item.id)}
@@ -301,10 +306,13 @@ export function WorkflowView({
                   ? workspace.works.find((item) => item.id === task.workId)
                   : undefined;
                 const taskWorld = task.universeId
-                  ? workspace.universes.find((item) => item.id === task.universeId)
+                  ? workspace.universes.find(
+                      (item) => item.id === task.universeId,
+                    )
                   : undefined;
                 return (
                   <button
+                    type="button"
                     key={task.id}
                     className={
                       "workflow-row " +
@@ -392,7 +400,8 @@ export function WorkflowView({
               ) : selected.status === "queued" ? (
                 <div className="workflow-readiness waiting">
                   <Icon name="link" size={16} />
-                  {t("workflowWaitingNote")}: {readiness.blockers
+                  {t("workflowWaitingNote")}:{" "}
+                  {readiness.blockers
                     .map((task) => displayText(task.title, locale))
                     .join(" / ")}
                 </div>
@@ -417,7 +426,7 @@ export function WorkflowView({
                   </span>
                 ) : null}
                 {work ? (
-                  <button onClick={() => onOpenWork(work.id)}>
+                  <button type="button" onClick={() => onOpenWork(work.id)}>
                     <Icon name="book" size={14} />
                     {displayText(work.title, locale)}
                   </button>
@@ -443,24 +452,31 @@ export function WorkflowView({
               {parent || children.length || dependencies.length ? (
                 <section className="workflow-links">
                   {parent ? (
-                    <button onClick={() => switchTo(parent.id)}>
+                    <button type="button" onClick={() => switchTo(parent.id)}>
                       <Icon name="arrowLeft" size={14} />
                       {t("workflowParent")}: {displayText(parent.title, locale)}
                     </button>
                   ) : null}
                   {children.map((child) => (
-                    <button key={child.id} onClick={() => switchTo(child.id)}>
+                    <button
+                      type="button"
+                      key={child.id}
+                      onClick={() => switchTo(child.id)}
+                    >
                       <Icon name="arrow" size={14} />
-                      {t("workflowSubtasks")}: {displayText(child.title, locale)}
+                      {t("workflowSubtasks")}:{" "}
+                      {displayText(child.title, locale)}
                     </button>
                   ))}
                   {dependencies.map((dependency) => (
                     <button
+                      type="button"
                       key={dependency.id}
                       onClick={() => switchTo(dependency.id)}
                     >
                       <Icon name="link" size={14} />
-                      {t("workflowDepends")}: {displayText(dependency.title, locale)}
+                      {t("workflowDepends")}:{" "}
+                      {displayText(dependency.title, locale)}
                       {dependency.status !== "done" ? " · Open" : null}
                     </button>
                   ))}
@@ -468,6 +484,7 @@ export function WorkflowView({
               ) : null}
 
               <section className="workflow-result">
+                {/* biome-ignore lint/a11y/noLabelWithoutControl: TextArea renders the control inside the label */}
                 <label>
                   <span className="eyebrow">{t("workflowResult")}</span>
                   <TextArea
@@ -516,13 +533,18 @@ export function WorkflowView({
                     }
                     aria-label={t("status")}
                   >
-                    {(["queued", "active", "review", "done"] as WorkflowTaskStatus[]).map(
-                      (status) => (
-                        <option value={status} key={status}>
-                          {statusText(t, status)}
-                        </option>
-                      ),
-                    )}
+                    {(
+                      [
+                        "queued",
+                        "active",
+                        "review",
+                        "done",
+                      ] as WorkflowTaskStatus[]
+                    ).map((status) => (
+                      <option value={status} key={status}>
+                        {statusText(t, status)}
+                      </option>
+                    ))}
                   </select>
                   <Button
                     data-testid="workflow-save-result"
@@ -550,13 +572,19 @@ export function WorkflowView({
                 selected.previousResult.en.trim()) ? (
                 <details className="workflow-previous-result">
                   <summary>
-                    {local(locale, "上次运行前的结果", "Result before the last run")}
+                    {local(
+                      locale,
+                      "上次运行前的结果",
+                      "Result before the last run",
+                    )}
                   </summary>
                   <p>{displayText(selected.previousResult, locale)}</p>
                   <Button
                     variant="ghost"
                     onClick={() =>
-                      setResultText(displayText(selected.previousResult!, locale))
+                      setResultText(
+                        displayText(selected.previousResult!, locale),
+                      )
                     }
                   >
                     {local(locale, "恢复此版本", "Restore this version")}
@@ -575,7 +603,9 @@ export function WorkflowView({
                     setBriefCopied(true);
                   }}
                 >
-                  {briefCopied ? t("workflowBriefCopied") : t("workflowCopyBrief")}
+                  {briefCopied
+                    ? t("workflowBriefCopied")
+                    : t("workflowCopyBrief")}
                 </Button>
                 <Button icon="plus" onClick={() => onAddSubtask(selected)}>
                   {t("workflowAddSubtask")}

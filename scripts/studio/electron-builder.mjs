@@ -45,7 +45,35 @@ export default {
     "!**/node_modules/**/*",
   ],
   asar: true,
+  // The packaged MCP server runs through the app binary with
+  // ELECTRON_RUN_AS_NODE=1, so RunAsNode has to stay enabled. Every other
+  // runtime escape hatch is off. ASAR integrity validation stays off until the
+  // app is code signed.
+  //
+  // grantFileProtocolExtraPrivileges stays at Electron's default (enabled).
+  // With it disabled, the packaged app's first file:// load of
+  // app.asar/renderer/index.html fails with ERR_FILE_NOT_FOUND on Electron 45
+  // (the retry succeeds, so the smoke exit on did-fail-load made it look like a
+  // crash). Reproduced with a minimal asar app: every launch failed with the
+  // fuse off and none failed with it on. Electron Forge tracks the same failure
+  // mode (electron/forge#3508). Revisit if Electron fixes it or if the renderer
+  // moves to a custom protocol.
+  electronFuses: {
+    runAsNode: true,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    enableEmbeddedAsarIntegrityValidation: false,
+    onlyLoadAppFromAsar: true,
+    grantFileProtocolExtraPrivileges: true,
+    // Flipping the fuses rewrites the unsigned app binary and invalidates the
+    // ad-hoc signature Electron ships with. macOS refuses to launch that on
+    // Apple Silicon (it is killed with "Code Signature Invalid"), so re-sign
+    // ad-hoc right after the flip. A real Developer ID signature can replace
+    // this later without changing the fuses themselves.
+    resetAdHocDarwinSignature: true,
+  },
   compression: "normal",
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder expands these macros at build time
   artifactName: "IPloom-Studio-${version}-${platform}-${arch}.${ext}",
   extraResources: hasMcpBinary
     ? [
@@ -68,6 +96,7 @@ export default {
     identity: null,
   },
   dmg: {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder expands this macro at build time
     title: "IPloom Studio ${version}",
   },
   win: {

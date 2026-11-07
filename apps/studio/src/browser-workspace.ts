@@ -6,12 +6,16 @@ export const browserWorkspaceKey = "iploom-studio:workspace:v1";
 export const browserSnapshotKey = "iploom-studio:workspace-snapshot:v1";
 type WorkspaceStorage = Pick<Storage, "getItem" | "setItem">;
 
-export function loadBrowserWorkspace(storage: WorkspaceStorage, locale: UiLocale) {
+export function loadBrowserWorkspace(
+  storage: WorkspaceStorage,
+  locale: UiLocale,
+) {
   const raw = storage.getItem(browserWorkspaceKey);
   return {
-    workspace: raw === null
-      ? createDemoWorkspace(locale)
-      : validateWorkspace(JSON.parse(raw)),
+    workspace:
+      raw === null
+        ? createDemoWorkspace(locale)
+        : validateWorkspace(JSON.parse(raw)),
     path: "Browser localStorage",
     recoveredFromBackup: false,
   };

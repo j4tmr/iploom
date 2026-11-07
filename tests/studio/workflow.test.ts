@@ -40,7 +40,13 @@ describe("workflow task results", () => {
     task.status = "done";
     task.result.en = "Approved world rules.";
     expect(
-      setWorkflowTaskResult(workspace, task.id, "Rewritten rules.", "en", runMeta),
+      setWorkflowTaskResult(
+        workspace,
+        task.id,
+        "Rewritten rules.",
+        "en",
+        runMeta,
+      ),
     ).toBe(true);
     expect(task.lastRun).toEqual(runMeta);
     expect(task.previousResult?.en).toBe("Approved world rules.");
@@ -103,15 +109,16 @@ describe("workflow task results", () => {
     const adaptation = workspace.workflowTasks.find(
       (item) => item.id === "task_adaptation_pass",
     )!;
-    adaptation.dependsOnIds = ["task_chapter_three"];
-    expect(taskDependentIds(workspace.workflowTasks, "task_world_rules")).toEqual([
-      "task_chapter_three",
-      "task_adaptation_pass",
-    ]);
-    expect(taskDependentIds(workspace.workflowTasks, "task_review_first")).toEqual(
+    adaptation.dependsOnIds = [chapter.id];
+    expect(
+      taskDependentIds(workspace.workflowTasks, "task_world_rules"),
+    ).toEqual(["task_chapter_three", "task_adaptation_pass"]);
+    expect(
+      taskDependentIds(workspace.workflowTasks, "task_review_first"),
+    ).toEqual([]);
+    expect(taskDependentIds(workspace.workflowTasks, "task_missing")).toEqual(
       [],
     );
-    expect(taskDependentIds(workspace.workflowTasks, "task_missing")).toEqual([]);
   });
 });
 

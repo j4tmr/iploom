@@ -100,14 +100,7 @@ const standardIdSchema = z
   .min(1)
   .describe("基础规则 ID / Foundation standard ID.");
 const standardKindSchema = z
-  .enum([
-    "style",
-    "format",
-    "naming",
-    "numeric",
-    "entity-prompt",
-    "continuity",
-  ])
+  .enum(["style", "format", "naming", "numeric", "entity-prompt", "continuity"])
   .describe("规则类型 / Foundation standard kind.");
 const standardStatusSchema = z
   .enum(["draft", "active", "disabled"])
@@ -135,8 +128,16 @@ const standardTitleSchema = z
   .describe("双语标题 / Localized standard title.");
 const standardBodySchema = z
   .object({
-    zh: z.string().max(20_000).default("").describe("中文规则正文 / Chinese body."),
-    en: z.string().max(20_000).default("").describe("英文规则正文 / English body."),
+    zh: z
+      .string()
+      .max(20_000)
+      .default("")
+      .describe("中文规则正文 / Chinese body."),
+    en: z
+      .string()
+      .max(20_000)
+      .default("")
+      .describe("英文规则正文 / English body."),
   })
   .strict()
   .describe("双语规则正文 / Localized standard body.");
@@ -354,10 +355,7 @@ function factionView(faction: StoryFaction) {
   };
 }
 
-function workflowTaskView(
-  workspace: StudioWorkspace,
-  task: WorkflowTask,
-) {
+function workflowTaskView(workspace: StudioWorkspace, task: WorkflowTask) {
   const readiness = workflowTaskReadiness(workspace, task);
   return {
     id: task.id,
@@ -564,9 +562,7 @@ export function createStudioMcpServer(
     const realCandidate = await realPathWithExistingAncestor(candidate);
     for (const root of exportRoots) {
       try {
-        if (
-          isWithin(await realPathWithExistingAncestor(root), realCandidate)
-        ) {
+        if (isWithin(await realPathWithExistingAncestor(root), realCandidate)) {
           return;
         }
       } catch {
@@ -1061,8 +1057,7 @@ export function createStudioMcpServer(
               "invalid_argument",
               "The workspace already contains the maximum of 1000 foundation standards.",
             );
-          if (standard.universeId)
-            ensureUniverse(current, standard.universeId);
+          if (standard.universeId) ensureUniverse(current, standard.universeId);
           current.standards.push(standard);
           current.updatedAt = now;
         });

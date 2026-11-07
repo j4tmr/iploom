@@ -30,7 +30,9 @@ The application:
 - never derives “open folder” locations from renderer-writable export records, which a compromised renderer could otherwise turn into an arbitrary-path or app-launch primitive;
 - confines MCP exports to the workspace `exports` directory plus explicit `--export-root` arguments, compared by real path;
 - validates every ArcReel bundle — identifiers, timestamp, SHA-256 digest, file paths, media types, file count and total size — before the first filesystem write, and requires the package directory to sit exactly one level below the selected destination;
-- checks export package paths against traversal.
+- checks export package paths against traversal;
+- packages the app in an ASAR archive, loads the application only from that archive in packaged builds, and disables the `NODE_OPTIONS` and CLI inspect-argument escape hatches;
+- keeps `RunAsNode` enabled only because the bundled MCP server is launched through the Electron binary with a fixed script path and workspace argument, and exposes no developer tools in packaged builds.
 
 The application does not:
 
@@ -45,6 +47,14 @@ Use full-disk encryption, maintain backups, connect only trusted MCP clients and
 ## Release integrity
 
 The initial release is unsigned. The project publishes SHA-256 checksums, but unsigned builds cannot provide operating-system publisher authentication. Treat a checksum from the same compromised channel as insufficient evidence.
+
+Release workflows attach Sigstore build provenance to every `.dmg`, `.zip` and `.exe`. Verify a downloaded file with the GitHub CLI:
+
+```sh
+gh attestation verify IPloom-Studio-0.3.0-darwin-universal.dmg --repo j4tmr/iploom
+```
+
+An attestation binds the file to the workflow run, repository and source commit that produced it. It does not authenticate the publisher the way platform code signing does, and it cannot help if the repository or a maintainer account is compromised.
 
 Signing can be added without a format change. Never commit certificates or signing credentials.
 

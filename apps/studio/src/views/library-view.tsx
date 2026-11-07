@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { displayText, workWords } from "../core/factory.ts";
-import type {
-  StudioWorkspace,
-  UiLocale,
-  WorkStatus,
-} from "../core/types.ts";
-import { formatDate, formatNumber, statusLabels, type Translate } from "../i18n.ts";
+import type { StudioWorkspace, UiLocale, WorkStatus } from "../core/types.ts";
+import {
+  formatDate,
+  formatNumber,
+  statusLabels,
+  type Translate,
+} from "../i18n.ts";
 import { Icon } from "../components/icon.tsx";
 import {
   Badge,
@@ -86,7 +87,9 @@ export function LibraryView({
           <p>{t("libraryLead")}</p>
         </div>
         <div className="page-heading-actions">
-          <Button data-testid="import-open" icon="file" onClick={onImportNovel}>{locale === "en" ? "Import novel" : "导入已有小说"}</Button>
+          <Button data-testid="import-open" icon="file" onClick={onImportNovel}>
+            {locale === "en" ? "Import novel" : "导入已有小说"}
+          </Button>
           <Button variant="primary" icon="plus" onClick={onNewNovel}>
             {t("writeNovel")}
           </Button>
@@ -94,6 +97,7 @@ export function LibraryView({
       </header>
 
       <div className="library-toolbar library-toolbar-wide">
+        {/* biome-ignore lint/a11y/noLabelWithoutControl: TextInput renders the control inside the label */}
         <label className="search-field">
           <Icon name="search" size={17} />
           <TextInput
@@ -116,7 +120,9 @@ export function LibraryView({
         </Select>
         <Select
           value={status}
-          onChange={(event) => setStatus(event.target.value as WorkStatus | "all")}
+          onChange={(event) =>
+            setStatus(event.target.value as WorkStatus | "all")
+          }
           aria-label={t("status")}
         >
           <option value="all">{t("all")}</option>
@@ -149,19 +155,27 @@ export function LibraryView({
             const words = workWords(work);
             return (
               <button
+                type="button"
                 className="story-card"
                 key={work.id}
                 onClick={() => onOpenWork(work.id)}
               >
-                <Cover title={displayText(work.title, locale)} accent={work.coverColor} />
+                <Cover
+                  title={displayText(work.title, locale)}
+                  accent={work.coverColor}
+                />
                 <span className="story-card-copy">
                   <span className="eyebrow">
-                    {universe ? displayText(universe.name, locale) : work.genre || t("novel")}
+                    {universe
+                      ? displayText(universe.name, locale)
+                      : work.genre || t("novel")}
                   </span>
                   <h3>{displayText(work.title, locale)}</h3>
                   <p>{displayText(work.logline, locale)}</p>
                   <span className="story-meta">
-                    <Badge tone={work.status === "complete" ? "green" : "neutral"}>
+                    <Badge
+                      tone={work.status === "complete" ? "green" : "neutral"}
+                    >
                       {statusLabels[locale][work.status]}
                     </Badge>
                     <small>
@@ -169,7 +183,11 @@ export function LibraryView({
                       {formatNumber(words, locale)} {t("words")}
                     </small>
                   </span>
-                  <ProgressBar value={words} max={work.targetWords} color={work.coverColor} />
+                  <ProgressBar
+                    value={words}
+                    max={work.targetWords}
+                    color={work.coverColor}
+                  />
                   <span className="library-card-foot">
                     <span>{work.genre || t("novel")}</span>
                     <span>{formatDate(work.updatedAt, locale)}</span>

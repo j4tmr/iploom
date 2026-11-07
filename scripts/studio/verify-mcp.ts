@@ -9,12 +9,25 @@ import { WorkspaceStore } from "../../apps/studio/src/node/workspace-store.ts";
 import { packagedPaths } from "./packaged-paths.ts";
 
 const binaryIndex = process.argv.indexOf("--binary");
+const archIndex = process.argv.indexOf("--arch");
+const arch = archIndex >= 0 ? process.argv[archIndex + 1] : undefined;
 const packaged = process.argv.includes("--packaged") ? packagedPaths() : null;
-const binary = packaged?.mcpScript ?? resolve(
-  binaryIndex >= 0
-    ? (process.argv[binaryIndex + 1] ?? "")
-    : "dist-studio/bin/iploom-mcp",
-);
+if (arch !== undefined) {
+  if (arch !== "x86_64" && arch !== "arm64") {
+    throw new Error(`Unsupported architecture: ${arch}`);
+  }
+  if (!packaged) throw new Error("--arch requires --packaged");
+  if (process.platform !== "darwin") {
+    throw new Error("--arch is only supported on macOS");
+  }
+}
+const binary =
+  packaged?.mcpScript ??
+  resolve(
+    binaryIndex >= 0
+      ? (process.argv[binaryIndex + 1] ?? "")
+      : "dist-studio/bin/iploom-mcp",
+  );
 const root = mkdtempSync(join(tmpdir(), "iploom-studio-bundle-mcp-"));
 const workspacePath = join(root, "workspace.json");
 const client = new Client({ name: "bundle-smoke", version: "1.0.0" });
@@ -24,10 +37,12 @@ try {
     createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"),
   );
   const require = createRequire(import.meta.url);
-  const electron = packaged?.executable ?? require("electron") as string;
+  const electron = packaged?.executable ?? (require("electron") as string);
   const transport = new StdioClientTransport({
-    command: electron,
-    args: [binary, "--workspace", workspacePath],
+    command: arch ? "/usr/bin/arch" : electron,
+    args: arch
+      ? [`-${arch}`, electron, binary, "--workspace", workspacePath]
+      : [binary, "--workspace", workspacePath],
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: "1",
@@ -84,7 +99,9 @@ try {
   });
   if (exported.isError) throw new Error("Bundled MCP export failed");
   console.log(
-    `[mcp] bundled Electron runtime ok: ${tools.tools.length} tools, ${binary}`,
+    `[mcp] bundled Electron runtime ok: ${tools.tools.length} tools, ${binary}${
+      arch ? ` (${arch})` : ""
+    }`,
   );
 } finally {
   await client.close().catch(() => undefined);

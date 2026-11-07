@@ -4,6 +4,14 @@ on:
   push:
     tags:
       - "studio-v*"
+  workflow_dispatch:
+    inputs:
+      overwrite_existing_release:
+        description: >-
+          Replace the assets of an already published release for this tag.
+          Leave off for a normal release.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -14,6 +22,7 @@ concurrency:
 
 env:
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  OVERWRITE_EXISTING_RELEASE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.overwrite_existing_release == 'true' }}
 
 jobs:
   verify:
@@ -21,40 +30,39 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require the tagged commit on main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          echo "$GITHUB_SHA is reachable from origin/main"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .node-version
       - name: Verify tag matches package version
         run: |
+          set -euo pipefail
           version="$(node -p "require('./package.json').version")"
           test "${GITHUB_REF_NAME}" = "studio-v${version}"
           test -s "docs/release-notes/${version}.md"
           echo "Releasing IPloom Studio ${version}"
       - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run format:check
       - run: bun run typecheck
       - run: bun run test
       - run: bun run studio:build:release
       - name: Verify release inputs
-        run: |
-          set -euo pipefail
-          test -s dist-studio/electron/main.cjs
-          test -s dist-studio/electron/preload.cjs
-          test -s dist-studio/bin/iploom-mcp
-          test -s dist-studio/app/bin/iploom-mcp
-          test -s dist-studio/bin/package.json
-          test -s dist-studio/app/package.json
-          test -s dist-studio/app/renderer/index.html
-          test -s apps/studio/build/icon.icns
-          test -s apps/studio/build/icon.ico
-          node --check dist-studio/electron/main.cjs
-          node --check dist-studio/electron/preload.cjs
-          node --check dist-studio/bin/iploom-mcp
-          grep -q 'Content-Security-Policy' dist-studio/app/renderer/index.html
-          grep -q 'ELECTRON_RUN_AS_NODE' dist-studio/electron/main.cjs
+        run: bun scripts/studio/verify-release-inputs.ts inputs
+      - name: Verify download versions in documentation
+        run: bun scripts/studio/verify-release-inputs.ts docs
       - run: bun run studio:verify-mcp
 
   package:
@@ -67,51 +75,44 @@ jobs:
           - macos-latest
           - windows-latest
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .node-version
       - run: bun install --frozen-lockfile
       - run: bun run studio:package
-      - name: Verify and smoke macOS packages
+      - name: Verify macOS packages
+        if: runner.os == 'macOS'
+        run: bun scripts/studio/verify-release-inputs.ts package --platform darwin
+      - name: Verify Windows packages
+        if: runner.os == 'Windows'
+        run: bun scripts/studio/verify-release-inputs.ts package --platform win32
+      - run: bun run studio:smoke:package
+      - run: bun run studio:verify-mcp --packaged
+      - name: Confirm Rosetta 2 is available for the Intel slice
         if: runner.os == 'macOS'
         run: |
           set -euo pipefail
-          version="$(node -p "require('./package.json').version")"
-          dmg="release/IPloom-Studio-${version}-darwin-universal.dmg"
-          zip="release/IPloom-Studio-${version}-darwin-universal.zip"
-          test -s "$dmg"
-          test -s "$zip"
-          hdiutil verify "$dmg"
-          unzip -t "$zip" >/dev/null
-          app="release/mac-universal/IPloom Studio.app/Contents/MacOS/IPloom Studio"
-          test -n "$app"
-          lipo -archs "$app" | grep -q arm64
-          lipo -archs "$app" | grep -q x86_64
-      - name: Verify Windows packages
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $version = node -p "require('./package.json').version"
-          $installer = Get-ChildItem release -Filter '*.exe' |
-            Where-Object { $_.Length -gt 10000000 } |
-            Select-Object -First 1
-          if (-not $installer) { throw 'NSIS installer not found' }
-          $app = Get-ChildItem release -Recurse -Filter 'IPloom Studio.exe' |
-            Where-Object { $_.Length -gt 1000000 } |
-            Select-Object -First 1
-          if (-not $app) { throw 'Packaged Windows executable not found' }
-          Write-Host "Installer: $($installer.FullName)"
-      - run: bun run studio:smoke:package
-      - run: bun run studio:verify-mcp --packaged
+          uname -m
+          if ! /usr/bin/arch -x86_64 /usr/bin/true; then
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
+      - name: Smoke the Intel slice
+        if: runner.os == 'macOS'
+        run: bun scripts/studio/smoke.ts --packaged --arch x86_64
+      - name: Verify MCP through the Intel slice
+        if: runner.os == 'macOS'
+        run: bun scripts/studio/verify-mcp.ts --packaged --arch x86_64
       - name: Upload macOS packages
         if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: studio-macos-packages
           path: |
@@ -122,7 +123,7 @@ jobs:
           retention-days: 14
       - name: Upload Windows packages
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: studio-windows-packages
           path: |
@@ -136,14 +137,20 @@ jobs:
     needs: package
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment:
+      name: release
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .node-version
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: studio-*-packages
           path: release-artifacts
@@ -154,9 +161,9 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           test "${GITHUB_REF_NAME}" = "studio-v${version}"
           find release-artifacts -maxdepth 1 -type f -printf '%f\n' | sort
-          test -n "$(find release-artifacts -maxdepth 1 -name '*.dmg' -print -quit)"
-          test -n "$(find release-artifacts -maxdepth 1 -name '*-darwin-universal.zip' -print -quit)"
-          test -n "$(find release-artifacts -maxdepth 1 -name '*.exe' -print -quit)"
+          test -s "release-artifacts/IPloom-Studio-${version}-darwin-universal.dmg"
+          test -s "release-artifacts/IPloom-Studio-${version}-darwin-universal.zip"
+          test -s "release-artifacts/IPloom-Studio-${version}-win32-x64.exe"
           (
             cd release-artifacts
             find . -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -printf '%f\0' |
@@ -165,6 +172,13 @@ jobs:
             sha256sum --check SHA256SUMS.txt
           )
           cat release-artifacts/SHA256SUMS.txt
+      - name: Attest packaged binaries
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            release-artifacts/*.dmg
+            release-artifacts/*.zip
+            release-artifacts/*.exe
       - name: Create or update Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -173,14 +187,30 @@ jobs:
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
           notes="docs/release-notes/${version}.md"
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+          existing_draft=""
+          if existing_draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft' 2>/dev/null)"; then
+            if [ "$existing_draft" = "false" ] && [ "$OVERWRITE_EXISTING_RELEASE" != "true" ]; then
+              echo "Release ${GITHUB_REF_NAME} is already published." >&2
+              echo "Re-run this workflow from the tag with overwrite_existing_release enabled to replace its assets." >&2
+              exit 1
+            fi
             gh release upload "$GITHUB_REF_NAME" release-artifacts/* --clobber
-            gh release edit "$GITHUB_REF_NAME" \
-              --title "IPloom Studio ${version}" \
-              --notes-file "$notes" \
-              --latest
+            if [ "$existing_draft" = "true" ]; then
+              gh release edit "$GITHUB_REF_NAME" \
+                --title "IPloom Studio ${version}" \
+                --notes-file "$notes" \
+                --draft=false \
+                --latest
+            else
+              # Do not pass --latest here: an explicit overwrite must not move
+              # the repository's Latest marker away from a newer release.
+              gh release edit "$GITHUB_REF_NAME" \
+                --title "IPloom Studio ${version}" \
+                --notes-file "$notes"
+            fi
           else
             gh release create "$GITHUB_REF_NAME" release-artifacts/* \
+              --verify-tag \
               --title "IPloom Studio ${version}" \
               --notes-file "$notes" \
               --latest

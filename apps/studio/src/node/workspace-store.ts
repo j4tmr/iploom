@@ -9,11 +9,14 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { constants } from "node:fs";
+import { constants, type Dirent } from "node:fs";
 import { basename, dirname, join, normalize, resolve, sep } from "node:path";
 import { arcReelSlug } from "../core/arcreel.ts";
 import { createEmptyWorkspace } from "../core/factory.ts";
-import { validateWorkspace, WorkspaceValidationError } from "../core/validate.ts";
+import {
+  validateWorkspace,
+  WorkspaceValidationError,
+} from "../core/validate.ts";
 import { migrateWorkspace } from "../core/migrations.ts";
 import {
   WORKSPACE_SCHEMA_VERSION,
@@ -78,11 +81,7 @@ export async function renameWithRetry(
       return;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (
-        !code ||
-        !RETRYABLE_RENAME_CODES.has(code) ||
-        attempt >= attempts
-      ) {
+      if (!code || !RETRYABLE_RENAME_CODES.has(code) || attempt >= attempts) {
         throw error;
       }
       await new Promise((resolveDelay) => setTimeout(resolveDelay, delayMs));
@@ -202,7 +201,10 @@ export class WorkspaceStore {
   }
 
   async ensure(): Promise<LoadedWorkspace> {
-    if (await exists(this.filePath) || await exists(backupPath(this.filePath)))
+    if (
+      (await exists(this.filePath)) ||
+      (await exists(backupPath(this.filePath)))
+    )
       return this.load();
     const workspace = createEmptyWorkspace("My Story Multiverse");
     await this.save(workspace);
@@ -294,7 +296,7 @@ export class WorkspaceStore {
     const directory = dirname(this.filePath);
     if (!(await exists(directory))) return;
     const prefix = `${basename(this.filePath)}.tmp-`;
-    let entries;
+    let entries: Dirent[];
     try {
       entries = await readdir(directory, { withFileTypes: true });
     } catch {
@@ -405,7 +407,9 @@ export class WorkspaceStore {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       }
     }
-    throw new Error(`Could not find a free recovery-copy name for ${this.filePath}`);
+    throw new Error(
+      `Could not find a free recovery-copy name for ${this.filePath}`,
+    );
   }
 
   /**
@@ -559,7 +563,9 @@ export class WorkspaceStore {
       }
       await rename(staging, directory);
     } catch (error) {
-      await rm(staging, { recursive: true, force: true }).catch(() => undefined);
+      await rm(staging, { recursive: true, force: true }).catch(
+        () => undefined,
+      );
       throw error;
     }
     return { directory, files: bundle.files.length, bytes };

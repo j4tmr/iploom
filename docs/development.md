@@ -21,12 +21,16 @@ Development opens a Vite renderer on loopback and launches Electron against it. 
 ## Verification
 
 ```sh
+bun run lint
+bun run format:check
 bun run typecheck
 bun run test
 bun run studio:build:release
 bun run studio:verify-mcp
 bun run studio:smoke
 ```
+
+`bun run check` runs the same steps in order, with coverage, the shared release-input checks and the documentation version check. Apply formatting with `bun run format`.
 
 On a Linux CI runner, wrap the GUI smoke with Xvfb:
 
@@ -39,6 +43,13 @@ The packaged smoke:
 ```sh
 bun run studio:package
 bun run studio:smoke:package
+```
+
+On Apple silicon, exercise the Intel slice of the universal bundle through Rosetta:
+
+```sh
+bun scripts/studio/smoke.ts --packaged --arch x86_64
+bun scripts/studio/verify-mcp.ts --packaged --arch x86_64
 ```
 
 The smoke test creates a temporary workspace, opens the real renderer in a hidden Electron window, waits for `.studio-shell`, checks that navigation and content are present, then exits.

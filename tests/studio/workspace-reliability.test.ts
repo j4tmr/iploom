@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, readdir, stat, utimes, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  open,
+  readdir,
+  readFile,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
@@ -121,6 +129,23 @@ test("renameWithRetry retries transient Windows codes and reports attempts", asy
     }),
   ).rejects.toThrow(/bad path/);
 });
+
+test.skipIf(process.platform !== "win32")(
+  "saving replaces the workspace while another reader keeps it open",
+  async () => {
+    const store = await storeInTemp();
+    await store.save(named("before"));
+    const reader = await open(store.filePath, "r");
+    try {
+      await store.save(named("after"));
+    } finally {
+      await reader.close();
+    }
+    expect(JSON.parse(await readFile(store.filePath, "utf8")).name).toBe(
+      "after",
+    );
+  },
+);
 
 test("loading removes stale temporary files but keeps fresh ones", async () => {
   const store = await storeInTemp();

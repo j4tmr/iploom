@@ -235,7 +235,8 @@ const zh = {
   reusableBadge: "通用角色",
   noRelationships: "还没有人物关系。",
   noRelationshipsLead: "添加人物之间的关系，生成可用于写作与改编的关系图谱。",
-  relationshipNeedsTwoCharacters: "至少需要两个角色才能建立关系，请先在人物库中补充角色。",
+  relationshipNeedsTwoCharacters:
+    "至少需要两个角色才能建立关系，请先在人物库中补充角色。",
   addRelationship: "添加关系",
   sourceCharacter: "人物 A",
   targetCharacter: "人物 B",
@@ -294,7 +295,8 @@ const zh = {
   mcpTools: "可用工具",
   mcpToolsNote: "11 个只读查询工具 + 2 个基础规则写入工具 + 1 个本地导出工具。",
   resetDemo: "载入演示工作区",
-  resetDemoNote: "先把当前工作区存入 snapshots 快照目录，再载入双世界演示数据。",
+  resetDemoNote:
+    "先把当前工作区存入 snapshots 快照目录，再载入双世界演示数据。",
   snapshotsTitle: "工作区快照",
   snapshotsNote:
     "删除或导入前自动保存；快照不会被自动保存轮换覆盖，保留最近 20 份。",
@@ -406,8 +408,7 @@ const zh = {
   updateTitle: "应用更新",
   checkUpdates: "检查更新",
   checkingUpdates: "检查中…",
-  updateIdle:
-    "仅在你主动点击时查询 GitHub Releases，不会自动安装任何内容。",
+  updateIdle: "仅在你主动点击时查询 GitHub Releases，不会自动安装任何内容。",
   updateAvailable: "发现更新的稳定版本：{version}。",
   updateCurrent: "当前已是最新稳定版本（{version}）。",
   updateNoRelease: "暂未找到稳定版本。",
@@ -589,7 +590,8 @@ const en: Record<MessageKey, string> = {
   cancel: "Cancel",
   close: "Close",
   delete: "Delete",
-  confirmDelete: "Delete this item? The change will be written to your local workspace.",
+  confirmDelete:
+    "Delete this item? The change will be written to your local workspace.",
   deleteEverywhere: "Delete in all worlds",
   removeFromThisWorld: "Remove from this world",
   confirmDeleteCharacterEverywhere:
@@ -653,16 +655,21 @@ const en: Record<MessageKey, string> = {
   emptyDashboardLead:
     "Create an IP universe with its rules and cast. Novels inherit this material and can generate a stylized 3D screen handoff in one step.",
   createWorldTitle: "New IP universe",
-  createWorldLead: "One world can hold many novels, short stories and adaptations.",
+  createWorldLead:
+    "One world can hold many novels, short stories and adaptations.",
   createNovelTitle: "New novel",
-  createNovelLead: "The novel inherits cast, locations and relationships from its world.",
+  createNovelLead:
+    "The novel inherits cast, locations and relationships from its world.",
   createCharacterTitle: "New character",
   editCharacterTitle: "Edit character",
-  characterLead: "A character can belong to several worlds, enabling reusable cast and crossovers.",
+  characterLead:
+    "A character can belong to several worlds, enabling reusable cast and crossovers.",
   createRelationshipTitle: "New relationship",
-  relationshipLead: "The map displays stable character relationships inside one world.",
+  relationshipLead:
+    "The map displays stable character relationships inside one world.",
   addChapterTitle: "Add chapter",
-  addChapterLead: "Create the chapter card first, then build its outline and prose.",
+  addChapterLead:
+    "Create the chapter card first, then build its outline and prose.",
   addLocationTitle: "New location",
   addFactionTitle: "New faction",
   addLoreTitle: "New lore entry",
@@ -691,7 +698,8 @@ const en: Record<MessageKey, string> = {
   sceneCast: "Chapter cast",
   sceneLocation: "Primary location",
   noChapters: "No chapters yet.",
-  noChaptersLead: "Add the first chapter and start the three-layer writing flow.",
+  noChaptersLead:
+    "Add the first chapter and start the three-layer writing flow.",
   chapterEmpty: "Select a chapter to start writing.",
   autosaveNote: "Every change is autosaved to the local workspace.",
   fullText: "Full text",
@@ -744,7 +752,8 @@ const en: Record<MessageKey, string> = {
   sourceChapters: "Source chapters",
   exportedHistory: "Export history",
   noExports: "No exports yet.",
-  noExportsLead: "Generate the first ArcReel handoff from a novel's adaptation tab.",
+  noExportsLead:
+    "Generate the first ArcReel handoff from a novel's adaptation tab.",
   generatedAt: "Generated",
   fileCount: "Files",
   settingsTitle: "Workspace settings",
@@ -766,7 +775,8 @@ const en: Record<MessageKey, string> = {
   copyConfig: "Copy config",
   copied: "Copied",
   mcpTools: "Available tools",
-  mcpToolsNote: "11 read-only query tools + 2 foundation-standard writers + 1 local export tool.",
+  mcpToolsNote:
+    "11 read-only query tools + 2 foundation-standard writers + 1 local export tool.",
   resetDemo: "Load demo workspace",
   resetDemoNote:
     "Save the current workspace into the snapshots folder, then load the two-world demo.",
@@ -826,7 +836,8 @@ const en: Record<MessageKey, string> = {
   errorTitle: "Something went wrong",
   retry: "Retry",
   emptySelection: "Nothing selected",
-  clickNode: "Click a node to edit its character; hover a line to inspect the relationship.",
+  clickNode:
+    "Click a node to edit its character; hover a line to inspect the relationship.",
   degree: "Connections",
   sceneDraft: "Scene draft",
   castAnchors: "Cast anchors",
@@ -848,7 +859,8 @@ const en: Record<MessageKey, string> = {
   selected: "{n} selected",
   wordProgress: "{actual} / {target} words",
   library: "Library",
-  libraryLead: "Browse every novel across worlds, filtered by world, status and genre.",
+  libraryLead:
+    "Browse every novel across worlds, filtered by world, status and genre.",
   allWorlds: "All worlds",
   editWorldTitle: "Edit IP universe",
   editNovelTitle: "Edit novel",
@@ -892,13 +904,15 @@ const en: Record<MessageKey, string> = {
   updateNoRelease: "No stable release was found yet.",
   updateUnavailable: "The update check did not complete.",
   updateReasonTimeout: "The request timed out. Try again shortly.",
-  updateReasonNetwork: "Could not reach GitHub. Check your connection and retry.",
+  updateReasonNetwork:
+    "Could not reach GitHub. Check your connection and retry.",
   updateReasonHttp: "GitHub returned HTTP {status}.",
   updateReasonResponse:
     "GitHub returned an unreadable response. Try again later.",
   updateReasonVersion:
     "The current version cannot be parsed, so versions cannot be compared.",
-  updateReasonDesktopOnly: "Update checks are available in the desktop app only.",
+  updateReasonDesktopOnly:
+    "Update checks are available in the desktop app only.",
   releaseNotes: "Release notes",
   openReleases: "All releases",
   downloadForPlatform: "Download for this platform",

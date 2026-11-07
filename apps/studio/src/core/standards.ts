@@ -338,7 +338,12 @@ export function parseStandardCandidates(raw: string): StandardCandidate[] {
     if (!STANDARD_KINDS.includes(kind as StandardKind)) continue;
     const title = record.title;
     const body = record.body;
-    if (!title || typeof title !== "object" || !body || typeof body !== "object")
+    if (
+      !title ||
+      typeof title !== "object" ||
+      !body ||
+      typeof body !== "object"
+    )
       continue;
     const localized = (value: unknown) => {
       const text = value as Record<string, unknown>;

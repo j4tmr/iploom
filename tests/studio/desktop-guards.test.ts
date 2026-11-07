@@ -79,14 +79,20 @@ describe("desktop path guards", () => {
         }),
       ).toBe(true);
       expect(
-        isTrustedRendererUrl(pathToFileURL(join(root, "assets", "app.js")).href, {
-          rendererRoot,
-        }),
+        isTrustedRendererUrl(
+          pathToFileURL(join(root, "assets", "app.js")).href,
+          {
+            rendererRoot,
+          },
+        ),
       ).toBe(true);
       expect(
-        isTrustedRendererUrl(pathToFileURL(join(root, "..", "secret.html")).href, {
-          rendererRoot,
-        }),
+        isTrustedRendererUrl(
+          pathToFileURL(join(root, "..", "secret.html")).href,
+          {
+            rendererRoot,
+          },
+        ),
       ).toBe(false);
       expect(
         isTrustedRendererUrl("file://evil.example/tmp/index.html", {
@@ -130,7 +136,9 @@ describe("desktop path guards", () => {
     expect(safeExternalUrl("javascript:alert(1)")).toBeNull();
     expect(safeExternalUrl("file:///etc/passwd")).toBeNull();
     expect(safeExternalUrl("https://user:pass@example.com")).toBeNull();
-    expect(safeExternalUrl(`https://example.com/${"a".repeat(8_192)}`)).toBeNull();
+    expect(
+      safeExternalUrl(`https://example.com/${"a".repeat(8_192)}`),
+    ).toBeNull();
     expect(safeExternalUrl("::::")).toBeNull();
   });
 
@@ -139,9 +147,9 @@ describe("desktop path guards", () => {
     expect(isBlockedShellTarget("/Applications/Evil.APP/")).toBe(true);
     expect(isBlockedShellTarget("/tmp/Installer.pkg")).toBe(true);
     expect(isBlockedShellTarget("/tmp/Thing.bundle")).toBe(true);
-    expect(isBlockedShellTarget("/Applications/Evil.app/Contents/MacOS/Evil")).toBe(
-      false,
-    );
+    expect(
+      isBlockedShellTarget("/Applications/Evil.app/Contents/MacOS/Evil"),
+    ).toBe(false);
     expect(isBlockedShellTarget("/tmp/exports")).toBe(false);
     expect(isBlockedShellTarget("/tmp/my.app.backup")).toBe(false);
   });
@@ -150,12 +158,14 @@ describe("desktop path guards", () => {
     const root = mkdtempSync(join(tmpdir(), "iploom-guards-real-"));
     try {
       const realRoot = await realpath(root);
-      expect(await realPathWithExistingAncestor(join(root, "missing", "deeper"))).toBe(
-        join(realRoot, "missing", "deeper"),
-      );
+      expect(
+        await realPathWithExistingAncestor(join(root, "missing", "deeper")),
+      ).toBe(join(realRoot, "missing", "deeper"));
       mkdirSync(join(root, "existing"));
       expect(
-        await realPathWithExistingAncestor(join(root, "existing", "child.json")),
+        await realPathWithExistingAncestor(
+          join(root, "existing", "child.json"),
+        ),
       ).toBe(join(realRoot, "existing", "child.json"));
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -175,7 +185,9 @@ describe("ArcReel bundle validation", () => {
   test("accepts the bundle the exporter builds", async () => {
     const bundle = await bundleFor();
     expect(() => parseArcReelBundle(bundle)).not.toThrow();
-    expect(parseArcReelBundle(bundle).manifestSha256).toBe(bundle.manifestSha256);
+    expect(parseArcReelBundle(bundle).manifestSha256).toBe(
+      bundle.manifestSha256,
+    );
   });
 
   test("rejects payloads the directory name or writer would trust", async () => {
@@ -183,15 +195,21 @@ describe("ArcReel bundle validation", () => {
 
     const hashEscape = structuredClone(bundle);
     hashEscape.manifestSha256 = "/../..//";
-    expect(() => parseArcReelBundle(hashEscape)).toThrow(/Invalid ArcReel bundle/);
+    expect(() => parseArcReelBundle(hashEscape)).toThrow(
+      /Invalid ArcReel bundle/,
+    );
 
     const shortHash = structuredClone(bundle);
     shortHash.manifestSha256 = "abc";
-    expect(() => parseArcReelBundle(shortHash)).toThrow(/Invalid ArcReel bundle/);
+    expect(() => parseArcReelBundle(shortHash)).toThrow(
+      /Invalid ArcReel bundle/,
+    );
 
     const badTimestamp = structuredClone(bundle);
     badTimestamp.generatedAt = "not-a-date";
-    expect(() => parseArcReelBundle(badTimestamp)).toThrow(/Invalid ArcReel bundle/);
+    expect(() => parseArcReelBundle(badTimestamp)).toThrow(
+      /Invalid ArcReel bundle/,
+    );
 
     const badWork = structuredClone(bundle);
     badWork.workId = "../../etc";
@@ -199,15 +217,21 @@ describe("ArcReel bundle validation", () => {
 
     const badSchema = structuredClone(bundle) as unknown as { schema: string };
     badSchema.schema = "iploom.arcreel.manifest/v0";
-    expect(() => parseArcReelBundle(badSchema)).toThrow(/Invalid ArcReel bundle/);
+    expect(() => parseArcReelBundle(badSchema)).toThrow(
+      /Invalid ArcReel bundle/,
+    );
 
     const noFiles = structuredClone(bundle);
     noFiles.files = [];
     expect(() => parseArcReelBundle(noFiles)).toThrow(/Invalid ArcReel bundle/);
 
     const longPath = structuredClone(bundle);
-    longPath.files[0]!.path = "a".repeat(ARC_REEL_EXPORT_LIMITS.maxPathLength + 1);
-    expect(() => parseArcReelBundle(longPath)).toThrow(/Invalid ArcReel bundle/);
+    longPath.files[0]!.path = "a".repeat(
+      ARC_REEL_EXPORT_LIMITS.maxPathLength + 1,
+    );
+    expect(() => parseArcReelBundle(longPath)).toThrow(
+      /Invalid ArcReel bundle/,
+    );
 
     const oversizedFile = structuredClone(bundle);
     oversizedFile.files[0]!.content = "x".repeat(
@@ -226,17 +250,26 @@ describe("ArcReel bundle validation", () => {
         mediaType: "text/plain" as const,
       }),
     );
-    expect(() => parseArcReelBundle(tooManyFiles)).toThrow(/Invalid ArcReel bundle/);
+    expect(() => parseArcReelBundle(tooManyFiles)).toThrow(
+      /Invalid ArcReel bundle/,
+    );
 
     const badMedia = structuredClone(bundle) as unknown as {
       files: Array<{ mediaType: string }>;
     };
     badMedia.files[0]!.mediaType = "application/octet-stream";
-    expect(() => parseArcReelBundle(badMedia)).toThrow(/Invalid ArcReel bundle/);
+    expect(() => parseArcReelBundle(badMedia)).toThrow(
+      /Invalid ArcReel bundle/,
+    );
 
-    const extraKey = structuredClone(bundle) as unknown as Record<string, unknown>;
+    const extraKey = structuredClone(bundle) as unknown as Record<
+      string,
+      unknown
+    >;
     extraKey.command = "rm -rf /";
-    expect(() => parseArcReelBundle(extraKey)).toThrow(/Invalid ArcReel bundle/);
+    expect(() => parseArcReelBundle(extraKey)).toThrow(
+      /Invalid ArcReel bundle/,
+    );
 
     expect(() => parseArcReelBundle(null)).toThrow(/Invalid ArcReel bundle/);
   });
@@ -267,7 +300,10 @@ describe("revealKnownPath", () => {
         revealKnownPath(join(root, "exports", "package"), deps),
       ).resolves.toBe(await realpath(join(root, "exports", "package")));
       await expect(
-        revealKnownPath(join(root, "exports", "package", "manifest.json"), deps),
+        revealKnownPath(
+          join(root, "exports", "package", "manifest.json"),
+          deps,
+        ),
       ).resolves.toBe(
         await realpath(join(root, "exports", "package", "manifest.json")),
       );
@@ -278,7 +314,10 @@ describe("revealKnownPath", () => {
       mkdirSync(join(root, "snapshots"));
       writeFileSync(join(root, "snapshots", "workspace-1-0-manual.json"), "{}");
       await expect(
-        revealKnownPath(join(root, "snapshots", "workspace-1-0-manual.json"), deps),
+        revealKnownPath(
+          join(root, "snapshots", "workspace-1-0-manual.json"),
+          deps,
+        ),
       ).resolves.toBe(
         await realpath(join(root, "snapshots", "workspace-1-0-manual.json")),
       );

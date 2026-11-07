@@ -13,10 +13,10 @@ const kindLabels: Record<UiLocale, Record<SearchHit["kind"], string>> = {
     chapter: "章节",
     character: "人物",
     location: "地点",
-  object: "物件",
+    object: "物件",
     faction: "势力",
     lore: "设定",
-  timeline: "时间线",
+    timeline: "时间线",
   },
   en: {
     universe: "IP world",
@@ -24,10 +24,10 @@ const kindLabels: Record<UiLocale, Record<SearchHit["kind"], string>> = {
     chapter: "Chapter",
     character: "Character",
     location: "Location",
-  object: "Prop",
+    object: "Prop",
     faction: "Faction",
     lore: "Lore",
-  timeline: "Timeline",
+    timeline: "Timeline",
   },
 };
 
@@ -77,6 +77,7 @@ export function SearchOverlay({
   if (!open) return null;
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the backdrop only handles mouse dismissal; Escape is handled by the overlay stack
     <div
       className="search-backdrop"
       onMouseDown={(event) => {
@@ -107,7 +108,9 @@ export function SearchOverlay({
               }
               if (event.key === "ArrowDown") {
                 event.preventDefault();
-                setActive((current) => Math.min(results.length - 1, current + 1));
+                setActive((current) =>
+                  Math.min(results.length - 1, current + 1),
+                );
               } else if (event.key === "ArrowUp") {
                 event.preventDefault();
                 setActive((current) => Math.max(0, current - 1));
@@ -134,6 +137,7 @@ export function SearchOverlay({
           ) : (
             results.map((hit, index) => (
               <button
+                type="button"
                 key={`${hit.kind}-${hit.id}`}
                 className={`command-result ${index === active ? "active" : ""}`}
                 onMouseEnter={() => setActive(index)}
@@ -156,8 +160,13 @@ export function SearchOverlay({
           )}
         </div>
         <footer className="command-footer">
-          <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
-          <span><kbd>↵</kbd> open</span>
+          <span>
+            <kbd>↑</kbd>
+            <kbd>↓</kbd> navigate
+          </span>
+          <span>
+            <kbd>↵</kbd> open
+          </span>
           <span>{results.length} results</span>
         </footer>
       </section>

@@ -51,10 +51,7 @@ export const storyboardSceneSchema = z
     id: nativeId,
     sequence,
     heading: text.max(STORYBOARD_LIMITS.sceneHeading),
-    description: z
-      .string()
-      .max(STORYBOARD_LIMITS.sceneDescription)
-      .default(""),
+    description: z.string().max(STORYBOARD_LIMITS.sceneDescription).default(""),
     location: z.string().max(STORYBOARD_LIMITS.location).default(""),
     story_time: z.string().max(STORYBOARD_LIMITS.storyTime).default(""),
     data: jsonObject,
@@ -75,10 +72,7 @@ export const storyboardWriteSchema = z
     based_on_storyboard_version_id: nativeId.optional(),
     title: text.max(STORYBOARD_LIMITS.title),
     data: jsonObject,
-    scenes: z
-      .array(storyboardSceneSchema)
-      .min(1)
-      .max(STORYBOARD_LIMITS.scenes),
+    scenes: z.array(storyboardSceneSchema).min(1).max(STORYBOARD_LIMITS.scenes),
   })
   .strict()
   .superRefine((value, ctx) => {

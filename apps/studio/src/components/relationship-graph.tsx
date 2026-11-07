@@ -36,7 +36,11 @@ export function RelationshipCanvas({
     return (
       <div className="graph-empty">
         <span>◌</span>
-        <p>{locale === "en" ? "Add characters to grow the map." : "添加人物后，关系图会在这里生长。"}</p>
+        <p>
+          {locale === "en"
+            ? "Add characters to grow the map."
+            : "添加人物后，关系图会在这里生长。"}
+        </p>
       </div>
     );
 
@@ -45,10 +49,22 @@ export function RelationshipCanvas({
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label={locale === "en" ? "Character relationship graph" : "人物关系图"}
+        aria-label={
+          locale === "en" ? "Character relationship graph" : "人物关系图"
+        }
       >
         <defs>
-          <marker id={arrowId} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 Z" fill="context-stroke" /></marker>
+          <marker
+            id={arrowId}
+            markerWidth="8"
+            markerHeight="8"
+            refX="7"
+            refY="4"
+            orient="auto-start-reverse"
+            markerUnits="userSpaceOnUse"
+          >
+            <path d="M0,0 L8,4 L0,8 Z" fill="context-stroke" />
+          </marker>
           <radialGradient id="graph-glow" cx="50%" cy="45%" r="55%">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity=".14" />
             <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
@@ -56,7 +72,12 @@ export function RelationshipCanvas({
           <filter id="node-shadow" x="-50%" y="-50%" width="200%" height="200%">
             <feDropShadow dx="0" dy="5" stdDeviation="7" floodOpacity=".16" />
           </filter>
-          <pattern id="dot-grid" width="22" height="22" patternUnits="userSpaceOnUse">
+          <pattern
+            id="dot-grid"
+            width="22"
+            height="22"
+            patternUnits="userSpaceOnUse"
+          >
             <circle cx="1" cy="1" r="1" fill="var(--line)" opacity=".52" />
           </pattern>
         </defs>
@@ -67,9 +88,12 @@ export function RelationshipCanvas({
           const target = byId.get(edge.target);
           if (!source || !target) return null;
           const active = hovered?.id === edge.id;
-          const distance = Math.hypot(target.x - source.x, target.y - source.y) || 1;
-          const dx = (target.x - source.x) / distance, dy = (target.y - source.y) / distance;
+          const distance =
+            Math.hypot(target.x - source.x, target.y - source.y) || 1;
+          const dx = (target.x - source.x) / distance,
+            dy = (target.y - source.y) / distance;
           return (
+            // biome-ignore lint/a11y/noStaticElementInteractions: hover only highlights an edge whose data is also listed in the relationship table
             <g
               key={edge.id}
               className="graph-edge"
@@ -121,16 +145,22 @@ export function RelationshipCanvas({
           );
         })}
         {nodes.map((node) => (
+          // biome-ignore lint/a11y/noStaticElementInteractions: the group gains role="button" and keyboard handling only when onNodeClick is provided
           <g
             key={node.id}
             className="graph-node"
             transform={`translate(${node.x} ${node.y})`}
             role={onNodeClick ? "button" : undefined}
             tabIndex={onNodeClick ? 0 : undefined}
-            onClick={() => onNodeClick?.(node)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") onNodeClick?.(node);
-            }}
+            onClick={onNodeClick ? () => onNodeClick(node) : undefined}
+            onKeyDown={
+              onNodeClick
+                ? (event) => {
+                    if (event.key === "Enter" || event.key === " ")
+                      onNodeClick(node);
+                  }
+                : undefined
+            }
           >
             <circle r={node.radius + 8} fill="var(--paper)" opacity=".88" />
             <circle
@@ -148,10 +178,18 @@ export function RelationshipCanvas({
             >
               {node.label.trim().slice(0, 1).toLocaleUpperCase()}
             </text>
-            <text y={node.radius + 22} textAnchor="middle" className="graph-node-label">
+            <text
+              y={node.radius + 22}
+              textAnchor="middle"
+              className="graph-node-label"
+            >
               {node.label}
             </text>
-            <text y={node.radius + 39} textAnchor="middle" className="graph-node-role">
+            <text
+              y={node.radius + 39}
+              textAnchor="middle"
+              className="graph-node-role"
+            >
               {node.secondary.length > 20
                 ? `${node.secondary.slice(0, 20)}…`
                 : node.secondary}

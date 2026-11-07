@@ -42,7 +42,10 @@ export function StoryObjectModal({
 }) {
   const en = locale === "en";
   const [universeId, setUniverseId] = useState(
-    initial?.universeId ?? defaultUniverseId ?? workspace.universes[0]?.id ?? "",
+    initial?.universeId ??
+      defaultUniverseId ??
+      workspace.universes[0]?.id ??
+      "",
   );
   const [nameZh, setNameZh] = useState(initial?.name.zh ?? "");
   const [nameEn, setNameEn] = useState(initial?.name.en ?? "");
@@ -58,16 +61,26 @@ export function StoryObjectModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={initial
-        ? (en ? "Edit story prop" : "编辑故事物件")
-        : (en ? "New story prop" : "新增故事物件")}
-      description={en
-        ? "Props carry identity, wear, hand changes, reveal rules and reusable image prompts across the project."
-        : "物件可以记录外观、磨损、持有者变化、揭示规则与可复用的图像提示词。"}
+      title={
+        initial
+          ? en
+            ? "Edit story prop"
+            : "编辑故事物件"
+          : en
+            ? "New story prop"
+            : "新增故事物件"
+      }
+      description={
+        en
+          ? "Props carry identity, wear, hand changes, reveal rules and reusable image prompts across the project."
+          : "物件可以记录外观、磨损、持有者变化、揭示规则与可复用的图像提示词。"
+      }
       wide
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>{en ? "Cancel" : "取消"}</Button>
+          <Button variant="ghost" onClick={onClose}>
+            {en ? "Cancel" : "取消"}
+          </Button>
           <Button
             variant="primary"
             icon="check"
@@ -96,7 +109,13 @@ export function StoryObjectModal({
       <FieldGrid>
         <Field
           label={en ? "Universe" : "所属宇宙"}
-          hint={initial ? (en ? "The universe is fixed after creation." : "创建后不可更改所属宇宙。") : undefined}
+          hint={
+            initial
+              ? en
+                ? "The universe is fixed after creation."
+                : "创建后不可更改所属宇宙。"
+              : undefined
+          }
           wide
         >
           <Select
@@ -105,37 +124,75 @@ export function StoryObjectModal({
             onChange={(event) => setUniverseId(event.target.value)}
           >
             {workspace.universes.map((item) => (
-              <option key={item.id} value={item.id}>{displayText(item.name, locale)}</option>
+              <option key={item.id} value={item.id}>
+                {displayText(item.name, locale)}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={en ? "Chinese name" : "中文名称"}>
-          <TextInput autoFocus value={nameZh} onChange={(event) => setNameZh(event.target.value)} />
+          <TextInput
+            autoFocus
+            value={nameZh}
+            onChange={(event) => setNameZh(event.target.value)}
+          />
         </Field>
         <Field label="English name">
-          <TextInput value={nameEn} onChange={(event) => setNameEn(event.target.value)} />
+          <TextInput
+            value={nameEn}
+            onChange={(event) => setNameEn(event.target.value)}
+          />
         </Field>
         <Field label={en ? "Chinese category" : "中文类别"}>
-          <TextInput value={categoryZh} onChange={(event) => setCategoryZh(event.target.value)} />
+          <TextInput
+            value={categoryZh}
+            onChange={(event) => setCategoryZh(event.target.value)}
+          />
         </Field>
         <Field label="English category">
-          <TextInput value={categoryEn} onChange={(event) => setCategoryEn(event.target.value)} />
+          <TextInput
+            value={categoryEn}
+            onChange={(event) => setCategoryEn(event.target.value)}
+          />
         </Field>
         <Field label={en ? "Chinese summary" : "中文说明"} wide>
-          <TextArea rows={3} value={summaryZh} onChange={(event) => setSummaryZh(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={summaryZh}
+            onChange={(event) => setSummaryZh(event.target.value)}
+          />
         </Field>
         <Field label="English summary" wide>
-          <TextArea rows={3} value={summaryEn} onChange={(event) => setSummaryEn(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={summaryEn}
+            onChange={(event) => setSummaryEn(event.target.value)}
+          />
         </Field>
         <Field
           label={en ? "Reusable visual prompt" : "可复用视觉提示词"}
-          hint={en ? "Identity, materials, wear, views and negatives." : "固定 Identity、材质、磨损、视图与负向约束。"}
+          hint={
+            en
+              ? "Identity, materials, wear, views and negatives."
+              : "固定 Identity、材质、磨损、视图与负向约束。"
+          }
           wide
         >
-          <TextArea rows={5} value={visualPrompt} onChange={(event) => setVisualPrompt(event.target.value)} />
+          <TextArea
+            rows={5}
+            value={visualPrompt}
+            onChange={(event) => setVisualPrompt(event.target.value)}
+          />
         </Field>
-        <Field label={en ? "Source and continuity notes" : "来源与连续性备注"} wide>
-          <TextArea rows={4} value={sourceNotes} onChange={(event) => setSourceNotes(event.target.value)} />
+        <Field
+          label={en ? "Source and continuity notes" : "来源与连续性备注"}
+          wide
+        >
+          <TextArea
+            rows={4}
+            value={sourceNotes}
+            onChange={(event) => setSourceNotes(event.target.value)}
+          />
         </Field>
       </FieldGrid>
     </Modal>
@@ -161,7 +218,9 @@ export function TimelineEventModal({
   onSave: (value: TimelineEvent) => boolean;
 }) {
   const en = locale === "en";
-  const initialWork = workspace.works.find((item) => item.id === (initial?.workId ?? defaultWorkId));
+  const initialWork = workspace.works.find(
+    (item) => item.id === (initial?.workId ?? defaultWorkId),
+  );
   const initialUniverseId =
     initial?.universeId ??
     initialWork?.universeId ??
@@ -169,8 +228,12 @@ export function TimelineEventModal({
     workspace.universes[0]?.id ??
     "";
   const [universeId, setUniverseId] = useState(initialUniverseId);
-  const [workId, setWorkId] = useState(initial?.workId ?? initialWork?.id ?? "");
-  const [chapterId, setChapterId] = useState(initial?.chapterId ?? defaultChapterId ?? "");
+  const [workId, setWorkId] = useState(
+    initial?.workId ?? initialWork?.id ?? "",
+  );
+  const [chapterId, setChapterId] = useState(
+    initial?.chapterId ?? defaultChapterId ?? "",
+  );
   const [sceneId, setSceneId] = useState(initial?.sceneId ?? "");
   const [storyTime, setStoryTime] = useState(initial?.storyTime ?? "");
   const [order, setOrder] = useState(initial?.order ?? 0);
@@ -202,7 +265,9 @@ export function TimelineEventModal({
     initial?.productionPrompt ?? "",
   );
 
-  const works = workspace.works.filter((item) => item.universeId === universeId);
+  const works = workspace.works.filter(
+    (item) => item.universeId === universeId,
+  );
   const work = works.find((item) => item.id === workId);
   const chapters = work?.chapters ?? [];
   const chapter = chapters.find((item) => item.id === chapterId);
@@ -217,20 +282,28 @@ export function TimelineEventModal({
   );
   const subjectOptions =
     subjectKind === "character"
-      ? characters.map((item) => [item.id, displayText(item.name, locale)] as const)
+      ? characters.map(
+          (item) => [item.id, displayText(item.name, locale)] as const,
+        )
       : subjectKind === "location"
-        ? locations.map((item) => [item.id, displayText(item.name, locale)] as const)
+        ? locations.map(
+            (item) => [item.id, displayText(item.name, locale)] as const,
+          )
         : subjectKind === "object"
-          ? objects.map((item) => [item.id, displayText(item.name, locale)] as const)
-          : (chapter?.scenes ?? []).map((item) => [item.id, item.title] as const);
+          ? objects.map(
+              (item) => [item.id, displayText(item.name, locale)] as const,
+            )
+          : (chapter?.scenes ?? []).map(
+              (item) => [item.id, item.title] as const,
+            );
   const canSave = Boolean(
     universeId &&
-    workId &&
-    subjectId &&
-    (chapterId || storyTime.trim()) &&
-    (titleZh.trim() || titleEn.trim()) &&
-    (stateBefore.trim() || stateAfter.trim()) &&
-    (subjectKind !== "scene" || chapterId),
+      workId &&
+      subjectId &&
+      (chapterId || storyTime.trim()) &&
+      (titleZh.trim() || titleEn.trim()) &&
+      (stateBefore.trim() || stateAfter.trim()) &&
+      (subjectKind !== "scene" || chapterId),
   );
 
   const toggle = (
@@ -238,24 +311,36 @@ export function TimelineEventModal({
     values: string[],
     setValues: (next: string[]) => void,
   ) =>
-    setValues(values.includes(id)
-      ? values.filter((value) => value !== id)
-      : [...values, id]);
+    setValues(
+      values.includes(id)
+        ? values.filter((value) => value !== id)
+        : [...values, id],
+    );
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={initial
-        ? (en ? "Edit timeline event" : "编辑时间线事件")
-        : (en ? "New timeline event" : "新增时间线事件")}
-      description={en
-        ? "Anchor a state change to a chapter, an in-world time, or both. Canon and proposed states stay visibly distinct."
-        : "把状态变化绑定到章节、故事内时间或两者。既定事实与未来提案会保持明确区分。"}
+      title={
+        initial
+          ? en
+            ? "Edit timeline event"
+            : "编辑时间线事件"
+          : en
+            ? "New timeline event"
+            : "新增时间线事件"
+      }
+      description={
+        en
+          ? "Anchor a state change to a chapter, an in-world time, or both. Canon and proposed states stay visibly distinct."
+          : "把状态变化绑定到章节、故事内时间或两者。既定事实与未来提案会保持明确区分。"
+      }
       wide
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>{en ? "Cancel" : "取消"}</Button>
+          <Button variant="ghost" onClick={onClose}>
+            {en ? "Cancel" : "取消"}
+          </Button>
           <Button
             variant="primary"
             icon="check"
@@ -269,7 +354,9 @@ export function TimelineEventModal({
                 chapterId: chapterId || undefined,
                 sceneId: sceneId || undefined,
                 storyTime: storyTime.trim(),
-                order: Number.isFinite(order) ? Math.max(0, Math.trunc(order)) : 0,
+                order: Number.isFinite(order)
+                  ? Math.max(0, Math.trunc(order))
+                  : 0,
                 subjectKind,
                 subjectId,
                 eventKind,
@@ -309,7 +396,9 @@ export function TimelineEventModal({
             }}
           >
             {workspace.universes.map((item) => (
-              <option key={item.id} value={item.id}>{displayText(item.name, locale)}</option>
+              <option key={item.id} value={item.id}>
+                {displayText(item.name, locale)}
+              </option>
             ))}
           </Select>
         </Field>
@@ -329,11 +418,20 @@ export function TimelineEventModal({
           >
             <option value="">—</option>
             {works.map((item) => (
-              <option key={item.id} value={item.id}>{displayText(item.title, locale)}</option>
+              <option key={item.id} value={item.id}>
+                {displayText(item.title, locale)}
+              </option>
             ))}
           </Select>
         </Field>
-        <Field label={en ? "Chapter anchor" : "章节锚点"} hint={en ? "Optional when an in-world time is supplied." : "填写故事内时间时可留空。"}>
+        <Field
+          label={en ? "Chapter anchor" : "章节锚点"}
+          hint={
+            en
+              ? "Optional when an in-world time is supplied."
+              : "填写故事内时间时可留空。"
+          }
+        >
           <Select
             value={chapterId}
             onChange={(event) => {
@@ -344,18 +442,35 @@ export function TimelineEventModal({
           >
             <option value="">—</option>
             {chapters.map((item) => (
-              <option key={item.id} value={item.id}>{item.number}. {item.title}</option>
+              <option key={item.id} value={item.id}>
+                {item.number}. {item.title}
+              </option>
             ))}
           </Select>
         </Field>
-        <Field label={en ? "In-world time" : "故事内时间"} hint={en ? "Example: Year 112, winter 7th, 22:40." : "例如：帝国历 112 年冬月初七 22:40。"}>
-          <TextInput value={storyTime} onChange={(event) => setStoryTime(event.target.value)} />
+        <Field
+          label={en ? "In-world time" : "故事内时间"}
+          hint={
+            en
+              ? "Example: Year 112, winter 7th, 22:40."
+              : "例如：帝国历 112 年冬月初七 22:40。"
+          }
+        >
+          <TextInput
+            value={storyTime}
+            onChange={(event) => setStoryTime(event.target.value)}
+          />
         </Field>
         <Field label={en ? "Scene association" : "关联场景"}>
-          <Select value={sceneId} onChange={(event) => setSceneId(event.target.value)}>
+          <Select
+            value={sceneId}
+            onChange={(event) => setSceneId(event.target.value)}
+          >
             <option value="">—</option>
             {(chapter?.scenes ?? []).map((item) => (
-              <option key={item.id} value={item.id}>{item.title}</option>
+              <option key={item.id} value={item.id}>
+                {item.title}
+              </option>
             ))}
           </Select>
         </Field>
@@ -375,43 +490,86 @@ export function TimelineEventModal({
               setSubjectId("");
             }}
           >
-            {(Object.keys(timelineSubjectLabels[locale]) as TimelineSubjectKind[]).map((kind) => (
-              <option key={kind} value={kind}>{timelineSubjectLabels[locale][kind]}</option>
+            {(
+              Object.keys(
+                timelineSubjectLabels[locale],
+              ) as TimelineSubjectKind[]
+            ).map((kind) => (
+              <option key={kind} value={kind}>
+                {timelineSubjectLabels[locale][kind]}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={en ? "Subject" : "具体对象"}>
-          <Select value={subjectId} onChange={(event) => setSubjectId(event.target.value)}>
+          <Select
+            value={subjectId}
+            onChange={(event) => setSubjectId(event.target.value)}
+          >
             <option value="">—</option>
             {subjectOptions.map(([id, label]) => (
-              <option key={id} value={id}>{label}</option>
+              <option key={id} value={id}>
+                {label}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={en ? "Event kind" : "事件类型"}>
-          <Select value={eventKind} onChange={(event) => setEventKind(event.target.value as TimelineEventKind)}>
-            {(Object.keys(timelineEventLabels[locale]) as TimelineEventKind[]).map((kind) => (
-              <option key={kind} value={kind}>{timelineEventLabels[locale][kind]}</option>
+          <Select
+            value={eventKind}
+            onChange={(event) =>
+              setEventKind(event.target.value as TimelineEventKind)
+            }
+          >
+            {(
+              Object.keys(timelineEventLabels[locale]) as TimelineEventKind[]
+            ).map((kind) => (
+              <option key={kind} value={kind}>
+                {timelineEventLabels[locale][kind]}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={en ? "Canon status" : "事实状态"}>
-          <Select value={canonStatus} onChange={(event) => setCanonStatus(event.target.value as TimelineCanonStatus)}>
-            <option value="canon">{en ? "Established / canon" : "已确立 / 既定事实"}</option>
-            <option value="proposed">{en ? "Proposed / needs review" : "提案 / 待审"}</option>
+          <Select
+            value={canonStatus}
+            onChange={(event) =>
+              setCanonStatus(event.target.value as TimelineCanonStatus)
+            }
+          >
+            <option value="canon">
+              {en ? "Established / canon" : "已确立 / 既定事实"}
+            </option>
+            <option value="proposed">
+              {en ? "Proposed / needs review" : "提案 / 待审"}
+            </option>
           </Select>
         </Field>
         <Field label={en ? "Chinese title" : "中文标题"}>
-          <TextInput value={titleZh} onChange={(event) => setTitleZh(event.target.value)} />
+          <TextInput
+            value={titleZh}
+            onChange={(event) => setTitleZh(event.target.value)}
+          />
         </Field>
         <Field label="English title">
-          <TextInput value={titleEn} onChange={(event) => setTitleEn(event.target.value)} />
+          <TextInput
+            value={titleEn}
+            onChange={(event) => setTitleEn(event.target.value)}
+          />
         </Field>
         <Field label={en ? "State before" : "变化前状态"} wide>
-          <TextArea rows={3} value={stateBefore} onChange={(event) => setStateBefore(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={stateBefore}
+            onChange={(event) => setStateBefore(event.target.value)}
+          />
         </Field>
         <Field label={en ? "State after" : "变化后状态"} wide>
-          <TextArea rows={3} value={stateAfter} onChange={(event) => setStateAfter(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={stateAfter}
+            onChange={(event) => setStateAfter(event.target.value)}
+          />
         </Field>
         <Field label={en ? "Characters present or affected" : "关联人物"} wide>
           <div className="check-grid">
@@ -420,7 +578,9 @@ export function TimelineEventModal({
                 <input
                   type="checkbox"
                   checked={relatedCharacterIds.includes(item.id)}
-                  onChange={() => toggle(item.id, relatedCharacterIds, setRelatedCharacterIds)}
+                  onChange={() =>
+                    toggle(item.id, relatedCharacterIds, setRelatedCharacterIds)
+                  }
                 />
                 <span style={{ background: item.color }} />
                 {displayText(item.name, locale)}
@@ -435,7 +595,9 @@ export function TimelineEventModal({
                 <input
                   type="checkbox"
                   checked={relatedLocationIds.includes(item.id)}
-                  onChange={() => toggle(item.id, relatedLocationIds, setRelatedLocationIds)}
+                  onChange={() =>
+                    toggle(item.id, relatedLocationIds, setRelatedLocationIds)
+                  }
                 />
                 <span className="timeline-check-mark">⌖</span>
                 {displayText(item.name, locale)}
@@ -450,7 +612,9 @@ export function TimelineEventModal({
                 <input
                   type="checkbox"
                   checked={relatedObjectIds.includes(item.id)}
-                  onChange={() => toggle(item.id, relatedObjectIds, setRelatedObjectIds)}
+                  onChange={() =>
+                    toggle(item.id, relatedObjectIds, setRelatedObjectIds)
+                  }
                 />
                 <span className="timeline-check-mark">◇</span>
                 {displayText(item.name, locale)}
@@ -458,15 +622,30 @@ export function TimelineEventModal({
             ))}
           </div>
         </Field>
-        <Field label={en ? "Evidence / source location" : "证据 / 原文位置"} wide>
-          <TextArea rows={3} value={evidence} onChange={(event) => setEvidence(event.target.value)} />
+        <Field
+          label={en ? "Evidence / source location" : "证据 / 原文位置"}
+          wide
+        >
+          <TextArea
+            rows={3}
+            value={evidence}
+            onChange={(event) => setEvidence(event.target.value)}
+          />
         </Field>
         <Field
           label={en ? "Production state prompt" : "制作状态提示词"}
-          hint={en ? "Describe the visible state, not the plot summary." : "描述可看见的状态，而不是重复剧情摘要。"}
+          hint={
+            en
+              ? "Describe the visible state, not the plot summary."
+              : "描述可看见的状态，而不是重复剧情摘要。"
+          }
           wide
         >
-          <TextArea rows={5} value={productionPrompt} onChange={(event) => setProductionPrompt(event.target.value)} />
+          <TextArea
+            rows={5}
+            value={productionPrompt}
+            onChange={(event) => setProductionPrompt(event.target.value)}
+          />
         </Field>
       </FieldGrid>
     </Modal>

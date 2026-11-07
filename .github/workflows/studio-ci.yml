@@ -19,40 +19,29 @@ env:
 
 jobs:
   quality:
-    name: typecheck, tests and release inputs
+    name: lint, typecheck, tests and release inputs
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .node-version
       - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run format:check
       - run: bun run typecheck
       - run: bun run test:coverage
       - run: bun run studio:build:release
       - name: Verify release inputs
-        run: |
-          set -euo pipefail
-          test -s dist-studio/electron/main.cjs
-          test -s dist-studio/electron/preload.cjs
-          test -s dist-studio/bin/iploom-mcp
-          test -s dist-studio/app/bin/iploom-mcp
-          test -s dist-studio/bin/package.json
-          test -s dist-studio/app/package.json
-          test -s dist-studio/app/renderer/index.html
-          test -s apps/studio/build/icon.icns
-          test -s apps/studio/build/icon.ico
-          test -s apps/studio/build/icon.png
-          node --check dist-studio/electron/main.cjs
-          node --check dist-studio/electron/preload.cjs
-          node --check dist-studio/bin/iploom-mcp
-          grep -q 'Content-Security-Policy' dist-studio/app/renderer/index.html
-          grep -q 'ELECTRON_RUN_AS_NODE' dist-studio/electron/main.cjs
-          test "$(node -p "require('./package.json').version")" = "$(node -p "require('./dist-studio/app/package.json').version")"
+        run: bun scripts/studio/verify-release-inputs.ts inputs
+      - name: Verify download versions in documentation
+        run: bun scripts/studio/verify-release-inputs.ts docs
       - run: bun run studio:verify-mcp
 
   desktop-smoke:
@@ -65,16 +54,19 @@ jobs:
           - macos-latest
           - windows-latest
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .node-version
       - run: bun install --frozen-lockfile
+      - run: bun run test
       - run: bun run studio:build:release
       - run: bun run studio:smoke
 
@@ -90,39 +82,41 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .node-version
       - run: bun install --frozen-lockfile
       - run: bun run studio:dir
       - name: Verify macOS package
         if: runner.os == 'macOS'
-        run: |
-          set -euo pipefail
-          app="release/mac-universal/IPloom Studio.app/Contents/MacOS/IPloom Studio"
-          test -n "$app"
-          lipo -archs "$app" | grep -q arm64
-          lipo -archs "$app" | grep -q x86_64
-          test -s "apps/studio/build/icon.icns"
+        run: bun scripts/studio/verify-release-inputs.ts dir --platform darwin
       - name: Verify Windows package
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $app = Get-ChildItem release -Recurse -Filter 'IPloom Studio.exe' |
-            Where-Object { $_.Length -gt 1000000 } |
-            Select-Object -First 1
-          if (-not $app) { throw 'Packaged Windows executable not found' }
-          if ((Get-Item 'apps/studio/build/icon.ico').Length -lt 1000) {
-            throw 'Windows icon is missing or empty'
-          }
+        run: bun scripts/studio/verify-release-inputs.ts dir --platform win32
       - run: bun run studio:smoke:package
       - run: bun run studio:verify-mcp --packaged
+      - name: Confirm Rosetta 2 is available for the Intel slice
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          uname -m
+          if ! /usr/bin/arch -x86_64 /usr/bin/true; then
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
+      - name: Smoke the Intel slice
+        if: runner.os == 'macOS'
+        run: bun scripts/studio/smoke.ts --packaged --arch x86_64
+      - name: Verify MCP through the Intel slice
+        if: runner.os == 'macOS'
+        run: bun scripts/studio/verify-mcp.ts --packaged --arch x86_64
       - name: Upload package-smoke bundles
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: studio-ci-${{ runner.os }}-bundle
           path: |

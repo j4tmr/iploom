@@ -87,7 +87,7 @@ function locationPrompt(
 }
 
 function buildShotPrompt(
-  chapter: Chapter,
+  _chapter: Chapter,
   scene: StoryScene,
   shot: StoryShot,
   universe: StoryUniverse,
@@ -153,9 +153,13 @@ function clipText(
 ): { text: string; truncated: boolean } {
   if (value.length <= max) return { text: value, truncated: false };
   let cut = ellipsis && max > 1 ? max - 1 : max;
-  if (isHighSurrogate(value.charCodeAt(cut - 1)) && isLowSurrogate(value.charCodeAt(cut)))
+  if (
+    isHighSurrogate(value.charCodeAt(cut - 1)) &&
+    isLowSurrogate(value.charCodeAt(cut))
+  )
     cut -= 1;
-  if (cut <= 0) return { text: ellipsis ? "…" : value.slice(0, max), truncated: true };
+  if (cut <= 0)
+    return { text: ellipsis ? "…" : value.slice(0, max), truncated: true };
   const text = value.slice(0, cut).trimEnd();
   return {
     text: ellipsis && max > 1 ? `${text}…` : text,
@@ -169,7 +173,11 @@ function splitLongParagraph(paragraph: string, max: number): string[] {
   while (rest.length > max) {
     let cut = -1;
     const floor = Math.floor(max * 0.5);
-    for (let index = Math.min(max, rest.length - 1); index >= floor; index -= 1) {
+    for (
+      let index = Math.min(max, rest.length - 1);
+      index >= floor;
+      index -= 1
+    ) {
       if ("。！？!?".includes(rest[index]!)) {
         cut = index + 1;
         break;
@@ -177,7 +185,10 @@ function splitLongParagraph(paragraph: string, max: number): string[] {
     }
     if (cut <= 0) {
       cut = max;
-      if (isHighSurrogate(rest.charCodeAt(cut - 1)) && isLowSurrogate(rest.charCodeAt(cut)))
+      if (
+        isHighSurrogate(rest.charCodeAt(cut - 1)) &&
+        isLowSurrogate(rest.charCodeAt(cut))
+      )
         cut -= 1;
       if (cut <= 0) cut = 2;
     }
@@ -205,7 +216,9 @@ function chapterParagraphs(chapter: Chapter): string[] {
     .split(splitter)
     .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
     .filter(Boolean)
-    .flatMap((paragraph) => splitLongParagraph(paragraph, PARAGRAPH_SHOT_TARGET));
+    .flatMap((paragraph) =>
+      splitLongParagraph(paragraph, PARAGRAPH_SHOT_TARGET),
+    );
 }
 
 function sampleEvenly<T>(items: readonly T[], limit: number): T[] {
@@ -307,7 +320,10 @@ function authorScenes(chapter: Chapter): {
   };
 }
 
-function ensureSceneShots(scenes: PlannedScene[], chapter: Chapter): PlannedScene[] {
+function ensureSceneShots(
+  scenes: PlannedScene[],
+  chapter: Chapter,
+): PlannedScene[] {
   return scenes.map((scene, sceneIndex) => {
     if (scene.shots.length) return scene;
     const shotId = `shot_${String(sceneIndex + 1).padStart(2, "0")}`;
@@ -342,10 +358,15 @@ function splitOversizedScenes(
 ): PlannedScene[] {
   const parts = scenes.reduce(
     (sum, scene) =>
-      sum + Math.max(1, Math.ceil(scene.shots.length / STORYBOARD_LIMITS.shotsPerScene)),
+      sum +
+      Math.max(
+        1,
+        Math.ceil(scene.shots.length / STORYBOARD_LIMITS.shotsPerScene),
+      ),
     0,
   );
-  if (parts === scenes.length || parts > STORYBOARD_LIMITS.scenes) return scenes;
+  if (parts === scenes.length || parts > STORYBOARD_LIMITS.scenes)
+    return scenes;
   let splitScenes = 0;
   const result: PlannedScene[] = [];
   for (const scene of scenes) {
@@ -403,10 +424,7 @@ function allocateShots(
     }
     if (!added) break;
   }
-  const total = scenes.reduce(
-    (sum, scene) => sum + scene.shots.length,
-    0,
-  );
+  const total = scenes.reduce((sum, scene) => sum + scene.shots.length, 0);
   const kept = keep.reduce((sum, value) => sum + value, 0);
   if (total > kept)
     warnings.push(
@@ -486,7 +504,8 @@ function hydrateScenes(
           STORYBOARD_LIMITS.dialogue,
           true,
         ).text,
-        camera: clipText(entry.shot.camera, STORYBOARD_LIMITS.camera, true).text,
+        camera: clipText(entry.shot.camera, STORYBOARD_LIMITS.camera, true)
+          .text,
         durationMs: entry.shot.durationMs,
         visualPrompt: "",
       };
@@ -610,7 +629,8 @@ export async function buildArcReelBundle(
   );
   if (!universe) throw new Error(`Unknown universe: ${work.universeId}`);
   const locale = options.locale ?? work.language;
-  const aspectRatio = options.aspectRatio ?? workspace.settings.defaultAspectRatio;
+  const aspectRatio =
+    options.aspectRatio ?? workspace.settings.defaultAspectRatio;
   const generatedAt = options.generatedAt ?? new Date().toISOString();
   const requested = options.chapterIds?.length
     ? new Set(options.chapterIds)
@@ -626,7 +646,9 @@ export async function buildArcReelBundle(
     }
   }
   if (options.approvedOnly) {
-    const filtered = chapters.filter((chapter) => chapter.status === "approved");
+    const filtered = chapters.filter(
+      (chapter) => chapter.status === "approved",
+    );
     if (filtered.length !== chapters.length)
       warnings.push(
         `Excluded ${chapters.length - filtered.length} chapter(s) that are not approved.`,
@@ -644,7 +666,9 @@ export async function buildArcReelBundle(
   const factions = workspace.factions.filter(
     (faction) => faction.universeId === universe.id,
   );
-  const lore = workspace.lore.filter((entry) => entry.universeId === universe.id);
+  const lore = workspace.lore.filter(
+    (entry) => entry.universeId === universe.id,
+  );
   const relationships = workspace.relationships.filter(
     (relationship) => relationship.universeId === universe.id,
   );
@@ -734,7 +758,10 @@ export async function buildArcReelBundle(
     if (chapter.scenes.length) {
       source = { ...authorScenes(chapter), droppedParagraphs: 0 };
     } else {
-      source = { ...paragraphScenes(chapter, chapterCharacters), droppedScenes: 0 };
+      source = {
+        ...paragraphScenes(chapter, chapterCharacters),
+        droppedScenes: 0,
+      };
     }
     if (source.droppedScenes)
       warnings.push(
@@ -765,13 +792,18 @@ export async function buildArcReelBundle(
     );
     const scenes = hydratedScenes.map((item) => item.scene);
     if (!chapter.content.trim())
-      warnings.push(`Chapter ${chapter.number} has no prose; export contains a director draft only.`);
+      warnings.push(
+        `Chapter ${chapter.number} has no prose; export contains a director draft only.`,
+      );
     if (chapter.status !== "approved")
       warnings.push(
         `Chapter ${chapter.number} status is ${chapter.status}; approve before production.`,
       );
     const sceneCount = scenes.length;
-    const shotCount = scenes.reduce((sum, scene) => sum + scene.shots.length, 0);
+    const shotCount = scenes.reduce(
+      (sum, scene) => sum + scene.shots.length,
+      0,
+    );
     totalScenes += sceneCount;
     totalShots += shotCount;
     const sequence = String(chapter.number).padStart(4, "0");
@@ -856,54 +888,57 @@ export async function buildArcReelBundle(
         source: "iploom-studio",
         pov: chapter.pov,
       },
-      scenes: hydratedScenes.map(({ scene, sourceSceneId, sourceShotIds }, sceneIndex) => ({
-        id: `scene_${String(sceneIndex + 1).padStart(2, "0")}`,
-        sequence: sceneIndex + 1,
-        heading:
-          scene.title.trim() ||
-          `Scene ${sceneIndex + 1} / 场景 ${sceneIndex + 1}`,
-        description: scene.summary,
-        location: clipText(
-          scene.locationId
-            ? displayText(
-                locations.find((item) => item.id === scene.locationId)?.name ?? {
-                  zh: scene.locationId,
-                  en: scene.locationId,
-                },
-                locale,
-              )
-            : location
-              ? displayText(location.name, locale)
-              : "",
-          STORYBOARD_LIMITS.location,
-          true,
-        ).text,
-        story_time: "",
-        data: {
-          character_ids: scene.characterIds,
-          source_chapter_id: chapter.id,
-          source_scene_id: sourceSceneId,
-          pov: chapter.pov,
-        },
-        shots: scene.shots.map((shot, shotIndex) => ({
-          id: `shot_${String(shotIndex + 1).padStart(2, "0")}`,
-          sequence: shotIndex + 1,
-          shot_type: shot.shotType.trim() || "medium",
-          description:
-            shot.description.trim() ||
-            `Shot ${shotIndex + 1} direction pending author review.`,
-          dialogue: shot.dialogue,
-          camera: shot.camera,
-          duration_ms: shot.durationMs,
-          prompt: shot.visualPrompt,
+      scenes: hydratedScenes.map(
+        ({ scene, sourceSceneId, sourceShotIds }, sceneIndex) => ({
+          id: `scene_${String(sceneIndex + 1).padStart(2, "0")}`,
+          sequence: sceneIndex + 1,
+          heading:
+            scene.title.trim() ||
+            `Scene ${sceneIndex + 1} / 场景 ${sceneIndex + 1}`,
+          description: scene.summary,
+          location: clipText(
+            scene.locationId
+              ? displayText(
+                  locations.find((item) => item.id === scene.locationId)
+                    ?.name ?? {
+                    zh: scene.locationId,
+                    en: scene.locationId,
+                  },
+                  locale,
+                )
+              : location
+                ? displayText(location.name, locale)
+                : "",
+            STORYBOARD_LIMITS.location,
+            true,
+          ).text,
+          story_time: "",
           data: {
+            character_ids: scene.characterIds,
             source_chapter_id: chapter.id,
             source_scene_id: sourceSceneId,
-            source_shot_id: sourceShotIds[shotIndex]!,
-            style: "stylized-3d-animation",
+            pov: chapter.pov,
           },
-        })),
-      })),
+          shots: scene.shots.map((shot, shotIndex) => ({
+            id: `shot_${String(shotIndex + 1).padStart(2, "0")}`,
+            sequence: shotIndex + 1,
+            shot_type: shot.shotType.trim() || "medium",
+            description:
+              shot.description.trim() ||
+              `Shot ${shotIndex + 1} direction pending author review.`,
+            dialogue: shot.dialogue,
+            camera: shot.camera,
+            duration_ms: shot.durationMs,
+            prompt: shot.visualPrompt,
+            data: {
+              source_chapter_id: chapter.id,
+              source_scene_id: sourceSceneId,
+              source_shot_id: sourceShotIds[shotIndex]!,
+              style: "stylized-3d-animation",
+            },
+          })),
+        }),
+      ),
     };
     let storyboard: ReturnType<typeof storyboardWriteSchema.parse>;
     try {
@@ -912,7 +947,10 @@ export async function buildArcReelBundle(
       const detail =
         error instanceof ZodError
           ? error.issues
-              .map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`)
+              .map(
+                (issue) =>
+                  `${issue.path.join(".") || "root"}: ${issue.message}`,
+              )
               .join("; ")
           : String(error);
       throw new Error(
@@ -928,11 +966,13 @@ export async function buildArcReelBundle(
   }
 
   const exportedChapterIds = new Set(chapters.map((chapter) => chapter.id));
-  const approvedDesigns = workspace.workflowTasks.filter((task) =>
-    task.status === "done" &&
-    (task.workId === work.id || (!task.workId && task.universeId === universe.id)) &&
-    (!task.chapterId || exportedChapterIds.has(task.chapterId)) &&
-    (task.result.zh.trim() || task.result.en.trim()),
+  const approvedDesigns = workspace.workflowTasks.filter(
+    (task) =>
+      task.status === "done" &&
+      (task.workId === work.id ||
+        (!task.workId && task.universeId === universe.id)) &&
+      (!task.chapterId || exportedChapterIds.has(task.chapterId)) &&
+      (task.result.zh.trim() || task.result.en.trim()),
   );
   files.push({
     path: "production/approved-designs.json",
@@ -1039,7 +1079,10 @@ export async function buildArcReelBundle(
     aspectRatio,
     style: "stylized-3d-animation",
     chapters: chapterPreviews,
-    totalWords: chapterPreviews.reduce((sum, chapter) => sum + chapter.words, 0),
+    totalWords: chapterPreviews.reduce(
+      (sum, chapter) => sum + chapter.words,
+      0,
+    ),
     totalScenes,
     totalShots,
     warnings,

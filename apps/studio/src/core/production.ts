@@ -13,23 +13,68 @@ import {
 } from "./types.ts";
 
 export const productionTemplates = {
-  world: ["世界观设计", "World bible", "Design rules, history, geography, factions and unresolved mysteries. Separate canon from proposals."],
-  chapter: ["章节创作", "Chapter writing", "Write the selected chapter from its outline and prior context. Preserve POV, character motives, chronology and unresolved plot threads. Return manuscript plus continuity notes."],
-  character: ["人物设计", "Character design", "Design identity, silhouette, appearance, motivation, flaw, relationships, voice and front/side/back reference prompts. Keep fixed traits explicit."],
-  costume: ["人物服装", "Costume design", "Design named costume variants for the selected character: occasion, material, palette, layers, accessories, wear and continuity. Preserve face/body identity. Include reusable image prompts and negatives."],
-  relationship: ["人物关系", "Relationships", "Audit directional relationships: source, target, type, motive, public/hidden status, evolution and chapter evidence. Distinguish alliance from co-occurrence; do not invent canon."],
-  location: ["地点与布景", "Location design", "Design reusable environments: geography, entrances, scale, layout, props, light, palette and establishing-shot prompts. Preserve traversal and spatial continuity."],
-  scene: ["场景设计", "Scene design", "Break the selected chapter into numbered scenes: time/location, cast, costume states, goals/conflict, action beats, dialogue, transitions and source evidence. Include environment prompts."],
-  storyboard: ["分镜与镜头", "Storyboard", "Produce a shot list per scene: framing, camera/lens/motion, staging, action, dialogue/audio, duration, continuity, image prompt, video prompt and negative prompt. Keep stylized 3D animation, no live action or photorealism."],
-  review: ["连续性审查", "Continuity review", "Review canon, chronology, relationships, costumes, geography and shot continuity. Cite exact source conflicts, severity and proposed fixes without rewriting approved facts."],
-} as const satisfies Record<WorkflowTaskTemplate, readonly [string, string, string]>;
+  world: [
+    "世界观设计",
+    "World bible",
+    "Design rules, history, geography, factions and unresolved mysteries. Separate canon from proposals.",
+  ],
+  chapter: [
+    "章节创作",
+    "Chapter writing",
+    "Write the selected chapter from its outline and prior context. Preserve POV, character motives, chronology and unresolved plot threads. Return manuscript plus continuity notes.",
+  ],
+  character: [
+    "人物设计",
+    "Character design",
+    "Design identity, silhouette, appearance, motivation, flaw, relationships, voice and front/side/back reference prompts. Keep fixed traits explicit.",
+  ],
+  costume: [
+    "人物服装",
+    "Costume design",
+    "Design named costume variants for the selected character: occasion, material, palette, layers, accessories, wear and continuity. Preserve face/body identity. Include reusable image prompts and negatives.",
+  ],
+  relationship: [
+    "人物关系",
+    "Relationships",
+    "Audit directional relationships: source, target, type, motive, public/hidden status, evolution and chapter evidence. Distinguish alliance from co-occurrence; do not invent canon.",
+  ],
+  location: [
+    "地点与布景",
+    "Location design",
+    "Design reusable environments: geography, entrances, scale, layout, props, light, palette and establishing-shot prompts. Preserve traversal and spatial continuity.",
+  ],
+  scene: [
+    "场景设计",
+    "Scene design",
+    "Break the selected chapter into numbered scenes: time/location, cast, costume states, goals/conflict, action beats, dialogue, transitions and source evidence. Include environment prompts.",
+  ],
+  storyboard: [
+    "分镜与镜头",
+    "Storyboard",
+    "Produce a shot list per scene: framing, camera/lens/motion, staging, action, dialogue/audio, duration, continuity, image prompt, video prompt and negative prompt. Keep stylized 3D animation, no live action or photorealism.",
+  ],
+  review: [
+    "连续性审查",
+    "Continuity review",
+    "Review canon, chronology, relationships, costumes, geography and shot continuity. Cite exact source conflicts, severity and proposed fixes without rewriting approved facts.",
+  ],
+} as const satisfies Record<
+  WorkflowTaskTemplate,
+  readonly [string, string, string]
+>;
 export type ProductionTemplate = WorkflowTaskTemplate;
 /** Deliverable text every generated production task starts with. */
 export const PRODUCTION_TASK_DELIVERABLE: LocalizedText = {
   zh: "审阅设计结果与可复用提示词，再标记完成。",
   en: "Review the design and reusable prompts before marking done.",
 };
-export interface ProductionScope { universeId?: string; workId?: string; chapterId?: string; characterId?: string; characterIds?: string[] }
+export interface ProductionScope {
+  universeId?: string;
+  workId?: string;
+  chapterId?: string;
+  characterId?: string;
+  characterIds?: string[];
+}
 export interface ProductionPromptOptions {
   includeStandards?: boolean;
   /** Include the raw workspace snapshot appended as SOURCE DATA. */
@@ -45,36 +90,96 @@ export interface ProductionPromptOptions {
  * and belong together, so the checked commit never rejects them and a task can
  * never pair a stale chapter with a different work's world.
  */
-export function resolveProductionScope(workspace: StudioWorkspace, scope: ProductionScope): ProductionScope {
-  const work = scope.workId ? workspace.works.find((item) => item.id === scope.workId) : undefined;
-  const universeId = work?.universeId ?? (scope.universeId && workspace.universes.some((item) => item.id === scope.universeId) ? scope.universeId : undefined);
+export function resolveProductionScope(
+  workspace: StudioWorkspace,
+  scope: ProductionScope,
+): ProductionScope {
+  const work = scope.workId
+    ? workspace.works.find((item) => item.id === scope.workId)
+    : undefined;
+  const universeId =
+    work?.universeId ??
+    (scope.universeId &&
+    workspace.universes.some((item) => item.id === scope.universeId)
+      ? scope.universeId
+      : undefined);
   const chapter = work?.chapters.find((item) => item.id === scope.chapterId);
-  const requestedCharacters = scope.characterIds ?? (scope.characterId ? [scope.characterId] : []);
-  const characterIds = requestedCharacters.filter((id) => workspace.characters.some((item) => item.id === id && (!universeId || item.universeIds.includes(universeId))));
-  return { universeId, workId: work?.id, chapterId: chapter?.id, characterId: scope.characterId && characterIds.includes(scope.characterId) ? scope.characterId : undefined, characterIds };
+  const requestedCharacters =
+    scope.characterIds ?? (scope.characterId ? [scope.characterId] : []);
+  const characterIds = requestedCharacters.filter((id) =>
+    workspace.characters.some(
+      (item) =>
+        item.id === id &&
+        (!universeId || item.universeIds.includes(universeId)),
+    ),
+  );
+  return {
+    universeId,
+    workId: work?.id,
+    chapterId: chapter?.id,
+    characterId:
+      scope.characterId && characterIds.includes(scope.characterId)
+        ? scope.characterId
+        : undefined,
+    characterIds,
+  };
 }
 
-export function buildProductionPrompt(workspace: StudioWorkspace, template: ProductionTemplate, scope: ProductionScope, locale: UiLocale, options: ProductionPromptOptions = {}): string {
+export function buildProductionPrompt(
+  workspace: StudioWorkspace,
+  template: ProductionTemplate,
+  scope: ProductionScope,
+  locale: UiLocale,
+  options: ProductionPromptOptions = {},
+): string {
   scope = resolveProductionScope(workspace, scope);
   const work = workspace.works.find((item) => item.id === scope.workId);
   const universeId = work?.universeId ?? scope.universeId;
   const chapter = work?.chapters.find((item) => item.id === scope.chapterId);
-  const characterIds = scope.characterIds?.length ? scope.characterIds : scope.characterId ? [scope.characterId] : chapter?.characterIds;
-  const standards = options.includeStandards === false ? [] : standardsPromptSection(workspace, universeId, locale);
+  const characterIds = scope.characterIds?.length
+    ? scope.characterIds
+    : scope.characterId
+      ? [scope.characterId]
+      : chapter?.characterIds;
+  const standards =
+    options.includeStandards === false
+      ? []
+      : standardsPromptSection(workspace, universeId, locale);
   let sourceData = "";
   if (options.includeContext !== false) {
-    const characters = workspace.characters.filter((item) => item.universeIds.includes(universeId ?? "") && (!characterIds || characterIds.includes(item.id)));
+    const characters = workspace.characters.filter(
+      (item) =>
+        item.universeIds.includes(universeId ?? "") &&
+        (!characterIds || characterIds.includes(item.id)),
+    );
     const context = {
       sourceRevision: workspace.revision,
       world: workspace.universes.find((item) => item.id === universeId),
       work: work && { ...work, chapters: undefined },
       chapter,
-      chapterIndex: work?.chapters.map(({ id, number, title, summary }) => ({ id, number, title, summary })),
+      chapterIndex: work?.chapters.map(({ id, number, title, summary }) => ({
+        id,
+        number,
+        title,
+        summary,
+      })),
       characters,
-      relationships: workspace.relationships.filter((item) => item.universeId === universeId && (!characterIds || characterIds.includes(item.sourceId) || characterIds.includes(item.targetId))),
-      locations: workspace.locations.filter((item) => item.universeId === universeId),
-      storyObjects: workspace.storyObjects.filter((item) => item.universeId === universeId),
-      factions: workspace.factions.filter((item) => item.universeId === universeId),
+      relationships: workspace.relationships.filter(
+        (item) =>
+          item.universeId === universeId &&
+          (!characterIds ||
+            characterIds.includes(item.sourceId) ||
+            characterIds.includes(item.targetId)),
+      ),
+      locations: workspace.locations.filter(
+        (item) => item.universeId === universeId,
+      ),
+      storyObjects: workspace.storyObjects.filter(
+        (item) => item.universeId === universeId,
+      ),
+      factions: workspace.factions.filter(
+        (item) => item.universeId === universeId,
+      ),
       lore: workspace.lore.filter((item) => item.universeId === universeId),
       timeline: timelinePromptContext(workspace, scope, locale),
     };
@@ -161,7 +266,9 @@ export function approvedAncestorTasks(
     WORKFLOW_TASK_TEMPLATES.indexOf(effectiveProductionTemplate(item));
   return [...seen]
     .map((id) => byId.get(id))
-    .filter((item): item is WorkflowTask => Boolean(item && item.status === "done"))
+    .filter((item): item is WorkflowTask =>
+      Boolean(item && item.status === "done"),
+    )
     .sort(
       (left, right) =>
         rank(left) - rank(right) ||
@@ -170,26 +277,53 @@ export function approvedAncestorTasks(
     );
 }
 
-export function createProductionTasks(workspace: StudioWorkspace, scope: ProductionScope, locale: UiLocale): WorkflowTask[] {
+export function createProductionTasks(
+  workspace: StudioWorkspace,
+  scope: ProductionScope,
+  _locale: UiLocale,
+): WorkflowTask[] {
   scope = resolveProductionScope(workspace, scope);
   const work = workspace.works.find((item) => item.id === scope.workId);
   const universeId = scope.universeId;
-  if (!universeId) throw new Error("请先选择故事世界 / Select a story world first.");
+  if (!universeId)
+    throw new Error("请先选择故事世界 / Select a story world first.");
   const now = new Date().toISOString();
-  const stages: ProductionTemplate[] = ["world", "character", "costume", "scene", "storyboard", "review"];
+  const stages: ProductionTemplate[] = [
+    "world",
+    "character",
+    "costume",
+    "scene",
+    "storyboard",
+    "review",
+  ];
   let previous: string | undefined;
   return stages.map((template) => {
     const [zh, en, brief] = productionTemplates[template];
     const id = createId("task");
     const task: WorkflowTask = {
-      id, title: { zh, en }, brief: { zh: brief, en: brief },
+      id,
+      title: { zh, en },
+      brief: { zh: brief, en: brief },
       deliverable: { ...PRODUCTION_TASK_DELIVERABLE },
-      result: { zh: "", en: "" }, kind: template === "world" ? "world" : template === "character" || template === "costume" ? "character" : template === "review" ? "review" : "adaptation",
+      result: { zh: "", en: "" },
+      kind:
+        template === "world"
+          ? "world"
+          : template === "character" || template === "costume"
+            ? "character"
+            : template === "review"
+              ? "review"
+              : "adaptation",
       template,
-      status: "queued", universeId, workId: work?.id, chapterId: scope.chapterId,
-      characterIds: scope.characterId ? [scope.characterId] : [], dependsOnIds: previous ? [previous] : [],
+      status: "queued",
+      universeId,
+      workId: work?.id,
+      chapterId: scope.chapterId,
+      characterIds: scope.characterId ? [scope.characterId] : [],
+      dependsOnIds: previous ? [previous] : [],
       standardRefs: standardRefsFor(workspace, universeId),
-      createdAt: now, updatedAt: now,
+      createdAt: now,
+      updatedAt: now,
     };
     previous = id;
     return task;
@@ -218,17 +352,27 @@ function clipApprovedResult(result: string, limit: number): string {
  * letting one stage push the whole prompt past a hard rejection (issue #21).
  * Stage order, headings and the production instructions are never dropped.
  */
-export function taskProductionPrompt(workspace: StudioWorkspace, task: WorkflowTask, locale: UiLocale): string {
+export function taskProductionPrompt(
+  workspace: StudioWorkspace,
+  task: WorkflowTask,
+  locale: UiLocale,
+): string {
   const template = effectiveProductionTemplate(task);
-  const approvedOutputs = approvedAncestorTasks(workspace, task).map((item) => ({
-    stage: productionTemplates[effectiveProductionTemplate(item)][locale === "en" ? 1 : 0],
-    title: displayText(item.title, locale),
-    result: displayText(item.result, locale) || "—",
-  }));
+  const approvedOutputs = approvedAncestorTasks(workspace, task).map(
+    (item) => ({
+      stage:
+        productionTemplates[effectiveProductionTemplate(item)][
+          locale === "en" ? 1 : 0
+        ],
+      title: displayText(item.title, locale),
+      result: displayText(item.result, locale) || "—",
+    }),
+  );
   const render = (outputs: typeof approvedOutputs) =>
     `${buildWorkflowBrief(workspace, task.id, locale, { approvedOutputs: outputs })}\n${buildProductionPrompt(workspace, template, { universeId: task.universeId, workId: task.workId, chapterId: task.chapterId, characterIds: task.characterIds }, locale, { includeStandards: false, includeContext: false })}`;
   const prompt = render(approvedOutputs);
-  if (prompt.length <= MAX_AI_PROMPT_LENGTH || !approvedOutputs.length) return prompt;
+  if (prompt.length <= MAX_AI_PROMPT_LENGTH || !approvedOutputs.length)
+    return prompt;
   const base = render(approvedOutputs.map((item) => ({ ...item, result: "" })));
   const available = Math.max(0, MAX_AI_PROMPT_LENGTH - base.length);
   const share = Math.floor(available / approvedOutputs.length);

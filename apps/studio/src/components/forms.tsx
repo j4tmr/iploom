@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createId, displayText } from "../core/factory.ts";
 import { inferProductionTemplate } from "../core/production.ts";
-import { STANDARD_KINDS, standardKindLabel, standardRefsFor } from "../core/standards.ts";
+import {
+  STANDARD_KINDS,
+  standardKindLabel,
+  standardRefsFor,
+} from "../core/standards.ts";
 import { CHAPTER_LIMITS, MAX_LOCALIZED_LENGTH } from "../core/types.ts";
 import type {
   Chapter,
@@ -31,7 +35,16 @@ import {
   statusLabels,
   type Translate,
 } from "../i18n.ts";
-import { Button, Field, FieldGrid, Modal, Select, TextArea, TextInput, splitTags } from "./ui.tsx";
+import {
+  Button,
+  Field,
+  FieldGrid,
+  Modal,
+  Select,
+  TextArea,
+  TextInput,
+  splitTags,
+} from "./ui.tsx";
 
 type ModalBase = {
   open: boolean;
@@ -78,9 +91,23 @@ export function CharacterModal({
   // The modal is mounted per edit session (app.tsx keys it), so the first
   // render is the untouched baseline. Everything after that is user input.
   const snapshot = JSON.stringify([
-    nameZh, nameEn, roleZh, roleEn, summaryZh, summaryEn, appearance,
-    visualPrompt, personality, motivation, flaw, secret, voice, tags, color,
-    reusable, universeIds,
+    nameZh,
+    nameEn,
+    roleZh,
+    roleEn,
+    summaryZh,
+    summaryEn,
+    appearance,
+    visualPrompt,
+    personality,
+    motivation,
+    flaw,
+    secret,
+    voice,
+    tags,
+    color,
+    reusable,
+    universeIds,
   ]);
   const baselineRef = useRef(snapshot);
   const requestClose = () => {
@@ -143,49 +170,106 @@ export function CharacterModal({
     >
       <FieldGrid>
         <Field label={t("nameZh")}>
-          <TextInput value={nameZh} onChange={(event) => setNameZh(event.target.value)} autoFocus />
+          <TextInput
+            value={nameZh}
+            onChange={(event) => setNameZh(event.target.value)}
+            autoFocus
+          />
         </Field>
         <Field label={t("nameEn")}>
-          <TextInput value={nameEn} onChange={(event) => setNameEn(event.target.value)} />
+          <TextInput
+            value={nameEn}
+            onChange={(event) => setNameEn(event.target.value)}
+          />
         </Field>
         <Field label={t("roleZh")}>
-          <TextInput value={roleZh} onChange={(event) => setRoleZh(event.target.value)} />
+          <TextInput
+            value={roleZh}
+            onChange={(event) => setRoleZh(event.target.value)}
+          />
         </Field>
         <Field label={t("roleEn")}>
-          <TextInput value={roleEn} onChange={(event) => setRoleEn(event.target.value)} />
+          <TextInput
+            value={roleEn}
+            onChange={(event) => setRoleEn(event.target.value)}
+          />
         </Field>
         <Field label={t("summaryZh")} wide>
-          <TextArea rows={3} value={summaryZh} onChange={(event) => setSummaryZh(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={summaryZh}
+            onChange={(event) => setSummaryZh(event.target.value)}
+          />
         </Field>
         <Field label={t("summaryEn")} wide>
-          <TextArea rows={3} value={summaryEn} onChange={(event) => setSummaryEn(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={summaryEn}
+            onChange={(event) => setSummaryEn(event.target.value)}
+          />
         </Field>
         <Field label={t("appearance")} wide>
-          <TextArea rows={3} value={appearance} onChange={(event) => setAppearance(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={appearance}
+            onChange={(event) => setAppearance(event.target.value)}
+          />
         </Field>
         <Field label={t("visualPrompt")} hint={t("style3d")} wide>
-          <TextArea rows={4} value={visualPrompt} onChange={(event) => setVisualPrompt(event.target.value)} />
+          <TextArea
+            rows={4}
+            value={visualPrompt}
+            onChange={(event) => setVisualPrompt(event.target.value)}
+          />
         </Field>
         <Field label={t("personality")}>
-          <TextArea rows={3} value={personality} onChange={(event) => setPersonality(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={personality}
+            onChange={(event) => setPersonality(event.target.value)}
+          />
         </Field>
         <Field label={t("motivation")}>
-          <TextArea rows={3} value={motivation} onChange={(event) => setMotivation(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={motivation}
+            onChange={(event) => setMotivation(event.target.value)}
+          />
         </Field>
         <Field label={t("flaw")}>
-          <TextArea rows={3} value={flaw} onChange={(event) => setFlaw(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={flaw}
+            onChange={(event) => setFlaw(event.target.value)}
+          />
         </Field>
         <Field label={t("secret")}>
-          <TextArea rows={3} value={secret} onChange={(event) => setSecret(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={secret}
+            onChange={(event) => setSecret(event.target.value)}
+          />
         </Field>
         <Field label={t("voice")}>
-          <TextArea rows={3} value={voice} onChange={(event) => setVoice(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={voice}
+            onChange={(event) => setVoice(event.target.value)}
+          />
         </Field>
         <Field label={t("tags")} hint={t("tagPlaceholder")}>
-          <TextInput value={tags} onChange={(event) => setTags(event.target.value)} />
+          <TextInput
+            value={tags}
+            onChange={(event) => setTags(event.target.value)}
+          />
         </Field>
         <Field label={t("color")}>
-          <input className="color-input" type="color" value={color} onChange={(event) => setColor(event.target.value)} />
+          <input
+            className="color-input"
+            type="color"
+            value={color}
+            onChange={(event) => setColor(event.target.value)}
+          />
         </Field>
         <Field label={t("linkedWorlds")} wide>
           <div className="check-grid">
@@ -209,7 +293,11 @@ export function CharacterModal({
           </div>
         </Field>
         <label className="toggle-row field-wide">
-          <input type="checkbox" checked={reusable} onChange={(event) => setReusable(event.target.checked)} />
+          <input
+            type="checkbox"
+            checked={reusable}
+            onChange={(event) => setReusable(event.target.checked)}
+          />
           <span>
             <strong>{t("reusable")}</strong>
             <small>{t("characterLead")}</small>
@@ -248,7 +336,9 @@ export function UniverseModal({
       wide
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>{t("cancel")}</Button>
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
           <Button
             variant="primary"
             icon="check"
@@ -276,31 +366,69 @@ export function UniverseModal({
     >
       <FieldGrid>
         <Field label={t("nameZh")}>
-          <TextInput autoFocus maxLength={MAX_LOCALIZED_LENGTH} value={nameZh} onChange={(event) => setNameZh(event.target.value)} />
+          <TextInput
+            autoFocus
+            maxLength={MAX_LOCALIZED_LENGTH}
+            value={nameZh}
+            onChange={(event) => setNameZh(event.target.value)}
+          />
         </Field>
         <Field label={t("nameEn")}>
-          <TextInput maxLength={MAX_LOCALIZED_LENGTH} value={nameEn} onChange={(event) => setNameEn(event.target.value)} />
+          <TextInput
+            maxLength={MAX_LOCALIZED_LENGTH}
+            value={nameEn}
+            onChange={(event) => setNameEn(event.target.value)}
+          />
         </Field>
         <Field label={t("titleZh")}>
-          <TextInput maxLength={MAX_LOCALIZED_LENGTH} value={taglineZh} onChange={(event) => setTaglineZh(event.target.value)} />
+          <TextInput
+            maxLength={MAX_LOCALIZED_LENGTH}
+            value={taglineZh}
+            onChange={(event) => setTaglineZh(event.target.value)}
+          />
         </Field>
         <Field label={t("titleEn")}>
-          <TextInput maxLength={MAX_LOCALIZED_LENGTH} value={taglineEn} onChange={(event) => setTaglineEn(event.target.value)} />
+          <TextInput
+            maxLength={MAX_LOCALIZED_LENGTH}
+            value={taglineEn}
+            onChange={(event) => setTaglineEn(event.target.value)}
+          />
         </Field>
         <Field label={t("summaryZh")} wide>
-          <TextArea rows={4} maxLength={MAX_LOCALIZED_LENGTH} value={summaryZh} onChange={(event) => setSummaryZh(event.target.value)} />
+          <TextArea
+            rows={4}
+            maxLength={MAX_LOCALIZED_LENGTH}
+            value={summaryZh}
+            onChange={(event) => setSummaryZh(event.target.value)}
+          />
         </Field>
         <Field label={t("summaryEn")} wide>
-          <TextArea rows={4} maxLength={MAX_LOCALIZED_LENGTH} value={summaryEn} onChange={(event) => setSummaryEn(event.target.value)} />
+          <TextArea
+            rows={4}
+            maxLength={MAX_LOCALIZED_LENGTH}
+            value={summaryEn}
+            onChange={(event) => setSummaryEn(event.target.value)}
+          />
         </Field>
         <Field label={t("genre")} hint={t("tagPlaceholder")}>
-          <TextInput value={genres} onChange={(event) => setGenres(event.target.value)} />
+          <TextInput
+            value={genres}
+            onChange={(event) => setGenres(event.target.value)}
+          />
         </Field>
         <Field label={t("themes")} hint={t("tagPlaceholder")}>
-          <TextInput value={themes} onChange={(event) => setThemes(event.target.value)} />
+          <TextInput
+            value={themes}
+            onChange={(event) => setThemes(event.target.value)}
+          />
         </Field>
         <Field label={t("coverColor")}>
-          <input className="color-input" type="color" value={accent} onChange={(event) => setAccent(event.target.value)} />
+          <input
+            className="color-input"
+            type="color"
+            value={accent}
+            onChange={(event) => setAccent(event.target.value)}
+          />
         </Field>
       </FieldGrid>
     </Modal>
@@ -323,7 +451,10 @@ export function NovelModal({
   onSave: (work: StoryWork) => boolean;
 }) {
   const [universeId, setUniverseId] = useState(
-    initial?.universeId ?? defaultUniverseId ?? workspace.universes[0]?.id ?? "",
+    initial?.universeId ??
+      defaultUniverseId ??
+      workspace.universes[0]?.id ??
+      "",
   );
   const [titleZh, setTitleZh] = useState(initial?.title.zh ?? "");
   const [titleEn, setTitleEn] = useState(initial?.title.en ?? "");
@@ -335,11 +466,15 @@ export function NovelModal({
   const [targetWords, setTargetWords] = useState(
     String(initial?.targetWords ?? 120_000),
   );
-  const [status, setStatus] = useState<WorkStatus>(initial?.status ?? "concept");
+  const [status, setStatus] = useState<WorkStatus>(
+    initial?.status ?? "concept",
+  );
   const [language, setLanguage] = useState<UiLocale>(
     initial?.language ?? locale,
   );
-  const [coverColor, setCoverColor] = useState(initial?.coverColor ?? "#2f7567");
+  const [coverColor, setCoverColor] = useState(
+    initial?.coverColor ?? "#2f7567",
+  );
   return (
     <Modal
       open={open}
@@ -349,7 +484,9 @@ export function NovelModal({
       wide
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>{t("cancel")}</Button>
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
           <Button
             variant="primary"
             icon="check"
@@ -382,7 +519,10 @@ export function NovelModal({
     >
       <FieldGrid>
         <Field label={t("storyWorld")}>
-          <Select value={universeId} onChange={(event) => setUniverseId(event.target.value)}>
+          <Select
+            value={universeId}
+            onChange={(event) => setUniverseId(event.target.value)}
+          >
             {workspace.universes.map((universe) => (
               <option key={universe.id} value={universe.id}>
                 {displayText(universe.name, locale)}
@@ -391,44 +531,95 @@ export function NovelModal({
           </Select>
         </Field>
         <Field label={t("status")}>
-          <Select value={status} onChange={(event) => setStatus(event.target.value as WorkStatus)}>
-            {(["concept", "outlining", "drafting", "complete", "archived"] as WorkStatus[]).map((value) => (
-              <option key={value} value={value}>{statusLabels[locale][value]}</option>
+          <Select
+            value={status}
+            onChange={(event) => setStatus(event.target.value as WorkStatus)}
+          >
+            {(
+              [
+                "concept",
+                "outlining",
+                "drafting",
+                "complete",
+                "archived",
+              ] as WorkStatus[]
+            ).map((value) => (
+              <option key={value} value={value}>
+                {statusLabels[locale][value]}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={t("titleZh")}>
-          <TextInput autoFocus value={titleZh} onChange={(event) => setTitleZh(event.target.value)} />
+          <TextInput
+            autoFocus
+            value={titleZh}
+            onChange={(event) => setTitleZh(event.target.value)}
+          />
         </Field>
         <Field label={t("titleEn")}>
-          <TextInput value={titleEn} onChange={(event) => setTitleEn(event.target.value)} />
+          <TextInput
+            value={titleEn}
+            onChange={(event) => setTitleEn(event.target.value)}
+          />
         </Field>
         <Field label={t("loglineZh")} wide>
-          <TextArea rows={2} value={loglineZh} onChange={(event) => setLoglineZh(event.target.value)} />
+          <TextArea
+            rows={2}
+            value={loglineZh}
+            onChange={(event) => setLoglineZh(event.target.value)}
+          />
         </Field>
         <Field label={t("loglineEn")} wide>
-          <TextArea rows={2} value={loglineEn} onChange={(event) => setLoglineEn(event.target.value)} />
+          <TextArea
+            rows={2}
+            value={loglineEn}
+            onChange={(event) => setLoglineEn(event.target.value)}
+          />
         </Field>
         <Field label={t("synopsis")} wide>
-          <TextArea rows={5} value={synopsis} onChange={(event) => setSynopsis(event.target.value)} />
+          <TextArea
+            rows={5}
+            value={synopsis}
+            onChange={(event) => setSynopsis(event.target.value)}
+          />
         </Field>
         <Field label={t("genre")}>
-          <TextInput value={genre} onChange={(event) => setGenre(event.target.value)} />
+          <TextInput
+            value={genre}
+            onChange={(event) => setGenre(event.target.value)}
+          />
         </Field>
         <Field label={t("themes")} hint={t("tagPlaceholder")}>
-          <TextInput value={themes} onChange={(event) => setThemes(event.target.value)} />
+          <TextInput
+            value={themes}
+            onChange={(event) => setThemes(event.target.value)}
+          />
         </Field>
         <Field label={t("targetWords")}>
-          <TextInput type="number" min={1} value={targetWords} onChange={(event) => setTargetWords(event.target.value)} />
+          <TextInput
+            type="number"
+            min={1}
+            value={targetWords}
+            onChange={(event) => setTargetWords(event.target.value)}
+          />
         </Field>
         <Field label={t("language")}>
-          <Select value={language} onChange={(event) => setLanguage(event.target.value as UiLocale)}>
+          <Select
+            value={language}
+            onChange={(event) => setLanguage(event.target.value as UiLocale)}
+          >
             <option value="zh-CN">中文</option>
             <option value="en">English</option>
           </Select>
         </Field>
         <Field label={t("coverColor")}>
-          <input className="color-input" type="color" value={coverColor} onChange={(event) => setCoverColor(event.target.value)} />
+          <input
+            className="color-input"
+            type="color"
+            value={coverColor}
+            onChange={(event) => setCoverColor(event.target.value)}
+          />
         </Field>
       </FieldGrid>
     </Modal>
@@ -462,7 +653,9 @@ export function ChapterModal({
       description={t("addChapterLead")}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>{t("cancel")}</Button>
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
           <Button
             variant="primary"
             icon="plus"
@@ -497,9 +690,16 @@ export function ChapterModal({
     >
       <FieldGrid>
         <Field label={t("chapterNumber")}>
-          <TextInput type="number" min={1} value={number} onChange={(event) => setNumber(event.target.value)} />
+          <TextInput
+            type="number"
+            min={1}
+            value={number}
+            onChange={(event) => setNumber(event.target.value)}
+          />
         </Field>
-        {duplicateNumber ? <p className="form-error">{t("duplicateChapterNumber")}</p> : null}
+        {duplicateNumber ? (
+          <p className="form-error">{t("duplicateChapterNumber")}</p>
+        ) : null}
         <div />
         <Field label={t("chapterTitle")}>
           <TextInput
@@ -565,9 +765,7 @@ export function WorkflowTaskModal({
   const [universeId, setUniverseId] = useState(
     initial?.universeId ?? defaultUniverseId ?? "",
   );
-  const [workId, setWorkId] = useState(
-    initial?.workId ?? defaultWorkId ?? "",
-  );
+  const [workId, setWorkId] = useState(initial?.workId ?? defaultWorkId ?? "");
   const [chapterId, setChapterId] = useState(initial?.chapterId ?? "");
   const [parentId, setParentId] = useState(
     initial?.parentId ?? defaultParentId ?? "",
@@ -649,8 +847,7 @@ export function WorkflowTaskModal({
                 characterIds,
                 dependsOnIds,
                 standardRefs:
-                  initial &&
-                  initial.universeId === (universeId || undefined)
+                  initial && initial.universeId === (universeId || undefined)
                     ? initial.standardRefs
                     : standardRefsFor(workspace, universeId || undefined),
                 createdAt: initial?.createdAt ?? now,
@@ -668,7 +865,9 @@ export function WorkflowTaskModal({
         <Field label={t("kind")}>
           <Select
             value={kind}
-            onChange={(event) => setKind(event.target.value as WorkflowTaskKind)}
+            onChange={(event) =>
+              setKind(event.target.value as WorkflowTaskKind)
+            }
           >
             <option value="world">{t("taskKind_world")}</option>
             <option value="novel">{t("taskKind_novel")}</option>
@@ -738,7 +937,9 @@ export function WorkflowTaskModal({
             onChange={(event) => {
               const next = event.target.value;
               setUniverseId(next);
-              const selected = workspace.works.find((work) => work.id === workId);
+              const selected = workspace.works.find(
+                (work) => work.id === workId,
+              );
               if (selected && selected.universeId !== next) {
                 setWorkId("");
                 setChapterId("");
@@ -824,7 +1025,11 @@ export function WorkflowTaskModal({
             ))}
           </div>
         </Field>
-        <Field label={t("workflowDependencies")} hint={t("workflowDependenciesHint")} wide>
+        <Field
+          label={t("workflowDependencies")}
+          hint={t("workflowDependenciesHint")}
+          wide
+        >
           <div className="check-grid">
             {eligibleDependencies.map((task) => (
               <label className="check-card" key={task.id}>
@@ -849,7 +1054,6 @@ export function WorkflowTaskModal({
     </Modal>
   );
 }
-
 
 export function RelationshipModal({
   open,
@@ -877,7 +1081,7 @@ export function RelationshipModal({
     const preferred = initial?.sourceId ?? "";
     return characters.some((character) => character.id === preferred)
       ? preferred
-      : characters[0]?.id ?? "";
+      : (characters[0]?.id ?? "");
   });
   useEffect(() => {
     if (!characters.some((character) => character.id === sourceId)) {
@@ -895,7 +1099,7 @@ export function RelationshipModal({
     const preferred = initial?.targetId ?? "";
     return targetOptions.some((character) => character.id === preferred)
       ? preferred
-      : targetOptions[0]?.id ?? "";
+      : (targetOptions[0]?.id ?? "");
   });
   useEffect(() => {
     if (!targetOptions.some((character) => character.id === targetId)) {
@@ -906,7 +1110,9 @@ export function RelationshipModal({
   const [labelZh, setLabelZh] = useState(initial?.label.zh ?? "");
   const [labelEn, setLabelEn] = useState(initial?.label.en ?? "");
   const [strength, setStrength] = useState(String(initial?.strength ?? 3));
-  const [status, setStatus] = useState<RelationshipStatus>(initial?.status ?? "active");
+  const [status, setStatus] = useState<RelationshipStatus>(
+    initial?.status ?? "active",
+  );
   const [mutual, setMutual] = useState(initial?.mutual ?? true);
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const sourceIsValid = characters.some(
@@ -923,7 +1129,9 @@ export function RelationshipModal({
       description={t("relationshipLead")}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>{t("cancel")}</Button>
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
           <Button
             variant="primary"
             icon="link"
@@ -965,15 +1173,16 @@ export function RelationshipModal({
               // a select whose visible option and state disagree.
               if (nextSourceId === targetId) {
                 setTargetId(
-                  characters.find(
-                    (character) => character.id !== nextSourceId,
-                  )?.id ?? "",
+                  characters.find((character) => character.id !== nextSourceId)
+                    ?.id ?? "",
                 );
               }
             }}
           >
             {characters.map((character) => (
-              <option key={character.id} value={character.id}>{displayText(character.name, locale)}</option>
+              <option key={character.id} value={character.id}>
+                {displayText(character.name, locale)}
+              </option>
             ))}
           </Select>
         </Field>
@@ -985,42 +1194,87 @@ export function RelationshipModal({
             onChange={(event) => setTargetId(event.target.value)}
           >
             {targetOptions.map((character) => (
-              <option key={character.id} value={character.id}>{displayText(character.name, locale)}</option>
+              <option key={character.id} value={character.id}>
+                {displayText(character.name, locale)}
+              </option>
             ))}
           </Select>
         </Field>
         {characters.length < 2 ? (
-          <p className="field-hint field-wide">{t("relationshipNeedsTwoCharacters")}</p>
+          <p className="field-hint field-wide">
+            {t("relationshipNeedsTwoCharacters")}
+          </p>
         ) : null}
         <Field label={t("relationType")}>
-          <Select value={type} onChange={(event) => setType(event.target.value as RelationshipType)}>
-            {(Object.keys(relationshipLabels[locale]) as RelationshipType[]).map((value) => (
-              <option key={value} value={value}>{relationshipLabels[locale][value]}</option>
+          <Select
+            value={type}
+            onChange={(event) =>
+              setType(event.target.value as RelationshipType)
+            }
+          >
+            {(
+              Object.keys(relationshipLabels[locale]) as RelationshipType[]
+            ).map((value) => (
+              <option key={value} value={value}>
+                {relationshipLabels[locale][value]}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={t("status")}>
-          <Select value={status} onChange={(event) => setStatus(event.target.value as RelationshipStatus)}>
-            {(Object.keys(relationStatusLabels[locale]) as RelationshipStatus[]).map((value) => (
-              <option key={value} value={value}>{relationStatusLabels[locale][value]}</option>
+          <Select
+            value={status}
+            onChange={(event) =>
+              setStatus(event.target.value as RelationshipStatus)
+            }
+          >
+            {(
+              Object.keys(relationStatusLabels[locale]) as RelationshipStatus[]
+            ).map((value) => (
+              <option key={value} value={value}>
+                {relationStatusLabels[locale][value]}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={t("relationLabel") + " · 中文"}>
-          <TextInput value={labelZh} onChange={(event) => setLabelZh(event.target.value)} />
+          <TextInput
+            value={labelZh}
+            onChange={(event) => setLabelZh(event.target.value)}
+          />
         </Field>
         <Field label={t("relationLabel") + " · English"}>
-          <TextInput value={labelEn} onChange={(event) => setLabelEn(event.target.value)} />
+          <TextInput
+            value={labelEn}
+            onChange={(event) => setLabelEn(event.target.value)}
+          />
         </Field>
         <Field label={t("strength")}>
-          <input className="range" type="range" min={1} max={5} value={strength} onChange={(event) => setStrength(event.target.value)} />
+          <input
+            className="range"
+            type="range"
+            min={1}
+            max={5}
+            value={strength}
+            onChange={(event) => setStrength(event.target.value)}
+          />
         </Field>
         <label className="toggle-row">
-          <input type="checkbox" checked={mutual} onChange={(event) => setMutual(event.target.checked)} />
-          <span><strong>{t("mutual")}</strong></span>
+          <input
+            type="checkbox"
+            checked={mutual}
+            onChange={(event) => setMutual(event.target.checked)}
+          />
+          <span>
+            <strong>{t("mutual")}</strong>
+          </span>
         </label>
         <Field label={t("notes")} wide>
-          <TextArea rows={4} value={notes} onChange={(event) => setNotes(event.target.value)} />
+          <TextArea
+            rows={4}
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+          />
         </Field>
       </FieldGrid>
     </Modal>
@@ -1039,16 +1293,31 @@ export function AtlasModal({
 }: ModalBase & {
   universeId: string;
   kind: "location" | "faction" | "lore";
-  initial?: StoryLocation | StoryFaction | { id: string; title: { zh: string; en: string }; body: string; category: LoreCategory; createdAt: string; updatedAt: string };
-  onSave: (value: StoryLocation | StoryFaction | {
-    id: string;
-    universeId: string;
-    category: LoreCategory;
-    title: { zh: string; en: string };
-    body: string;
-    createdAt: string;
-    updatedAt: string;
-  }) => boolean;
+  initial?:
+    | StoryLocation
+    | StoryFaction
+    | {
+        id: string;
+        title: { zh: string; en: string };
+        body: string;
+        category: LoreCategory;
+        createdAt: string;
+        updatedAt: string;
+      };
+  onSave: (
+    value:
+      | StoryLocation
+      | StoryFaction
+      | {
+          id: string;
+          universeId: string;
+          category: LoreCategory;
+          title: { zh: string; en: string };
+          body: string;
+          createdAt: string;
+          updatedAt: string;
+        },
+  ) => boolean;
 }) {
   const isLore = kind === "lore";
   const existingName = initial
@@ -1056,25 +1325,41 @@ export function AtlasModal({
       ? initial.name
       : initial.title
     : { zh: "", en: "" };
-  const existingSummary = initial && "summary" in initial ? initial.summary : { zh: "", en: "" };
+  const existingSummary =
+    initial && "summary" in initial ? initial.summary : { zh: "", en: "" };
   const [nameZh, setNameZh] = useState(existingName.zh);
   const [nameEn, setNameEn] = useState(existingName.en);
   const [summaryZh, setSummaryZh] = useState(existingSummary.zh);
   const [summaryEn, setSummaryEn] = useState(existingSummary.en);
-  const [atmosphere, setAtmosphere] = useState(initial && "atmosphere" in initial ? initial.atmosphere : "");
-  const [visualPrompt, setVisualPrompt] = useState(initial && "visualPrompt" in initial ? initial.visualPrompt : "");
-  const [goal, setGoal] = useState(initial && "goal" in initial ? initial.goal : "");
-  const [visualMotif, setVisualMotif] = useState(initial && "visualMotif" in initial ? initial.visualMotif : "");
-  const [body, setBody] = useState(initial && "body" in initial ? initial.body : "");
+  const [atmosphere, setAtmosphere] = useState(
+    initial && "atmosphere" in initial ? initial.atmosphere : "",
+  );
+  const [visualPrompt, setVisualPrompt] = useState(
+    initial && "visualPrompt" in initial ? initial.visualPrompt : "",
+  );
+  const [goal, setGoal] = useState(
+    initial && "goal" in initial ? initial.goal : "",
+  );
+  const [visualMotif, setVisualMotif] = useState(
+    initial && "visualMotif" in initial ? initial.visualMotif : "",
+  );
+  const [body, setBody] = useState(
+    initial && "body" in initial ? initial.body : "",
+  );
   const [category, setCategory] = useState<LoreCategory>(
     initial && "category" in initial ? initial.category : "rule",
   );
-  const title =
-    isLore
-      ? initial ? t("editLoreTitle") : t("addLoreTitle")
-      : kind === "location"
-        ? initial ? t("editLocationTitle") : t("addLocationTitle")
-        : initial ? t("editFactionTitle") : t("addFactionTitle");
+  const title = isLore
+    ? initial
+      ? t("editLoreTitle")
+      : t("addLoreTitle")
+    : kind === "location"
+      ? initial
+        ? t("editLocationTitle")
+        : t("addLocationTitle")
+      : initial
+        ? t("editFactionTitle")
+        : t("addFactionTitle");
   return (
     <Modal
       open={open}
@@ -1082,7 +1367,9 @@ export function AtlasModal({
       title={title}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>{t("cancel")}</Button>
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
           <Button
             variant="primary"
             icon="check"
@@ -1134,49 +1421,93 @@ export function AtlasModal({
     >
       <FieldGrid>
         <Field label={isLore ? t("titleZh") : t("nameZh")}>
-          <TextInput autoFocus value={nameZh} onChange={(event) => setNameZh(event.target.value)} />
+          <TextInput
+            autoFocus
+            value={nameZh}
+            onChange={(event) => setNameZh(event.target.value)}
+          />
         </Field>
         <Field label={isLore ? t("titleEn") : t("nameEn")}>
-          <TextInput value={nameEn} onChange={(event) => setNameEn(event.target.value)} />
+          <TextInput
+            value={nameEn}
+            onChange={(event) => setNameEn(event.target.value)}
+          />
         </Field>
         {isLore ? (
           <>
             <Field label={t("loreCategory")}>
-              <Select value={category} onChange={(event) => setCategory(event.target.value as LoreCategory)}>
-                {(Object.keys(loreLabels[locale]) as LoreCategory[]).map((value) => (
-                  <option key={value} value={value}>{loreLabels[locale][value]}</option>
-                ))}
+              <Select
+                value={category}
+                onChange={(event) =>
+                  setCategory(event.target.value as LoreCategory)
+                }
+              >
+                {(Object.keys(loreLabels[locale]) as LoreCategory[]).map(
+                  (value) => (
+                    <option key={value} value={value}>
+                      {loreLabels[locale][value]}
+                    </option>
+                  ),
+                )}
               </Select>
             </Field>
             <div />
             <Field label={t("body")} wide>
-              <TextArea rows={8} value={body} onChange={(event) => setBody(event.target.value)} />
+              <TextArea
+                rows={8}
+                value={body}
+                onChange={(event) => setBody(event.target.value)}
+              />
             </Field>
           </>
         ) : (
           <>
             <Field label={t("summaryZh")} wide>
-              <TextArea rows={3} value={summaryZh} onChange={(event) => setSummaryZh(event.target.value)} />
+              <TextArea
+                rows={3}
+                value={summaryZh}
+                onChange={(event) => setSummaryZh(event.target.value)}
+              />
             </Field>
             <Field label={t("summaryEn")} wide>
-              <TextArea rows={3} value={summaryEn} onChange={(event) => setSummaryEn(event.target.value)} />
+              <TextArea
+                rows={3}
+                value={summaryEn}
+                onChange={(event) => setSummaryEn(event.target.value)}
+              />
             </Field>
             {kind === "location" ? (
               <>
                 <Field label={t("atmosphere")} wide>
-                  <TextArea rows={3} value={atmosphere} onChange={(event) => setAtmosphere(event.target.value)} />
+                  <TextArea
+                    rows={3}
+                    value={atmosphere}
+                    onChange={(event) => setAtmosphere(event.target.value)}
+                  />
                 </Field>
                 <Field label={t("visualPrompt")} wide>
-                  <TextArea rows={4} value={visualPrompt} onChange={(event) => setVisualPrompt(event.target.value)} />
+                  <TextArea
+                    rows={4}
+                    value={visualPrompt}
+                    onChange={(event) => setVisualPrompt(event.target.value)}
+                  />
                 </Field>
               </>
             ) : (
               <>
                 <Field label={t("goal")} wide>
-                  <TextArea rows={3} value={goal} onChange={(event) => setGoal(event.target.value)} />
+                  <TextArea
+                    rows={3}
+                    value={goal}
+                    onChange={(event) => setGoal(event.target.value)}
+                  />
                 </Field>
                 <Field label={t("visualMotif")} wide>
-                  <TextArea rows={3} value={visualMotif} onChange={(event) => setVisualMotif(event.target.value)} />
+                  <TextArea
+                    rows={3}
+                    value={visualMotif}
+                    onChange={(event) => setVisualMotif(event.target.value)}
+                  />
                 </Field>
               </>
             )}
@@ -1202,7 +1533,9 @@ export function StandardModal({
   defaultKind?: StandardKind;
   onSave: (standard: WorkspaceStandard) => boolean;
 }) {
-  const [kind, setKind] = useState<StandardKind>(initial?.kind ?? defaultKind ?? "style");
+  const [kind, setKind] = useState<StandardKind>(
+    initial?.kind ?? defaultKind ?? "style",
+  );
   const [titleZh, setTitleZh] = useState(initial?.title.zh ?? "");
   const [titleEn, setTitleEn] = useState(initial?.title.en ?? "");
   const [bodyZh, setBodyZh] = useState(initial?.body.zh ?? "");
@@ -1224,11 +1557,16 @@ export function StandardModal({
       description={t("foundationDraftNote")}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>{t("cancel")}</Button>
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
           <Button
             variant="primary"
             icon="check"
-            disabled={(!titleZh.trim() && !titleEn.trim()) || (!bodyZh.trim() && !bodyEn.trim())}
+            disabled={
+              (!titleZh.trim() && !titleEn.trim()) ||
+              (!bodyZh.trim() && !bodyEn.trim())
+            }
             onClick={() => {
               const now = new Date().toISOString();
               const saved = onSave({
@@ -1238,7 +1576,11 @@ export function StandardModal({
                 title: { zh: titleZh.trim(), en: titleEn.trim() },
                 body: { zh: bodyZh.trim(), en: bodyEn.trim() },
                 status: initial?.status ?? "draft",
-                version: initial ? (changed ? initial.version + 1 : initial.version) : 1,
+                version: initial
+                  ? changed
+                    ? initial.version + 1
+                    : initial.version
+                  : 1,
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
@@ -1252,31 +1594,55 @@ export function StandardModal({
     >
       <FieldGrid>
         <Field label={t("foundationKind")}>
-          <Select value={kind} onChange={(event) => setKind(event.target.value as StandardKind)}>
+          <Select
+            value={kind}
+            onChange={(event) => setKind(event.target.value as StandardKind)}
+          >
             {STANDARD_KINDS.map((value) => (
-              <option key={value} value={value}>{standardKindLabel(value, locale)}</option>
+              <option key={value} value={value}>
+                {standardKindLabel(value, locale)}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={t("foundationScope")}>
-          <Select value={universeId} onChange={(event) => setUniverseId(event.target.value)}>
+          <Select
+            value={universeId}
+            onChange={(event) => setUniverseId(event.target.value)}
+          >
             <option value="">{t("foundationProjectWide")}</option>
             {workspace.universes.map((universe) => (
-              <option key={universe.id} value={universe.id}>{displayText(universe.name, locale)}</option>
+              <option key={universe.id} value={universe.id}>
+                {displayText(universe.name, locale)}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={t("titleZh")}>
-          <TextInput value={titleZh} onChange={(event) => setTitleZh(event.target.value)} />
+          <TextInput
+            value={titleZh}
+            onChange={(event) => setTitleZh(event.target.value)}
+          />
         </Field>
         <Field label={t("titleEn")}>
-          <TextInput value={titleEn} onChange={(event) => setTitleEn(event.target.value)} />
+          <TextInput
+            value={titleEn}
+            onChange={(event) => setTitleEn(event.target.value)}
+          />
         </Field>
         <Field label={t("foundationBodyZh")} wide>
-          <TextArea rows={7} value={bodyZh} onChange={(event) => setBodyZh(event.target.value)} />
+          <TextArea
+            rows={7}
+            value={bodyZh}
+            onChange={(event) => setBodyZh(event.target.value)}
+          />
         </Field>
         <Field label={t("foundationBodyEn")} wide>
-          <TextArea rows={7} value={bodyEn} onChange={(event) => setBodyEn(event.target.value)} />
+          <TextArea
+            rows={7}
+            value={bodyEn}
+            onChange={(event) => setBodyEn(event.target.value)}
+          />
         </Field>
       </FieldGrid>
     </Modal>

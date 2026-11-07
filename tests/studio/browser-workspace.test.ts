@@ -15,7 +15,9 @@ function storageWith(raw: string | null = null) {
   if (raw !== null) values.set(browserWorkspaceKey, raw);
   return {
     getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => { values.set(key, value); },
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
   };
 }
 
@@ -33,13 +35,17 @@ test("browser migrates v1 manuscripts without altering the stored original", () 
   expect(storage.getItem(browserWorkspaceKey)).toBe(raw);
 });
 
-test.each(["{broken", "", "null", "{}", JSON.stringify({ ...createDemoWorkspace("en"), schema_version: 999 })])(
-  "browser rejects invalid data without deleting it: %s", (raw) => {
-    const storage = storageWith(raw);
-    expect(() => loadBrowserWorkspace(storage, "en")).toThrow();
-    expect(storage.getItem(browserWorkspaceKey)).toBe(raw);
-  },
-);
+test.each([
+  "{broken",
+  "",
+  "null",
+  "{}",
+  JSON.stringify({ ...createDemoWorkspace("en"), schema_version: 999 }),
+])("browser rejects invalid data without deleting it: %s", (raw) => {
+  const storage = storageWith(raw);
+  expect(() => loadBrowserWorkspace(storage, "en")).toThrow();
+  expect(storage.getItem(browserWorkspaceKey)).toBe(raw);
+});
 
 test("browser initializes only absent storage and round-trips valid data", () => {
   const storage = storageWith();

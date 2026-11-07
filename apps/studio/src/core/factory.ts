@@ -8,7 +8,6 @@ import type {
   StudioWorkspace,
   UiLocale,
   WorkspaceStats,
-  WorkflowTask,
 } from "./types.ts";
 import { WORKSPACE_SCHEMA_VERSION } from "./types.ts";
 
@@ -23,7 +22,8 @@ export function displayText(value: LocalizedText, locale: UiLocale): string {
 }
 
 export function createId(prefix: string): string {
-  const random = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36);
+  const random =
+    globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36);
   return `${prefix}_${random.replaceAll("-", "").slice(0, 12)}`;
 }
 
@@ -91,8 +91,9 @@ export function workspaceStats(workspace: StudioWorkspace): WorkspaceStats {
     universes: workspace.universes.length,
     works: workspace.works.length,
     chapters: chapters.length,
-    approvedChapters: chapters.filter((chapter) => chapter.status === "approved")
-      .length,
+    approvedChapters: chapters.filter(
+      (chapter) => chapter.status === "approved",
+    ).length,
     words: workspace.works.reduce((sum, work) => sum + workWords(work), 0),
     characters: workspace.characters.length,
     storyObjects: workspace.storyObjects.length,
@@ -271,7 +272,10 @@ export function createDemoWorkspace(
         id: "char_shen",
         universeIds: ["uni_mist_harbor"],
         name: localized("沈雁", "Shen Yan"),
-        role: localized("同盟/对手 · 潮汐调查员", "Ally/Rival · Tide investigator"),
+        role: localized(
+          "同盟/对手 · 潮汐调查员",
+          "Ally/Rival · Tide investigator",
+        ),
         summary: localized(
           "负责登记错误钟声的调查员。她相信制度能救人，却私下替父亲销毁过一份记录。",
           "An investigator who logs wrong chimes. She believes in the system, yet once destroyed a record for her father.",
@@ -295,7 +299,10 @@ export function createDemoWorkspace(
         id: "char_gu",
         universeIds: ["uni_mist_harbor", "uni_ninth_station"],
         name: localized("顾望潮", "Gu Wangchao"),
-        role: localized("对手 · 潮汐公会会长", "Antagonist · Tide Guild master"),
+        role: localized(
+          "对手 · 潮汐公会会长",
+          "Antagonist · Tide Guild master",
+        ),
         summary: localized(
           "把整座城的记忆当成可调度资源的人。他相信忘记是秩序的成本，也相信只有自己能承担这笔账。",
           "He treats the city's memory as a dispatchable resource. Forgetting is the price of order, and only he can carry the ledger.",
@@ -398,7 +405,8 @@ export function createDemoWorkspace(
         ),
         visualPrompt:
           "faded green waterproof investigator case, brass clasps, one diagonal salt-scour scratch on the lid, damp leather handle, stylized 3D animation prop sheet, front and side views, non-photorealistic",
-        sourceNotes: "Chapter 1: kept beside the exit. Later scenes may show it opened or handed over.",
+        sourceNotes:
+          "Chapter 1: kept beside the exit. Later scenes may show it opened or handed over.",
         createdAt,
         updatedAt: createdAt,
       },
@@ -413,7 +421,8 @@ export function createDemoWorkspace(
         ),
         visualPrompt:
           "sealed black tidal ledger, salt-stained brass corners, seven blank clock dials embossed on the cover, no legible text, ominous teal rim light, stylized 3D animation prop, non-photorealistic",
-        sourceNotes: "Proposal for chapters 3+. Do not treat as canon until revealed in manuscript.",
+        sourceNotes:
+          "Proposal for chapters 3+. Do not treat as canon until revealed in manuscript.",
         createdAt,
         updatedAt: createdAt,
       },
@@ -451,7 +460,10 @@ export function createDemoWorkspace(
         id: "lore_clock_rule",
         universeId: "uni_mist_harbor",
         category: "rule",
-        title: localized("第七响不可记录", "The Seventh Chime Cannot Be Recorded"),
+        title: localized(
+          "第七响不可记录",
+          "The Seventh Chime Cannot Be Recorded",
+        ),
         body: "任何试图用文字、录音或图像保存第七响的行为，都会让记录者失去一段与钟声相关的记忆。该规则只能通过重复事件显形。",
         createdAt,
         updatedAt: createdAt,
@@ -496,7 +508,10 @@ export function createDemoWorkspace(
         sourceId: "char_shen",
         targetId: "char_gu",
         type: "family",
-        label: localized("父女，公开关系被封存", "Father and daughter, sealed publicly"),
+        label: localized(
+          "父女，公开关系被封存",
+          "Father and daughter, sealed publicly",
+        ),
         strength: 5,
         status: "hidden",
         mutual: true,
@@ -524,7 +539,10 @@ export function createDemoWorkspace(
         sourceId: "char_echo",
         targetId: "char_lin",
         type: "debt",
-        label: localized("送达一封不能退回的信", "Delivered a letter that cannot be returned"),
+        label: localized(
+          "送达一封不能退回的信",
+          "Delivered a letter that cannot be returned",
+        ),
         strength: 2,
         status: "active",
         mutual: false,
@@ -544,7 +562,10 @@ export function createDemoWorkspace(
         subjectKind: "object",
         subjectId: "object_brass_key",
         eventKind: "transfer",
-        title: localized("铜钥匙由林舟交给沈雁", "Lin hands the brass key to Shen"),
+        title: localized(
+          "铜钥匙由林舟交给沈雁",
+          "Lin hands the brass key to Shen",
+        ),
         stateBefore: "林舟在修表铺收到钥匙，钥匙贴着柜台，尚未交给任何人。",
         stateAfter: "沈雁短暂握住钥匙，缺口正对门口；她尚未正式收下。",
         canonStatus: "canon",
@@ -569,7 +590,8 @@ export function createDemoWorkspace(
         eventKind: "state-change",
         title: localized("林舟进入雨湿状态", "Lin enters a rain-soaked state"),
         stateBefore: "深蓝短斗篷与头发基本干燥，怀表停在十点四十分。",
-        stateAfter: "斗篷肩部与发梢被雾雨打湿，右手仍留有握镊子的薄茧；怀表没有恢复。",
+        stateAfter:
+          "斗篷肩部与发梢被雾雨打湿，右手仍留有握镊子的薄茧；怀表没有恢复。",
         canonStatus: "canon",
         relatedCharacterIds: ["char_shen"],
         relatedLocationIds: ["loc_old_tower"],
@@ -590,9 +612,13 @@ export function createDemoWorkspace(
         subjectKind: "object",
         subjectId: "object_brass_key",
         eventKind: "reveal",
-        title: localized("缺口被确认是设计", "The notch is confirmed as intentional"),
+        title: localized(
+          "缺口被确认是设计",
+          "The notch is confirmed as intentional",
+        ),
         stateBefore: "众人把钥匙缺口理解为损坏或旧塔磨损。",
-        stateAfter: "缺口对齐机芯盒划痕后能触发夹层，证明它是钥匙设计的一部分。",
+        stateAfter:
+          "缺口对齐机芯盒划痕后能触发夹层，证明它是钥匙设计的一部分。",
         canonStatus: "canon",
         relatedCharacterIds: ["char_lin", "char_shen"],
         relatedLocationIds: ["loc_old_tower"],
@@ -613,7 +639,10 @@ export function createDemoWorkspace(
         subjectKind: "location",
         subjectId: "loc_old_tower",
         eventKind: "state-change",
-        title: localized("旧塔内部展开十三钟摆空间", "The tower reveals thirteen-pendulum space"),
+        title: localized(
+          "旧塔内部展开十三钟摆空间",
+          "The tower reveals thirteen-pendulum space",
+        ),
         stateBefore: "旧塔被封锁，外观是狭窄、潮湿、停摆的石制钟楼。",
         stateAfter: "内部空间明显大于外观，十三条钟摆各自停在失踪者最后一刻。",
         canonStatus: "proposed",
@@ -756,8 +785,7 @@ export function createDemoWorkspace(
             titleEn: "Seven Minutes Past Midnight",
             status: "outline",
             pov: "第三人称限知 · 叶宁",
-            summary:
-              "叶宁在末班车上接待一名没有目的地、却持有空白车票的女孩。",
+            summary: "叶宁在末班车上接待一名没有目的地、却持有空白车票的女孩。",
             outline:
               "建立列车规则与叶宁的职责；让女孩用第一张票换一个与剧情无关的真话；结尾揭示女孩知道叶宁的旧名字。",
             content: "",
@@ -833,7 +861,10 @@ export function createDemoWorkspace(
           "检查钥匙、信件、沈雁到访顺序和第七响是否与后续章节一致。",
           "Check the key, letter, Shen Yan's arrival and seventh chime against later chapters.",
         ),
-        deliverable: localized("逐条 finding 与证据位置。", "Itemized findings with evidence."),
+        deliverable: localized(
+          "逐条 finding 与证据位置。",
+          "Itemized findings with evidence.",
+        ),
         result: localized("", ""),
         kind: "review",
         template: "review",
@@ -850,7 +881,10 @@ export function createDemoWorkspace(
       },
       {
         id: "task_adaptation_pass",
-        title: localized("生成 3D 漫剧镜头清单", "Prepare the 3D comic shot list"),
+        title: localized(
+          "生成 3D 漫剧镜头清单",
+          "Prepare the 3D comic shot list",
+        ),
         brief: localized(
           "按风格化 3D 动画、9:16 和现有制作边界，把已定稿章节转成可审查的镜头草案。",
           "Turn approved chapters into reviewable shots for stylized 3D animation in 9:16 within the existing production boundary.",

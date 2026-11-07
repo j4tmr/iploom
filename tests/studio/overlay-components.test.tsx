@@ -172,7 +172,9 @@ test("the import dialog asks before discarding pasted manuscript text", () => {
   );
 
   const text = view.getByTestId("import-text");
-  fireEvent.change(text, { target: { value: "Chapter One\n\nThe bell rang." } });
+  fireEvent.change(text, {
+    target: { value: "Chapter One\n\nThe bell rang." },
+  });
   fireEvent.keyDown(window, { key: "Escape" });
 
   expect(confirm).toHaveBeenCalledTimes(1);
