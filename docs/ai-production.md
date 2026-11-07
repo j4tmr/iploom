@@ -26,9 +26,9 @@ The shared production desk is available above each view. Select world, novel, ch
 
 各视图顶部的制作台可选择对象和模板。提示词包含相关设定、章节、人物与风格约束；可编辑、复制或执行。超过 10 万字符会要求缩小范围，绝不静默截断。
 
-While running, the UI displays the task label and streamed authored output. Cancel stops the request; 180 seconds times out. Incomplete, filtered or truncated responses are not marked successful. The display is generated work, not a model's private reasoning. Output is saved as a workflow draft for review, never automatically replacing a chapter or approved asset.
+While running, the UI displays the task label and streamed authored output. Cancel stops the request and reports a cancellation, distinct from a timeout. A request is stopped when the provider sends no data for 120 seconds, or when an active stream stalls for 60 seconds; every received chunk resets the idle timer, so long generations that keep producing output can finish. Incomplete, filtered or truncated responses are not marked successful. When the provider rejects a request, the error shows its sanitized explanation, a status-specific hint and, for rate limits, `Retry-After`; key-like text is redacted. The display is generated work, not a model's private reasoning. Output is saved as a workflow draft for review, never automatically replacing a chapter or approved asset.
 
-执行时显示任务名称和实时产出，可取消；单次请求 180 秒超时。不完整结果不会算成功，也不会自动覆盖原稿。没有真实提供商凭据时可使用本地模拟服务验证执行链路，不代表某个远程模型已实测兼容。
+执行时显示任务名称和实时产出，可取消；取消与超时分别报告。首个数据 120 秒未到达，或流式输出中途 60 秒没有新数据时会停止；每收到一块数据都会重置空闲计时，因此持续输出的长生成可以正常完成。不完整结果不会算成功，也不会自动覆盖原稿。服务商拒绝请求时显示清洗后的说明与针对性提示，429 还会附带 `Retry-After`；疑似密钥的内容会被隐去。没有真实提供商凭据时可使用本地模拟服务验证执行链路，不代表某个远程模型已实测兼容。
 
 ## Production workflow / 制作工作流
 
