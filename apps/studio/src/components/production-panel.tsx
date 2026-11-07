@@ -33,12 +33,16 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
   const activeId = useRef("");
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
+  const latestContext = useRef(context);
+  latestContext.current = context;
+  const appliedContext = useRef(context);
   const [completedTask, setCompletedTask] = useState<WorkflowTask | null>(null);
   const work = workspace.works.find((item) => item.id === scope.workId);
   const universeId = work?.universeId ?? scope.universeId;
   const task = workspace.workflowTasks.find((item) => item.id === taskId);
   const blocked = Boolean(task && task.dependsOnIds.some((id) => workspace.workflowTasks.find((item) => item.id === id)?.status !== "done"));
-  useEffect(() => { if (!activeId.current) { setScope(context); setPrompt(""); setTaskId(""); } }, [context.universeId, context.workId, context.chapterId, context.characterId]);
+  const applyContext = (next: ProductionScope) => { appliedContext.current = next; setScope(next); setPrompt(""); setTaskId(""); };
+  useEffect(() => { if (!activeId.current) applyContext(context); }, [context.universeId, context.workId, context.chapterId, context.characterId]);
   useEffect(() => bridge.onAiProgress((progress) => { if (progress.id === activeId.current) setOutput(progress.text); }), []);
   useEffect(() => () => { if (activeId.current) void bridge.cancelAi(activeId.current); }, []);
   const reset = () => { setPrompt(""); setMessage(""); setUsage(undefined); };
@@ -122,7 +126,18 @@ export function ProductionPanel({ workspace, locale, t, aiInfo, onOpenSettings, 
           onStatus(resultTask, "review"); setCompletedTask(resultTask);
           setMessage(t("productionDraftSaved"));
         } catch (error) { setMessage(String(error)); if (task) onStatus(task, task.status); }
-        finally { activeId.current = ""; setBusy(false); }
+        finally {
+          activeId.current = ""; setBusy(false);
+          // Every context change that arrived while this run held `activeId`
+          // was skipped by the effect above; replay the latest one now so the
+          // panel does not keep composing and creating tasks for the scope the
+          // user navigated away from.
+          const latest = latestContext.current;
+          const applied = appliedContext.current;
+          if (latest.universeId !== applied.universeId || latest.workId !== applied.workId || latest.chapterId !== applied.chapterId || latest.characterId !== applied.characterId) {
+            applyContext(latest);
+          }
+        }
       }}>{t("productionSendRun")}</Button>
       {busy ? <Button onClick={() => void bridge.cancelAi(activeId.current)}>{t("cancel")}</Button> : null}
     </div>
