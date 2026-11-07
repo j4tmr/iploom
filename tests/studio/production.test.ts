@@ -76,6 +76,23 @@ test("chinese chapter markers need a boundary, so ordinary prose stays prose", (
   }
 });
 
+test("chinese chapter titles bounded by brackets or quotes still split", () => {
+  const cases: Array<[string, string[]]> = [
+    ["第一章（上）\n甲\n第二章（下）\n乙", ["第一章 (上)", "第二章 (下)"]],
+    ["第一章(上)\n甲\n第二章(下)\n乙", ["第一章 (上)", "第二章 (下)"]],
+    ["第一章【风起】\n甲\n第二章【云涌】\n乙", ["第一章 【风起】", "第二章 【云涌】"]],
+    ["第一章「风起」\n甲\n第二章「云涌」\n乙", ["第一章 「风起」", "第二章 「云涌」"]],
+    ["第一章『风起』\n甲\n第二章『云涌』\n乙", ["第一章 『风起』", "第二章 『云涌』"]],
+    ["第一章《风起》\n甲\n第二章《云涌》\n乙", ["第一章 《风起》", "第二章 《云涌》"]],
+    ["第一章“风起”\n甲\n第二章“云涌”\n乙", ["第一章 “风起”", "第二章 “云涌”"]],
+  ];
+  for (const [text, titles] of cases) {
+    const chapters = splitManuscript(text);
+    expect(chapters.map((chapter) => chapter.title)).toEqual(titles);
+    expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
+  }
+});
+
 test("markdown heading levels separate the document title from chapters", () => {
   const text = "# My Novel\n## Chapter 1\nOne\n### A scene\nStill chapter one\n## Chapter 2\nTwo";
   const chapters = splitManuscript(text);
@@ -89,6 +106,19 @@ test("markdown heading levels separate the document title from chapters", () => 
 
   // A lone heading level is still a chapter; the title rule needs a deeper level.
   expect(splitManuscript("# Only Chapter\nText").map((chapter) => chapter.title)).toEqual(["Only Chapter"]);
+});
+
+test("volume headings keep deeper chinese chapter headings as chapter boundaries", () => {
+  const text = "# 第一卷\n## 第一章\n甲\n## 第二章\n乙\n# 第二卷\n## 第三章\n丙";
+  const chapters = splitManuscript(text);
+  expect(chapters.map((chapter) => chapter.title)).toEqual([
+    "第一卷",
+    "第一章",
+    "第二章",
+    "第二卷",
+    "第三章",
+  ]);
+  expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
 });
 
 test("fenced code blocks never split chapters on heading-like comments", () => {
@@ -107,6 +137,21 @@ test("fenced code blocks never split chapters on heading-like comments", () => {
     expect(chapters.map((chapter) => chapter.title)).toEqual(titles);
     expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
   }
+});
+
+test("inline code that resembles a fence does not swallow later headings", () => {
+  const inline = "# One\n```json``` is inline\n# Two";
+  const chapters = splitManuscript(inline);
+  expect(chapters.map((chapter) => chapter.title)).toEqual(["One", "Two"]);
+  expect(chapters.map((chapter) => chapter.content).join("")).toBe(inline);
+
+  // A real fenced block still hides heading-like lines inside it.
+  const fenced = splitManuscript("# One\n```ts\n# still code\n```\n# Two");
+  expect(fenced.map((chapter) => chapter.title)).toEqual(["One", "Two"]);
+
+  // Tilde fences may contain backticks in their info string, so this one still opens.
+  const tilde = splitManuscript("# One\n~~~`ts`\n# still code\n~~~\n# Two");
+  expect(tilde.map((chapter) => chapter.title)).toEqual(["One", "Two"]);
 });
 
 test("new chapters are inserted by number without renumbering the existing ones", () => {
