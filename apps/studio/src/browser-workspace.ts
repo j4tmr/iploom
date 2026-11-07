@@ -8,10 +8,26 @@ type WorkspaceStorage = Pick<Storage, "getItem" | "setItem">;
 
 export function loadBrowserWorkspace(storage: WorkspaceStorage, locale: UiLocale) {
   const raw = storage.getItem(browserWorkspaceKey);
+  if (raw === null) {
+    const workspace = createDemoWorkspace(locale);
+    try {
+      // Persist the initial demo right away. Loading does not mark the
+      // workspace dirty, so no autosave would ever write it, and without a
+      // stored workspace the snapshot guard has nothing to protect and refuses
+      // the first delete/import until some unrelated edit is saved.
+      storage.setItem(browserWorkspaceKey, JSON.stringify(workspace));
+    } catch {
+      // Read-only or full storage still opens the demo; the snapshot guard
+      // keeps refusing destructive actions, which is the safe outcome.
+    }
+    return {
+      workspace,
+      path: "Browser localStorage",
+      recoveredFromBackup: false,
+    };
+  }
   return {
-    workspace: raw === null
-      ? createDemoWorkspace(locale)
-      : validateWorkspace(JSON.parse(raw)),
+    workspace: validateWorkspace(JSON.parse(raw)),
     path: "Browser localStorage",
     recoveredFromBackup: false,
   };

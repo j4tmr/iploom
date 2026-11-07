@@ -45,8 +45,25 @@ test("browser initializes only absent storage and round-trips valid data", () =>
   const storage = storageWith();
   const { workspace } = loadBrowserWorkspace(storage, "zh-CN");
   expect(workspace.settings.locale).toBe("zh-CN");
+  // The initial demo is persisted right away, so the first destructive action
+  // has a healthy workspace to snapshot instead of a null refusal.
+  expect(JSON.parse(storage.getItem(browserWorkspaceKey)!)).toEqual(workspace);
+  expect(saveBrowserSnapshot(storage)).toBe(browserSnapshotKey);
+  expect(loadBrowserSnapshot(storage)?.workspace).toEqual(workspace);
   saveBrowserWorkspace(storage, workspace);
   expect(loadBrowserWorkspace(storage, "en").workspace).toEqual(workspace);
+});
+
+test("unwritable browser storage still opens the demo but cannot snapshot", () => {
+  const storage = {
+    getItem: () => null,
+    setItem: () => {
+      throw new Error("QuotaExceededError");
+    },
+  };
+  const { workspace } = loadBrowserWorkspace(storage, "en");
+  expect(workspace.works.length).toBeGreaterThan(0);
+  expect(saveBrowserSnapshot(storage)).toBeNull();
 });
 
 test("invalid saves cannot overwrite a valid manuscript", () => {

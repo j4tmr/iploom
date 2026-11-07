@@ -49,10 +49,15 @@ export class StaleWorkspaceError extends Error {
     readonly incomingRevision: number,
   ) {
     super(
-      `Refusing to overwrite ${path} revision ${storedRevision} with older ` +
-        `revision ${incomingRevision}. Another process (for example the MCP ` +
-        `server) changed the workspace. Reload the workspace to continue from ` +
-        `the newer file; the file was left untouched.`,
+      storedRevision === incomingRevision
+        ? `Refusing to overwrite ${path} revision ${storedRevision} with different ` +
+            `content. Another process (for example the MCP server) changed the ` +
+            `workspace. Reload the workspace to continue from the newer file; ` +
+            `the file was left untouched.`
+        : `Refusing to overwrite ${path} revision ${storedRevision} with older ` +
+            `revision ${incomingRevision}. Another process (for example the MCP ` +
+            `server) changed the workspace. Reload the workspace to continue from ` +
+            `the newer file; the file was left untouched.`,
     );
     this.name = "StaleWorkspaceError";
   }
@@ -264,28 +269,37 @@ export class WorkspaceStore {
       const version = schemaVersionOf(parsed);
       if (version !== null && version > WORKSPACE_SCHEMA_VERSION)
         throw new NewerWorkspaceVersionError(candidate, version);
+      let workspace: StudioWorkspace;
       try {
-        const workspace = validateWorkspace(migrateWorkspace(parsed));
-        if (fromBackup && primaryError !== null) {
-          const rejectedPath = await this.quarantinePrimary(primaryError);
-          return {
-            workspace,
-            path: this.filePath,
-            recoveredFromBackup: true,
-            rejectedPath,
-            rejectedReason: primaryError,
-          };
-        }
-        return {
-          workspace,
-          path: this.filePath,
-          recoveredFromBackup: fromBackup,
-        };
+        workspace = validateWorkspace(migrateWorkspace(parsed));
       } catch (error) {
         const detail = formatValidationError(candidate, error);
         errors.push(detail);
         if (!fromBackup) primaryError = detail;
+        continue;
       }
+      if (fromBackup) {
+        const rejectedPath =
+          primaryError === null
+            ? null
+            : await this.quarantinePrimary(primaryError);
+        // Adopt the recovered copy as the new primary immediately. Without a
+        // primary file the snapshot guard has nothing healthy to snapshot and
+        // refuses every delete/import until an unrelated edit triggers a save.
+        await this.save(workspace);
+        return {
+          workspace,
+          path: this.filePath,
+          recoveredFromBackup: true,
+          rejectedPath,
+          rejectedReason: primaryError,
+        };
+      }
+      return {
+        workspace,
+        path: this.filePath,
+        recoveredFromBackup: false,
+      };
     }
     throw new Error(
       `Workspace is missing or invalid. ${errors.join(" | ") || this.filePath}`,
@@ -412,8 +426,16 @@ export class WorkspaceStore {
         // The editor keeps the whole workspace in memory and autosaves it
         // without reloading while another process (the MCP server) may have
         // written a newer revision. Refusing here keeps that change instead of
-        // silently rolling the file back.
-        if (!options.allowRollback && current.revision > workspace.revision) {
+        // silently rolling the file back. An equal revision is not proof that
+        // the content is the same: an editor that loaded R and bumped its
+        // local copy to R+1 would otherwise silently overwrite the external
+        // writer's R+1. Only an identical re-save (idempotent retry) passes.
+        if (
+          !options.allowRollback &&
+          (current.revision > workspace.revision ||
+            (current.revision === workspace.revision &&
+              JSON.stringify(current) !== JSON.stringify(workspace)))
+        ) {
           throw new StaleWorkspaceError(
             this.filePath,
             current.revision,

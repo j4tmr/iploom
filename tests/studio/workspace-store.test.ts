@@ -31,7 +31,9 @@ test("demo reset keeps the user workspace recoverable despite the renderer autos
   await store.save(workspaceTitled("我的小说"));
   const snapshotPath = await store.createSnapshot("before-reset-demo");
   const demo = createDemoWorkspace("en", NOW);
-  await store.save(demo);
+  // Demo reset intentionally moves the revision backwards (as the main process
+  // does), and the renderer's extra save is an identical re-save of it.
+  await store.save(demo, { allowRollback: true });
   // The renderer used to schedule one more save right after a reset; both the
   // main file and its single `.bak` slot end up holding the demo data.
   await store.save(demo);
@@ -70,7 +72,9 @@ test("restoring a snapshot keeps a pre-restore copy and returns the restored wor
   const store = await storeInTemp();
   await store.save(workspaceTitled("第一版"));
   await store.createSnapshot("before-import-novel");
-  await store.save(workspaceTitled("第二版"));
+  const second = workspaceTitled("第二版");
+  second.revision += 1;
+  await store.save(second);
 
   const snapshot = (await store.listSnapshots())[0]!;
   const restored = await store.restoreSnapshot(snapshot.path);
@@ -136,21 +140,49 @@ test("an older revision cannot overwrite a newer workspace file", async () => {
   expect(await readFile(store.filePath, "utf8")).toBe(before);
 });
 
-test("equal and newer revisions still save", async () => {
+test("a same-content retry at an equal revision saves, newer revisions still save", async () => {
   const store = await storeInTemp();
   const base = workspaceTitled("base");
   base.revision = 13;
   await store.save(base);
 
-  const equal = workspaceTitled("equal");
-  equal.revision = 13;
-  await store.save(equal);
-  expect(await storedTitle(store.filePath)).toBe("equal");
+  // Retrying the exact save that may already have landed must not error.
+  await store.save(structuredClone(base));
+  expect(await storedTitle(store.filePath)).toBe("base");
 
   const newer = workspaceTitled("newer");
   newer.revision = 14;
   await store.save(newer);
   expect(await storedTitle(store.filePath)).toBe("newer");
+});
+
+test("an equal-revision draft cannot overwrite an external writer's content", async () => {
+  const store = await storeInTemp();
+  const base = workspaceTitled("base");
+  base.revision = 12;
+  await store.save(base);
+
+  // The MCP server bumps the shared file to revision 13.
+  const external = await store.update((workspace) => {
+    workspace.name = "MCP edit";
+  });
+  expect(external.revision).toBe(13);
+
+  // The editor loaded revision 12 and its own edit also produces revision 13,
+  // but with different content. Accepting it would erase the external change.
+  const draft = workspaceTitled("editor draft");
+  draft.revision = 13;
+  const error: unknown = await store.save(draft).catch((reason) => reason);
+
+  expect(error).toBeInstanceOf(StaleWorkspaceError);
+  expect((error as StaleWorkspaceError).storedRevision).toBe(13);
+  expect((error as StaleWorkspaceError).incomingRevision).toBe(13);
+  expect((error as StaleWorkspaceError).retryable).toBe(false);
+  expect((error as Error).message).toMatch(/different content/i);
+  expect((error as Error).message).toMatch(/reload/i);
+  expect(JSON.parse(await readFile(store.filePath, "utf8")).name).toBe(
+    "MCP edit",
+  );
 });
 
 test("allowRollback lets an intentional restore move the revision backwards", async () => {

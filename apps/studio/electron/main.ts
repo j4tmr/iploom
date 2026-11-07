@@ -25,10 +25,15 @@ import {
 } from "../src/core/updates.ts";
 import type { StudioWorkspace, UiLocale } from "../src/core/types.ts";
 import {
+  StaleWorkspaceError,
   WorkspaceStore,
   type LoadedWorkspace,
   type WorkspaceSnapshot,
 } from "../src/node/workspace-store.ts";
+import {
+  isStaleSaveError,
+  markStaleWorkspaceMessage,
+} from "../src/save-errors.ts";
 import {
   canonicalPath,
   isTrustedRendererUrl as isTrustedRendererValue,
@@ -200,6 +205,18 @@ async function reloadAfterFlush(window: BrowserWindow): Promise<void> {
     if (window.isDestroyed() || window.webContents.isDestroyed()) return;
     window.webContents.reload();
   } catch (error) {
+    // A stale flush means the newer workspace is already on disk: reload to
+    // adopt it. Cancelling (as for a real write failure) would keep the stale
+    // in-memory copy, whose later edits could overwrite the newer file.
+    if (isStaleSaveError(error)) {
+      console.warn(
+        "[IPloom Studio] reloading to adopt the newer workspace on disk",
+      );
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+        window.webContents.reload();
+      }
+      return;
+    }
     console.error("[IPloom Studio] reload flush failed", error);
     if (smokeMode) {
       app.exit(1);
@@ -503,7 +520,15 @@ function registerIpcHandlers(): void {
   ipcMain.handle("iploom:save", async (event, workspace: StudioWorkspace) => {
     assertTrustedSender(event);
     if (workspace && typeof workspace === "object") recoveryWorkspace = workspace;
-    await requireStore().save(workspace);
+    try {
+      await requireStore().save(workspace);
+    } catch (error) {
+      // IPC keeps only the message, so the renderer's retry loop cannot see
+      // `retryable = false` unless the marker rides along in the message.
+      if (error instanceof StaleWorkspaceError)
+        throw new Error(markStaleWorkspaceMessage(error.message));
+      throw error;
+    }
     return { savedAt: new Date().toISOString() };
   });
 

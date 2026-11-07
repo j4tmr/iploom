@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import { mapSaveErrorFromIpc } from "../src/save-errors.ts";
 import type { StudioBridge } from "../src/platform.ts";
 
 const api: StudioBridge = {
@@ -12,7 +13,11 @@ const api: StudioBridge = {
     return () => ipcRenderer.removeListener("iploom:ai-progress", handler);
   },
   load: () => ipcRenderer.invoke("iploom:load"),
-  save: (workspace) => ipcRenderer.invoke("iploom:save", workspace),
+  save: (workspace) =>
+    ipcRenderer.invoke("iploom:save", workspace).catch((error: unknown) => {
+      // Preserve the non-retryable stale marker across the IPC boundary.
+      throw mapSaveErrorFromIpc(error);
+    }),
   createSnapshot: (reason) =>
     ipcRenderer.invoke("iploom:create-snapshot", reason),
   listSnapshots: () => ipcRenderer.invoke("iploom:list-snapshots"),
