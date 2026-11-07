@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildArcReelBundle } from "../core/arcreel.ts";
-import { countWords, displayText, workWords } from "../core/factory.ts";
+import { countChapterWords, displayText, workWords } from "../core/factory.ts";
 import { CHAPTER_LIMITS } from "../core/types.ts";
 import type {
   ArcReelBundle,
@@ -190,7 +190,7 @@ export function WorkView({
                   <span className="chapter-number">{String(chapter.number).padStart(2, "0")}</span>
                   <span className="chapter-list-copy">
                     <strong>{chapter.title}</strong>
-                    <small>{statusLabels[locale][chapter.status]} · {formatNumber(countWords(chapter.content), locale)} {t("words")}</small>
+                    <small>{statusLabels[locale][chapter.status]} · {formatNumber(countChapterWords(chapter), locale)} {t("words")}</small>
                   </span>
                 </button>
               ))}
@@ -264,7 +264,7 @@ export function WorkView({
                 <div className="chapter-prose-column">
                   <label className="prose-editor-label">
                     <span>{t("chapterBody")}</span>
-                    <small>{formatNumber(countWords(selected.content), locale)} {t("words")}</small>
+                    <small>{formatNumber(countChapterWords(selected), locale)} {t("words")}</small>
                   </label>
                   <textarea
                     className="prose-editor"
@@ -559,7 +559,7 @@ function AdaptationPanel({
               <span className="chapter-number">{String(chapter.number).padStart(2, "0")}</span>
               <span>
                 <strong>{chapter.title}</strong>
-                <small>{statusLabels[locale][chapter.status]} · {formatNumber(countWords(chapter.content), locale)} {t("words")}</small>
+                <small>{statusLabels[locale][chapter.status]} · {formatNumber(countChapterWords(chapter), locale)} {t("words")}</small>
               </span>
               <Badge tone={chapter.status === "approved" ? "green" : "neutral"}>
                 {statusLabels[locale][chapter.status]}

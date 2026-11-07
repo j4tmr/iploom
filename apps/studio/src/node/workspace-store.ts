@@ -192,8 +192,10 @@ function slug(value: string): string {
   return (
     value
       .normalize("NFKD")
+      .replace(/\p{M}+/gu, "")
+      .normalize("NFC")
       .toLocaleLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/[^\p{L}\p{N}]+/gu, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 40) || "iploom"
   );
