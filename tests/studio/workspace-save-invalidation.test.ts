@@ -6,9 +6,11 @@ import {
   WORKSPACE_SCHEMA_VERSION,
   type StudioWorkspace,
 } from "../../apps/studio/src/core/types.ts";
+import type { LoadedWorkspace } from "../../apps/studio/src/platform.ts";
 
 const initial = createDemoWorkspace("en");
 const savedRevisions: number[] = [];
+const savedNames: string[] = [];
 const flushCompletions: Array<{
   requestId: string;
   error?: string;
@@ -36,6 +38,7 @@ const mockBridge = {
   },
   save: async (workspace: StudioWorkspace) => {
     savedRevisions.push(workspace.revision);
+    savedNames.push(workspace.name);
     resolveFirstSave?.();
     resolveFirstSave = null;
     if (saveError) throw saveError;
@@ -73,8 +76,13 @@ const { applyTheme, useStudioWorkspace } = await import(
   "../../apps/studio/src/use-studio-workspace.ts"
 );
 
+function loadedWorkspace(workspace: StudioWorkspace): LoadedWorkspace {
+  return { workspace, path: "workspace.json", recoveredFromBackup: false };
+}
+
 function resetBridge() {
   savedRevisions.length = 0;
+  savedNames.length = 0;
   flushCompletions.length = 0;
   failNextSave = false;
   saveError = null;
@@ -197,6 +205,107 @@ test("invalidating before a restore dispatch drops a retry during the in-flight 
   expect(savedRevisions).toEqual([editedRevision]);
   expect(result.current.workspace!.name).toBe("restored snapshot");
   expect(result.current.saveState).toBe("saved");
+});
+
+test("dispatchWorkspaceReplacement invalidates before the bridge operation settles", async () => {
+  resetBridge();
+  failNextSave = true;
+  const firstSaveStarted = new Promise<void>((resolve) => {
+    resolveFirstSave = resolve;
+  });
+
+  const { result } = renderHook(() => useStudioWorkspace());
+  await waitFor(() => expect(result.current.saveState).toBe("saved"));
+
+  act(() => {
+    result.current.mutate((draft) => {
+      draft.name = "edited before the replacement";
+    });
+  });
+  const editedRevision = result.current.workspace!.revision;
+
+  // Put a save into retrySave's backoff so a stale retry is genuinely in
+  // flight when the replacement is dispatched.
+  let saveNowResult!: Promise<unknown>;
+  act(() => {
+    saveNowResult = result.current.saveNow().catch((error: unknown) => error);
+  });
+  await firstSaveStarted;
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  let resolveReplacement!: (loaded: LoadedWorkspace) => void;
+  const operation = new Promise<LoadedWorkspace>((resolve) => {
+    resolveReplacement = resolve;
+  });
+  let dispatched!: Promise<LoadedWorkspace>;
+  act(() => {
+    dispatched = result.current.dispatchWorkspaceReplacement(() => operation);
+  });
+
+  // The backoff retry was superseded even though the bridge operation has not
+  // resolved yet: invalidation ran at dispatch time.
+  expect(await saveNowResult).toBeInstanceOf(Error);
+  await new Promise((resolve) => setTimeout(resolve, 650));
+  expect(savedRevisions).toEqual([editedRevision]);
+
+  // The operation resolves and installs its workspace; no stale save may land
+  // after it.
+  const restored = createDemoWorkspace("en");
+  restored.revision = 4;
+  restored.name = "restored snapshot";
+  const loaded = loadedWorkspace(restored);
+  act(() => {
+    result.current.replaceWorkspace(loaded.workspace);
+    resolveReplacement(loaded);
+  });
+  expect((await dispatched).workspace.name).toBe("restored snapshot");
+  await new Promise((resolve) => setTimeout(resolve, 650));
+  expect(savedRevisions).toEqual([editedRevision]);
+  expect(result.current.saveState).toBe("saved");
+});
+
+test("a rejected workspace replacement re-arms the dirty edit's autosave", async () => {
+  resetBridge();
+  const { result } = renderHook(() => useStudioWorkspace());
+  await waitFor(() => expect(result.current.saveState).toBe("saved"));
+
+  act(() => {
+    result.current.mutate((draft) => {
+      draft.name = "edited before a failed reset";
+    });
+  });
+  const editedRevision = result.current.workspace!.revision;
+  expect(result.current.saveState).toBe("pending");
+
+  let rejectReplacement!: (reason: unknown) => void;
+  const operation = new Promise<LoadedWorkspace>((_, reject) => {
+    rejectReplacement = reject;
+  });
+  let outcome!: Promise<unknown>;
+  act(() => {
+    outcome = result.current
+      .dispatchWorkspaceReplacement(() => operation)
+      .catch((reason: unknown) => reason);
+  });
+
+  // Reject while the 450 ms debounce is still cancelled: without the re-arm
+  // this edit would stay unsaved until the next mutation.
+  rejectReplacement(new Error("reset refused"));
+  expect(await outcome).toBeInstanceOf(Error);
+
+  // The edit was never written before the failure, and it was not lost.
+  expect(savedRevisions).toEqual([]);
+  expect(result.current.workspace!.name).toBe("edited before a failed reset");
+
+  // The re-armed debounce persists the edit itself, not an older snapshot.
+  await waitFor(() => expect(savedNames).toEqual(["edited before a failed reset"]), {
+    timeout: 3000,
+  });
+  expect(savedRevisions).toEqual([editedRevision]);
+
+  // Exactly one save: a failed replacement must not start a retry storm.
+  await new Promise((resolve) => setTimeout(resolve, 650));
+  expect(savedNames).toEqual(["edited before a failed reset"]);
 });
 
 test("a non-retryable newer-schema save stays visible without retrying", async () => {

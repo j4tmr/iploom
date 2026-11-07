@@ -700,12 +700,14 @@ export function App() {
   };
 
   const resetDemo = async () => {
-    // Invalidate before dispatch: while the reset is in flight, a retry that
-    // wakes up would otherwise save the pre-reset workspace after the reset
-    // has already been written.
-    state.invalidatePendingSaves();
     try {
-      const loaded = await bridge.resetDemo(locale);
+      // The helper invalidates before dispatch: while the reset is in flight,
+      // a retry that wakes up would otherwise save the pre-reset workspace
+      // after the reset has already been written. A rejected reset re-arms
+      // the autosave for whatever was still unsaved.
+      const loaded = await state.dispatchWorkspaceReplacement(() =>
+        bridge.resetDemo(locale),
+      );
       state.replaceWorkspace(loaded.workspace);
       setRoute({ name: "dashboard" });
       setHistory([]);
@@ -722,10 +724,12 @@ export function App() {
   };
 
   const restoreSnapshot = async (snapshotPath: string) => {
-    // Same in-flight window as demo reset: stop stale retries before the
-    // restore IPC can be overtaken by a late save of the previous workspace.
-    state.invalidatePendingSaves();
-    const loaded = await bridge.restoreSnapshot(snapshotPath);
+    // Same in-flight window as demo reset: the helper stops stale retries
+    // before the restore IPC can be overtaken by a late save of the previous
+    // workspace, and re-arms the autosave if the restore fails.
+    const loaded = await state.dispatchWorkspaceReplacement(() =>
+      bridge.restoreSnapshot(snapshotPath),
+    );
     state.replaceWorkspace(loaded.workspace);
     setRoute({ name: "dashboard" });
     setHistory([]);
