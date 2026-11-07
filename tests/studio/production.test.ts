@@ -85,6 +85,9 @@ test("chinese chapter titles bounded by brackets or quotes still split", () => {
     ["第一章『风起』\n甲\n第二章『云涌』\n乙", ["第一章 『风起』", "第二章 『云涌』"]],
     ["第一章《风起》\n甲\n第二章《云涌》\n乙", ["第一章 《风起》", "第二章 《云涌》"]],
     ["第一章“风起”\n甲\n第二章“云涌”\n乙", ["第一章 “风起”", "第二章 “云涌”"]],
+    ["第一章\"风起\"\n甲\n第二章\"云涌\"\n乙", ["第一章 \"风起\"", "第二章 \"云涌\""]],
+    ["第一章'风起'\n甲\n第二章'云涌'\n乙", ["第一章 '风起'", "第二章 '云涌'"]],
+    ["第一章〝风起〞\n甲\n第二章〝云涌〞\n乙", ["第一章 〝风起〞", "第二章 〝云涌〞"]],
   ];
   for (const [text, titles] of cases) {
     const chapters = splitManuscript(text);
@@ -118,6 +121,37 @@ test("volume headings keep deeper chinese chapter headings as chapter boundaries
     "第二卷",
     "第三章",
   ]);
+  expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
+});
+
+test("deeper headings that read as chapter starts split under volume headings", () => {
+  const english = "# Volume One\n## Chapter 1\n甲\n## Chapter 2\n乙\n# Volume Two\n## Chapter 3\n丙";
+  const englishChapters = splitManuscript(english);
+  expect(englishChapters.map((chapter) => chapter.title)).toEqual([
+    "Volume One",
+    "Chapter 1",
+    "Chapter 2",
+    "Volume Two",
+    "Chapter 3",
+  ]);
+  expect(englishChapters.map((chapter) => chapter.content).join("")).toBe(english);
+
+  const chinese = "# 第一卷\n## 序章\n甲\n## 第一章\n乙\n# 第二卷\n## 尾声\n丙";
+  const chineseChapters = splitManuscript(chinese);
+  expect(chineseChapters.map((chapter) => chapter.title)).toEqual([
+    "第一卷",
+    "序章",
+    "第一章",
+    "第二卷",
+    "尾声",
+  ]);
+  expect(chineseChapters.map((chapter) => chapter.content).join("")).toBe(chinese);
+});
+
+test("section headings stay inside their chapter below a document title", () => {
+  const text = "# 书名\n## 第一章\n甲\n### 第一节\n乙\n## 第二章\n丙";
+  const chapters = splitManuscript(text);
+  expect(chapters.map((chapter) => chapter.title)).toEqual(["第一章", "第二章"]);
   expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
 });
 

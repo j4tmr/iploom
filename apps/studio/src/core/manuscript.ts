@@ -22,10 +22,13 @@ const MARKDOWN_HEADING = /^(#{1,6})[ \t　]+(\S.*)$/;
 // boundary, ordinary prose such as 第三回合开始了 or 第一回眸一笑百媚生 would split.
 const CHINESE_HEADING_PREFIX = /^第[ \t　]*([零〇一二三四五六七八九十百千万两0-9]+)[ \t　]*([章节回卷])/;
 const CHINESE_SEPARATOR = /^[:：、.．\-—，,·]/;
-// NFKC turns full-width （ ［ ｛ into ASCII ( [ { but leaves these CJK and typographic
-// opening brackets/quotes alone. They bound a title (第一章（上）) without being separators,
-// so they are kept in the suffix instead of being stripped.
-const CHINESE_OPENING = /^[([{【「『《“‘〈〔〖〘〚]/;
+// 章/回/卷 divide a work into chapters and volumes; 节 marks a section inside one. Only
+// chapter-level markers promote a deeper markdown heading; sections stay in their chapter.
+const CHINESE_SECTION_MARKERS = "节";
+// NFKC turns full-width （ ［ ｛ ＂ ＇ into ASCII forms but leaves these CJK and typographic
+// opening brackets/quotes alone. They bound a title (第一章（上）, 第一章"风起") without being
+// separators, so they are kept in the suffix instead of being stripped.
+const CHINESE_OPENING = /^[([{【「『《“‘〝〈〔〖〘〚"']/;
 const SPECIAL_HEADING = /^(序章|楔子|引子|尾声|终章|番外(?:篇)?|Prologue|Epilogue|Interlude)(?:[ \t　]*(?:[:：、.．\-—])?[ \t　]*(\S.*))?$/i;
 const ENGLISH_HEADING = /^(chapter)[ \t　]+((?:\d+)|[ivxlcdm]+\b|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:[ \t　]*(?:[:：、.．\-—])?[ \t　]*(\S.*))?$/i;
 const ROMAN_NUMERAL = /^m{0,4}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$/i;
@@ -59,7 +62,30 @@ function chineseHeading(line: string): Omit<ManuscriptHeading, "index"> | null {
   const suffix = rest.trim();
   if ([...suffix].length > CHINESE_TITLE_MAX || SENTENCE_PUNCTUATION.test(suffix)) return null;
   const marker = `第${chinese[1]}${chinese[2]}`;
-  return { title: suffix ? `${marker} ${suffix}` : marker, chapterMarker: true };
+  return { title: suffix ? `${marker} ${suffix}` : marker, chapterMarker: !CHINESE_SECTION_MARKERS.includes(chinese[2]!) };
+}
+
+function specialHeading(line: string): Omit<ManuscriptHeading, "index"> | null {
+  const special = SPECIAL_HEADING.exec(line);
+  if (!special) return null;
+  const suffix = (special[2] ?? "").trim();
+  if ([...suffix].length > CHINESE_TITLE_MAX || SENTENCE_PUNCTUATION.test(suffix)) return null;
+  return { title: suffix ? `${special[1]} ${suffix}` : special[1]!, chapterMarker: true };
+}
+
+function englishHeading(line: string): Omit<ManuscriptHeading, "index"> | null {
+  const english = ENGLISH_HEADING.exec(line);
+  if (!english) return null;
+  const suffix = (english[3] ?? "").trim();
+  if ([...suffix].length > ENGLISH_TITLE_MAX || ENGLISH_SENTENCE.test(suffix)) return null;
+  const numeral = english[2]!;
+  if (/^[ivxlcdm]+$/i.test(numeral) && !ROMAN_NUMERAL.test(numeral)) return null;
+  return { title: `${english[1]} ${numeral}${suffix ? ` ${suffix}` : ""}`, chapterMarker: true };
+}
+
+/** Title recognition shared by plain lines and the text inside a markdown heading. */
+function classifiedHeading(line: string): Omit<ManuscriptHeading, "index"> | null {
+  return chineseHeading(line) ?? specialHeading(line) ?? englishHeading(line);
 }
 
 function headingTitle(rawLine: string): Omit<ManuscriptHeading, "index"> | null {
@@ -70,25 +96,11 @@ function headingTitle(rawLine: string): Omit<ManuscriptHeading, "index"> | null 
     const title = markdown[2]!.trim();
     if (!title || title.length > CHAPTER_LIMITS.title) return null;
     // A markdown heading such as "## 第一章" is a chapter boundary below a volume heading.
-    return { title, level: markdown[1]!.length, chapterMarker: chineseHeading(title) !== null };
+    // Classify its text like a plain line so the same title rules apply: "## Chapter 1"
+    // and "## 序章" start chapters, while sections such as "### 第一节" stay inside one.
+    return { title, level: markdown[1]!.length, chapterMarker: classifiedHeading(title)?.chapterMarker === true };
   }
-  const chinese = chineseHeading(line);
-  if (chinese) return chinese;
-  const special = SPECIAL_HEADING.exec(line);
-  if (special) {
-    const suffix = (special[2] ?? "").trim();
-    if ([...suffix].length > CHINESE_TITLE_MAX || SENTENCE_PUNCTUATION.test(suffix)) return null;
-    return { title: suffix ? `${special[1]} ${suffix}` : special[1]! };
-  }
-  const english = ENGLISH_HEADING.exec(line);
-  if (english) {
-    const suffix = (english[3] ?? "").trim();
-    if ([...suffix].length > ENGLISH_TITLE_MAX || ENGLISH_SENTENCE.test(suffix)) return null;
-    const numeral = english[2]!;
-    if (/^[ivxlcdm]+$/i.test(numeral) && !ROMAN_NUMERAL.test(numeral)) return null;
-    return { title: `${english[1]} ${numeral}${suffix ? ` ${suffix}` : ""}` };
-  }
-  return null;
+  return classifiedHeading(line);
 }
 
 interface CodeFence { marker: "`" | "~"; length: number }
@@ -161,8 +173,8 @@ export function splitManuscript(text: string): Chapter[] {
       heading.level === undefined
       || heading.level === chapterLevel
       // Volumes can be the shallowest markdown level with chapters below them, so a
-      // deeper heading still starts a chapter when its own title is a Chinese chapter
-      // marker. Arbitrary deeper headings (scenes, sections) stay inside their chapter.
+      // deeper heading still starts a chapter when its title reads as a chapter start
+      // (第X章, 序章/尾声, Chapter 1). Scenes and sections stay inside their chapter.
       || (chapterLevel !== undefined && heading.level > chapterLevel && heading.chapterMarker === true),
     )
     .map((heading) => ({ ...heading }));
