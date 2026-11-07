@@ -3,6 +3,7 @@ import {
   CHAPTER_LIMITS,
   MAX_LOCALIZED_LENGTH,
   MAX_WORKFLOW_RESULT_LENGTH,
+  WORKFLOW_TASK_TEMPLATES,
   WORKSPACE_SCHEMA_VERSION,
 } from "./types.ts";
 
@@ -388,6 +389,7 @@ export const workflowTaskSchema = z
     lastRun: workflowTaskRunMetaSchema.optional(),
     resultSuperseded: z.boolean().optional(),
     kind: workflowTaskKindSchema,
+    template: z.enum(WORKFLOW_TASK_TEMPLATES).optional(),
     status: workflowTaskStatusSchema,
     universeId: identifier.optional(),
     workId: identifier.optional(),

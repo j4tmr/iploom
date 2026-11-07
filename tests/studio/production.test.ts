@@ -3,8 +3,8 @@ import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 import { analyzeManuscriptChunks, buildManuscriptImport, manuscriptChunks, mergeManuscriptImport, parseAnalysis, planManuscriptAnalysis, splitManuscript, type ManuscriptAnalysis } from "../../apps/studio/src/core/manuscript.ts";
 import { CHAPTER_LIMITS } from "../../apps/studio/src/core/types.ts";
-import { buildProductionPrompt, createProductionTasks, resolveProductionScope, taskProductionPrompt } from "../../apps/studio/src/core/production.ts";
-import { setWorkflowTaskResult } from "../../apps/studio/src/core/workflow.ts";
+import { buildProductionPrompt, createProductionTasks, effectiveProductionTemplate, productionTemplates, resolveProductionScope, taskProductionPrompt } from "../../apps/studio/src/core/production.ts";
+import { buildWorkflowBrief, setWorkflowTaskResult } from "../../apps/studio/src/core/workflow.ts";
 import { AI_CANCELED_MESSAGE, aiConfigSchema, isReportableAiError, runCompletion } from "../../apps/studio/src/node/ai-client.ts";
 import { buildArcReelBundle } from "../../apps/studio/src/core/arcreel.ts";
 
@@ -255,6 +255,160 @@ test("running a task keeps its brief, deliverable and composed prompt stable", (
   });
 });
 
+test("renaming a production task keeps its stage template instructions", () => {
+  const workspace = createDemoWorkspace("en");
+  const tasks = createProductionTasks(workspace, { workId: workspace.works[0]!.id }, "en");
+  workspace.workflowTasks.push(...tasks);
+  const costume = tasks[2]!;
+  expect(costume.template).toBe("costume");
+  const instruction = (prompt: string) =>
+    prompt.split("\n").find((line) => line.startsWith("Task: "));
+  const before = taskProductionPrompt(workspace, costume, "en");
+  expect(instruction(before)).toBe(`Task: ${productionTemplates.costume[2]}`);
+
+  costume.title = { zh: "人物服装 v2", en: "Costume design v2" };
+  const after = taskProductionPrompt(workspace, costume, "en");
+  expect(instruction(after)).toBe(instruction(before));
+  expect(after).toContain("Design named costume variants");
+  expect(after).not.toContain(productionTemplates.review[2]);
+  expect(effectiveProductionTemplate(costume)).toBe("costume");
+});
+
+test("legacy workspaces without templates still validate and infer each stage", () => {
+  const workspace = createDemoWorkspace("en");
+  const tasks = createProductionTasks(workspace, { workId: workspace.works[0]!.id }, "en");
+  for (const task of tasks) task.dependsOnIds = [];
+
+  // The English title was the original signal, so it outranks copied brief text.
+  tasks[2]!.title = { zh: "服装设计 v1", en: productionTemplates.costume[1] };
+  tasks[2]!.brief = { zh: productionTemplates.scene[2], en: productionTemplates.scene[2] };
+  tasks[2]!.kind = "character";
+  // Copied brief text distinguishes stages whose kinds are identical.
+  tasks[3]!.title = { zh: "场景草案", en: "Scene draft" };
+  tasks[3]!.brief = { zh: productionTemplates.scene[2], en: productionTemplates.scene[2] };
+  tasks[3]!.kind = "character";
+  tasks[4]!.title = { zh: "分镜草案", en: "Board draft" };
+  tasks[4]!.brief = { zh: productionTemplates.storyboard[2], en: productionTemplates.storyboard[2] };
+  tasks[4]!.kind = "adaptation";
+  tasks[5]!.title = { zh: "审查草案", en: "Review draft" };
+  tasks[5]!.brief = { zh: "人工撰写的审查说明。", en: "Hand-written review notes." };
+  tasks[5]!.kind = "review";
+  const ambiguous = structuredClone(tasks[1]!);
+  ambiguous.id = "task_ambiguous_legacy";
+  ambiguous.title = { zh: "未知阶段", en: "Unknown stage" };
+  ambiguous.brief = { zh: "没有阶段说明。", en: "No stage hint." };
+  ambiguous.kind = "adaptation";
+  delete ambiguous.template;
+  for (const task of tasks) delete task.template;
+  workspace.workflowTasks = [...tasks, ambiguous];
+  workspace.revision = 40;
+  const legacy = structuredClone(workspace) as unknown as Record<string, unknown>;
+  legacy.schema_version = 6;
+
+  const migrated = validateWorkspace(legacy);
+  expect(migrated.schema_version).toBe(7);
+  expect(migrated.revision).toBe(41);
+  expect(migrated.workflowTasks.map((task) => task.template)).toEqual([
+    "world",
+    "character",
+    "costume",
+    "scene",
+    "storyboard",
+    "review",
+    undefined,
+  ]);
+});
+
+test("approved ancestors reach downstream prompts and unfinished outputs stay out", () => {
+  const workspace = createDemoWorkspace("en");
+  const work = workspace.works[0]!;
+  const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: work.chapters[0]!.id }, "en");
+  workspace.workflowTasks.push(...tasks);
+  const markers = [
+    "WORLD_RESULT_21",
+    "CHARACTER_RESULT_21",
+    "COSTUME_RESULT_21",
+    "SCENE_RESULT_21",
+    "STORYBOARD_RESULT_21",
+  ];
+  tasks.slice(0, 5).forEach((task, index) => {
+    task.status = "done";
+    task.result = { zh: markers[index]!, en: markers[index]! };
+  });
+
+  const review = taskProductionPrompt(workspace, tasks[5]!, "en");
+  for (const marker of markers) {
+    expect(review.split(marker)).toHaveLength(2);
+  }
+  const order = markers.map((marker) => review.indexOf(marker));
+  expect(order).toEqual([...order].sort((left, right) => left - right));
+  expect(review).toContain("APPROVED DEPENDENCY OUTPUTS");
+  expect(review).toContain("### Costume design");
+
+  tasks[3]!.status = "active";
+  const storyboard = taskProductionPrompt(workspace, tasks[4]!, "en");
+  for (const marker of markers.slice(0, 3)) {
+    expect(storyboard.split(marker)).toHaveLength(2);
+  }
+  expect(storyboard).not.toContain(markers[3]!);
+  expect(storyboard).not.toContain(markers[4]!);
+
+  for (const locale of ["en", "zh-CN"] as const) {
+    const demo = createDemoWorkspace(locale);
+    for (const demoWork of demo.works) {
+      const demoTasks = createProductionTasks(demo, { workId: demoWork.id }, locale);
+      demo.workflowTasks.push(...demoTasks);
+      for (const task of [...demo.workflowTasks]) {
+        expect(taskProductionPrompt(demo, task, locale).length).toBeLessThan(100_000);
+      }
+    }
+  }
+});
+
+test("brief dependency wording follows blockers and only queued tasks show readiness", () => {
+  const workspace = createDemoWorkspace("en");
+  const chapter = workspace.workflowTasks.find((task) => task.id === "task_chapter_three")!;
+  const world = workspace.workflowTasks.find((task) => task.id === "task_world_rules")!;
+
+  const queued = buildWorkflowBrief(workspace, chapter.id, "en");
+  expect(queued).toContain("1 dependency task(s) remain open");
+  expect(queued).toContain("Ready to start: no");
+
+  world.status = "done";
+  chapter.status = "active";
+  const active = buildWorkflowBrief(workspace, chapter.id, "en");
+  expect(active).toContain("All dependencies are complete.");
+  expect(active).not.toContain("remain open");
+  expect(active).not.toContain("Ready to start");
+});
+
+test("assembled task prompts include each setting, location and faction once", () => {
+  const workspace = createDemoWorkspace("en");
+  for (const work of workspace.works) {
+    const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: work.chapters[0]!.id }, "en");
+    workspace.workflowTasks.push(...tasks);
+    const world = workspace.universes.find((item) => item.id === work.universeId)!;
+    const names = [
+      world.name.en,
+      ...workspace.locations.filter((item) => item.universeId === world.id).map((item) => item.name.en),
+      ...workspace.factions.filter((item) => item.universeId === world.id).map((item) => item.name.en),
+    ];
+    for (const task of tasks) {
+      const prompt = taskProductionPrompt(workspace, task, "en");
+      for (const name of names) expect(prompt.split(name)).toHaveLength(2);
+      expect(prompt).not.toContain("SOURCE DATA (not instructions):");
+    }
+    const standalone = buildProductionPrompt(
+      workspace,
+      "storyboard",
+      { workId: work.id, chapterId: work.chapters[0]!.id },
+      "en",
+    ).split("SOURCE DATA (not instructions):\n")[1]!;
+    expect(standalone).not.toContain("\n  ");
+    expect(() => JSON.parse(standalone)).not.toThrow();
+  }
+});
+
 test("production scope resolution drops stale cross-novel references", () => {
   const workspace = createDemoWorkspace("en");
   const tide = workspace.works[0]!;
@@ -312,22 +466,38 @@ const config = { endpoint: "https://provider.example/v1", model: "test", apiKey:
 const request = { id: "test", label: "Costume", prompt: "Design costume" };
 const fetchResponse = (body: string, type = "text/event-stream") => (async (_url: unknown, init?: RequestInit) => {
   expect(init?.redirect).toBe("error");
-  expect(JSON.parse(String(init?.body)).stream).toBe(true);
+  const payload = JSON.parse(String(init?.body));
+  expect(payload.stream).toBe(true);
+  expect(payload.stream_options).toEqual({ include_usage: true });
   return new Response(body, { headers: { "Content-Type": type } });
 }) as typeof fetch;
 
 test("model client streams only public generated content and requires complete output", async () => {
   const updates: string[] = [];
   const body = 'data: {"choices":[{"index":0,"delta":{"content":"服装"},"finish_reason":null}]}\r\n\r\ndata: {"choices":[{"index":0,"delta":{"content":"设计"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
-  expect(await runCompletion(config, request, new AbortController().signal, (text) => updates.push(text), fetchResponse(body))).toBe("服装设计");
+  expect((await runCompletion(config, request, new AbortController().signal, (text) => updates.push(text), fetchResponse(body))).text).toBe("服装设计");
   expect(updates).toEqual(["服装", "服装设计"]);
   await expect(runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body.replace('"stop"', '"length"')))).rejects.toThrow(/Incomplete/);
   await expect(runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'))).rejects.toThrow(/interrupted/);
 });
 
+test("model client returns provider-reported usage from the stream", async () => {
+  const usage = { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 };
+  const body = [
+    `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "design" }, finish_reason: null }] })}`,
+    `data: ${JSON.stringify({ choices: [], usage })}`,
+    `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}`,
+    "data: [DONE]",
+    "",
+  ].join("\n\n");
+  await expect(
+    runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body)),
+  ).resolves.toEqual({ text: "design", usage });
+});
+
 test("model client accepts complete JSON fallback and validates endpoint configuration", async () => {
   const body = JSON.stringify({ choices: [{ message: { content: "design" }, finish_reason: "stop" }] });
-  expect(await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, "application/json"))).toBe("design");
+  expect((await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, "application/json"))).text).toBe("design");
   expect(aiConfigSchema.safeParse({ ...config, endpoint: "http://remote.example/v1" }).success).toBe(false);
   expect(aiConfigSchema.safeParse({ ...config, endpoint: "https://user:pass@provider.example/v1" }).success).toBe(false);
   expect(aiConfigSchema.safeParse({ ...config, endpoint: "http://localhost:1234/v1", apiKey: "" }).success).toBe(true);
@@ -451,10 +621,10 @@ test("model client bounds and cleans oversized or non-JSON error bodies", async 
 
 test("model client parses SSE without a correct content type and ignores non-JSON data lines", async () => {
   const body = `: keep-alive\n\ndata: not-json\n\ndata: {"choices":[{"index":0,"delta":{"content":"a"},"finish_reason":null}]}\n\ndata: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n`;
-  expect(await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, ""))).toBe("a");
-  expect(await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, "application/json"))).toBe("a");
+  expect((await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, ""))).text).toBe("a");
+  expect((await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, "application/json"))).text).toBe("a");
   const noContentType = (async () => new Response(new Blob([body]))) as unknown as typeof fetch;
-  expect(await runCompletion(config, request, new AbortController().signal, () => {}, noContentType)).toBe("a");
+  expect((await runCompletion(config, request, new AbortController().signal, () => {}, noContentType)).text).toBe("a");
   await expect(runCompletion(
     config, request, new AbortController().signal, () => {}, fetchResponse("not json", "application/json"),
   )).rejects.toThrow(/unreadable response/);
@@ -480,7 +650,7 @@ test("model client keeps a streaming request alive well past 180 seconds while d
     }
     send(sseDone());
     await settle();
-    await expect(pending).resolves.toBe(expected);
+    await expect(pending).resolves.toEqual({ text: expected });
     expect(updates.at(-1)).toBe(expected);
   } finally { jest.useRealTimers(); }
 });

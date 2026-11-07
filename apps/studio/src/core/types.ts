@@ -1,4 +1,4 @@
-export const WORKSPACE_SCHEMA_VERSION = 6 as const;
+export const WORKSPACE_SCHEMA_VERSION = 7 as const;
 export const ARC_REEL_SCHEMA = "iploom.arcreel/v1" as const;
 /** Longest result text the workspace stores per language. */
 export const MAX_WORKFLOW_RESULT_LENGTH = 200_000 as const;
@@ -65,6 +65,22 @@ export type WorkflowTaskStatus =
   | "active"
   | "review"
   | "done";
+/**
+ * Stage templates a workflow task can be assembled from. Stored explicitly on
+ * the task so renaming its title never silently changes its instructions.
+ */
+export const WORKFLOW_TASK_TEMPLATES = [
+  "world",
+  "chapter",
+  "character",
+  "costume",
+  "relationship",
+  "location",
+  "scene",
+  "storyboard",
+  "review",
+] as const;
+export type WorkflowTaskTemplate = (typeof WORKFLOW_TASK_TEMPLATES)[number];
 /**
  * Foundational standards keep AI output coherent across every project type.
  * They are registered on the workspace, not derived from a particular genre.
@@ -307,6 +323,8 @@ export interface WorkflowTask {
   /** Set on done dependents when an upstream task's result was replaced. */
   resultSuperseded?: boolean;
   kind: WorkflowTaskKind;
+  /** Production stage template. Absent on handmade tasks and pre-v7 workspaces. */
+  template?: WorkflowTaskTemplate;
   status: WorkflowTaskStatus;
   universeId?: string;
   workId?: string;

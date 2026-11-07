@@ -15,6 +15,11 @@ export interface WorkflowTaskReadiness {
   blockers: WorkflowTask[];
 }
 
+export interface WorkflowBriefOptions {
+  /** Approved upstream outputs, already labeled with stage and title. */
+  approvedOutputs?: Array<{ stage: string; title: string; result: string }>;
+}
+
 export interface WorkflowSummary {
   total: number;
   done: number;
@@ -242,6 +247,7 @@ export function buildWorkflowBrief(
   workspace: StudioWorkspace,
   taskId: string,
   locale: UiLocale = workspace.settings.locale,
+  options: WorkflowBriefOptions = {},
 ): string {
   const task = workspace.workflowTasks.find((item) => item.id === taskId);
   if (!task) throw new Error(`Unknown workflow task: ${taskId}`);
@@ -284,7 +290,11 @@ export function buildWorkflowBrief(
     `- ${zh ? "任务 ID" : "Task ID"}: ${task.id}`,
     `- ${zh ? "类型" : "Kind"}: ${kindLabel(task, locale)}`,
     `- ${zh ? "状态" : "Status"}: ${statusLabel(task.status, locale)}`,
-    `- ${zh ? "可独立开始" : "Ready to start"}: ${readiness.ready ? (zh ? "是" : "yes") : zh ? "否" : "no"}`,
+    ...(task.status === "queued"
+      ? [
+          `- ${zh ? "可独立开始" : "Ready to start"}: ${readiness.ready ? (zh ? "是" : "yes") : zh ? "否" : "no"}`,
+        ]
+      : []),
     `- ${zh ? "工作区版本" : "Workspace revision"}: ${workspace.revision}`,
   ];
   if (parent) {
@@ -443,13 +453,13 @@ export function buildWorkflowBrief(
           (dependency) =>
             `- ${displayText(dependency.title, locale)} (${dependency.id}): ${statusLabel(dependency.status, locale)}`,
         ),
-        readiness.ready
+        blockers.length
           ? zh
-            ? "- 本任务没有未完成依赖，可以作为独立子任务开始。"
-            : "- This task has no open dependency and can run as an independent subtask."
-          : zh
             ? `- 尚有 ${blockers.length} 个依赖未完成；不得把下游结果标记为已验收。`
-            : `- ${blockers.length} dependency task(s) remain open; do not mark downstream work as accepted.`,
+            : `- ${blockers.length} dependency task(s) remain open; do not mark downstream work as accepted.`
+          : zh
+            ? "- 所有依赖均已完成。"
+            : "- All dependencies are complete.",
       ]),
     );
   } else {
@@ -459,6 +469,17 @@ export function buildWorkflowBrief(
           ? "- 本任务没有前置依赖，可以独立开始。"
           : "- This task has no prerequisites and can start independently.",
       ]),
+    );
+  }
+
+  if (options.approvedOutputs?.length) {
+    lines.push(
+      ...section(
+        zh ? "已批准的依赖产出" : "APPROVED DEPENDENCY OUTPUTS",
+        options.approvedOutputs.map(
+          (item) => `### ${item.stage} · ${item.title}\n${item.result || "—"}`,
+        ),
+      ),
     );
   }
 

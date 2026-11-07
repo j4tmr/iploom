@@ -630,6 +630,7 @@ export function WorkflowTaskModal({
                 lastRun: initial?.lastRun,
                 resultSuperseded: initial?.resultSuperseded,
                 kind,
+                template: initial?.template,
                 status,
                 universeId: universeId || undefined,
                 workId: workId || undefined,

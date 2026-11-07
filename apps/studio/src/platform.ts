@@ -11,7 +11,7 @@ import {
   saveBrowserSnapshot,
   saveBrowserWorkspace,
 } from "./browser-workspace.ts";
-import type { AiConfig, AiConfigInfo, AiProgress, AiRequest } from "./core/ai.ts";
+import type { AiCompletion, AiConfig, AiConfigInfo, AiProgress, AiRequest } from "./core/ai.ts";
 
 export interface LoadedWorkspace {
   workspace: StudioWorkspace;
@@ -63,7 +63,7 @@ export interface AppInfo {
 export interface StudioBridge {
   aiConfig(): Promise<AiConfigInfo>;
   configureAi(config: AiConfig): Promise<AiConfigInfo>;
-  runAi(request: AiRequest): Promise<string>;
+  runAi(request: AiRequest): Promise<AiCompletion>;
   cancelAi(id: string): Promise<void>;
   onAiProgress(listener: (progress: AiProgress) => void): () => void;
   load(): Promise<LoadedWorkspace>;

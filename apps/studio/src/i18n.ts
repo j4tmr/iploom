@@ -399,6 +399,9 @@ const zh = {
     "连接兼容 Chat Completions 的模型后即可发送制作提示词；其余功能均可本地使用。",
   modelEndpoint: "接口地址",
   modelIdentifier: "模型标识",
+  productionEffectiveTemplate: "执行模板",
+  productionUsage: "本次用量：输入 {input}，输出 {output}",
+  productionUsageTotal: "本次用量：输入 {input}，输出 {output}，共 {total}",
 
   updateTitle: "应用更新",
   checkUpdates: "检查更新",
@@ -875,6 +878,9 @@ const en: Record<MessageKey, string> = {
     "Connect a Chat Completions-compatible endpoint to send production prompts. Everything else still works locally.",
   modelEndpoint: "Endpoint",
   modelIdentifier: "Model ID",
+  productionEffectiveTemplate: "Template",
+  productionUsage: "Usage: {input} in, {output} out",
+  productionUsageTotal: "Usage: {input} in, {output} out, {total} total",
 
   updateTitle: "Application updates",
   checkUpdates: "Check for updates",
