@@ -20,6 +20,7 @@ import {
   type ArcReelBundle,
   type StudioWorkspace,
 } from "../core/types.ts";
+import { parseArcReelBundle } from "./desktop-guards.ts";
 
 export interface LoadedWorkspace {
   workspace: StudioWorkspace;
@@ -511,24 +512,33 @@ export class WorkspaceStore {
   }
 
   async exportArcReel(
-    bundle: ArcReelBundle,
+    bundleInput: ArcReelBundle,
     destinationRoot: string,
   ): Promise<WrittenBundle> {
-    await mkdir(destinationRoot, { recursive: true });
+    // Validate every field before creating anything. In particular the hash
+    // and timestamp feed the directory name, so a compromised renderer could
+    // otherwise escape the selected directory with `manifestSha256: "/../..//"`.
+    const bundle = parseArcReelBundle(bundleInput);
+    const destination = resolve(destinationRoot);
     const timestamp = bundle.generatedAt
       .replace(/[-:]/g, "")
       .replace(/\..+$/, "")
       .replace("T", "-");
     const baseDirectory = join(
-      destinationRoot,
+      destination,
       `${arcReelSlug(bundle.workTitle)}-${timestamp}-${bundle.manifestSha256.slice(0, 8)}-arcreel`,
     );
     let directory = baseDirectory;
     for (let suffix = 2; await exists(directory); suffix += 1) {
       directory = `${baseDirectory}-${suffix}`;
     }
+    // The package must stay exactly one level below the selected destination.
+    if (dirname(directory) !== destination) {
+      throw new Error("Export directory escapes the selected destination");
+    }
+    await mkdir(destination, { recursive: true });
     const staging = join(
-      destinationRoot,
+      destination,
       `.iploom-staging-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     );
     const seen = new Set<string>();

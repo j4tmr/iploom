@@ -123,4 +123,63 @@ describe("validation messages", () => {
     expect(text).toContain("a brand new rule failed");
     expect(text).toContain("workflowTasks.0");
   });
+
+  test("resolves entity labels for every collection the validator can point at", () => {
+    const edited = structuredClone(workspace);
+    const workIndex = edited.works.findIndex(
+      (item) => item.id === "work_tide_clock",
+    );
+    edited.works[workIndex]!.chapters[0]!.title = "";
+    const t = translator("zh-CN");
+    const cases: Array<[string, string]> = [
+      ["universes.0.name.zh", "世界"],
+      [`works.${workIndex}.chapters.0.title.zh`, "第"],
+      ["characters.0.name.zh", "人物"],
+      ["relationships.0.label.zh", "人物关系"],
+      ["standards.0.title.zh", "基础规则"],
+      ["workflowTasks.0.title.zh", "AI 任务"],
+      ["timelineEvents.0.title.zh", "时间线事件"],
+      ["storyObjects.0.name.zh", "故事物件"],
+      ["locations.0.name.zh", "地点"],
+      ["factions.0.name.zh", "势力"],
+      ["lore.0.title.zh", "世界设定"],
+      ["exports.0.workTitle", "导出记录"],
+      ["meta.elsewhere", "工作区"],
+    ];
+    for (const [path, label] of cases) {
+      const text = describeWorkspaceProblem(
+        [detail({ path, code: "invalid_type" })],
+        edited,
+        "zh-CN",
+        t,
+      );
+      expect(text).toContain(label);
+      expect(text).toContain(path);
+    }
+  });
+
+  test("translates reason codes for every origin and keeps unknown codes verbatim", () => {
+    const t = translator("zh-CN");
+    const reasons: Array<[Partial<WorkspaceIssueDetail>, string]> = [
+      [{ code: "too_small", origin: "array", minimum: 2 }, "至少需要 2 项"],
+      [{ code: "too_big", origin: "array", maximum: 8 }, "最多允许 8 项"],
+      [{ code: "invalid_value" }, "取值格式不正确"],
+      [{ code: "invalid_format" }, "取值格式不正确"],
+      [{ code: "not_multiple_of" }, "取值格式不正确"],
+      [{ code: "unrecognized_keys" }, "取值格式不正确"],
+      [{ code: "invalid_key" }, "取值格式不正确"],
+      [{ code: "invalid_element" }, "取值格式不正确"],
+      [{ code: "invalid_union" }, "取值格式不正确"],
+      [{ code: "mystery_code", message: "mystery" }, "mystery"],
+    ];
+    for (const [overrides, expected] of reasons) {
+      const text = describeWorkspaceProblem(
+        [detail({ path: "universes.0.name.zh", ...overrides })],
+        workspace,
+        "zh-CN",
+        t,
+      );
+      expect(text).toContain(expected);
+    }
+  });
 });

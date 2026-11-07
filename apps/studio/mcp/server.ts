@@ -36,6 +36,10 @@ import type {
 } from "../src/core/types.ts";
 import { APP_VERSION } from "../src/core/version.ts";
 import {
+  isWithin,
+  realPathWithExistingAncestor,
+} from "../src/node/desktop-guards.ts";
+import {
   WorkspaceStore,
   type LoadedWorkspace,
 } from "../src/node/workspace-store.ts";
@@ -537,15 +541,48 @@ async function run(action: () => Promise<unknown>): Promise<CallToolResult> {
   }
 }
 
-export function createStudioMcpServer(workspaceFile: string): McpServer {
+export interface StudioMcpServerOptions {
+  /**
+   * Extra export roots explicitly enabled by the operator (repeatable
+   * `--export-root`). Tool arguments can narrow a root, never widen the set.
+   */
+  exportRoots?: readonly string[];
+}
+
+export function createStudioMcpServer(
+  workspaceFile: string,
+  options: StudioMcpServerOptions = {},
+): McpServer {
   const store = new WorkspaceStore(workspaceFile);
   const workspaceDirectory = dirname(store.filePath);
+  const defaultExportRoot = join(workspaceDirectory, "exports");
+  const exportRoots = [
+    defaultExportRoot,
+    ...(options.exportRoots ?? []).map((root) => resolve(root)),
+  ];
+  const assertExportRoot = async (candidate: string): Promise<void> => {
+    const realCandidate = await realPathWithExistingAncestor(candidate);
+    for (const root of exportRoots) {
+      try {
+        if (
+          isWithin(await realPathWithExistingAncestor(root), realCandidate)
+        ) {
+          return;
+        }
+      } catch {
+        // An unreadable root cannot authorize a write.
+      }
+    }
+    throw new Error(
+      `Export root is outside the allowed export directories: ${candidate}`,
+    );
+  };
   const server = new McpServer(
     { name: "IPloom Studio", version: APP_VERSION },
     {
       instructions:
-        "IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节、关系、AI 工作流与项目基础规则；search_ip 支持中英双语子串检索。前 11 个工具只读；create_standard 与 update_standard 只修改工作区内的基础规则；export_arcreel_bundle 是唯一写盘导出工具，默认写入工作区同目录的 exports。\n" +
-        "IPloom Studio local IP memory: list story worlds before reading novels, chapters, relationships, AI workflow and foundation standards. The first 11 tools are read-only; create_standard and update_standard only change foundation standards inside the workspace; export_arcreel_bundle is the only tool that writes files and defaults to an exports directory beside the workspace file.",
+        "IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节、关系、AI 工作流与项目基础规则；search_ip 支持中英双语子串检索。前 11 个工具只读；create_standard 与 update_standard 只修改工作区内的基础规则；export_arcreel_bundle 是唯一写盘导出工具，只能写入工作区同目录的 exports，或服务端启动时用 --export-root 显式允许的目录。\n" +
+        "IPloom Studio local IP memory: list story worlds before reading novels, chapters, relationships, AI workflow and foundation standards. The first 11 tools are read-only; create_standard and update_standard only change foundation standards inside the workspace; export_arcreel_bundle is the only tool that writes files and may only write inside the exports directory beside workspace.json or a directory enabled with --export-root at server start.",
     },
   );
 
@@ -1123,7 +1160,7 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     {
       title: "导出 ArcReel 包 / Export ArcReel bundle",
       description:
-        "构建并写入 ArcReel/3D 漫剧交接包。output_dir 可为绝对路径或相对工作区目录的路径；省略时写入工作区同目录 exports。Build and write an ArcReel / stylized 3D comic-drama handoff. output_dir may be absolute or relative to the workspace directory; the default is exports beside workspace.json.",
+        "构建并写入 ArcReel/3D 漫剧交接包。output_dir 必须位于工作区 exports 目录或服务端启动时用 --export-root 显式允许的目录内；省略时写入工作区同目录 exports。Build and write an ArcReel / stylized 3D comic-drama handoff. output_dir must stay inside the workspace exports directory or a directory enabled with --export-root at server start; the default is exports beside workspace.json.",
       inputSchema: z.object({
         novel_id: novelIdSchema,
         chapter_ids: z
@@ -1150,7 +1187,7 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
           .min(1)
           .optional()
           .describe(
-            "导出根目录，绝对路径或相对工作区目录 / Absolute or workspace-relative export root.",
+            "导出根目录，必须位于 exports 或 --export-root 允许的目录内；相对路径按工作区目录解析 / Export root inside exports or an allowed --export-root; relative paths resolve against the workspace directory.",
           ),
       }),
       annotations: EXPORT_ANNOTATIONS,
@@ -1162,7 +1199,8 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
         const novel = findNovel(workspace, args.novel_id);
         const outputRoot = args.output_dir
           ? resolve(workspaceDirectory, args.output_dir)
-          : join(workspaceDirectory, "exports");
+          : defaultExportRoot;
+        await assertExportRoot(outputRoot);
         const bundle = await buildArcReelBundle(workspace, {
           workId: novel.id,
           chapterIds: args.chapter_ids,
@@ -1203,6 +1241,7 @@ async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
       workspace: { type: "string", short: "w" },
+      "export-root": { type: "string", multiple: true },
     },
     strict: true,
   });
@@ -1210,7 +1249,9 @@ async function main(): Promise<void> {
     throw new Error(
       "Missing required --workspace <workspace.json> / 缺少 --workspace 参数。",
     );
-  const server = createStudioMcpServer(values.workspace);
+  const server = createStudioMcpServer(values.workspace, {
+    exportRoots: values["export-root"]?.map((root) => resolve(root)),
+  });
   await server.connect(new StdioServerTransport());
 }
 

@@ -1,9 +1,15 @@
 import { expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import { WorkspaceStore } from "../../apps/studio/src/node/workspace-store.ts";
 
@@ -493,7 +499,7 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     const custom = await call(client, "export_arcreel_bundle", {
       novel_id: "work_tide_clock",
       chapter_ids: ["chapter_tide_001"],
-      output_dir: "custom-exports",
+      output_dir: "exports/custom-exports",
       approved_only: true,
     });
     expect(custom.isError).toBe(false);
@@ -501,7 +507,9 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
       directory: string;
       chapters: Array<{ chapterId: string }>;
     };
-    expect(dirname(customData.directory)).toBe(join(root, "custom-exports"));
+    expect(dirname(customData.directory)).toBe(
+      join(root, "exports", "custom-exports"),
+    );
     expect(customData.chapters).toHaveLength(1);
     expect(customData.chapters[0]?.chapterId).toBe("chapter_tide_001");
     expect(readFileSync(workspacePath, "utf8")).toBe(afterWrites);
@@ -564,6 +572,109 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
   } finally {
     await client.close().catch(() => undefined);
     rmSync(root, { recursive: true, force: true });
+  }
+}, 20_000);
+
+test("MCP export stays inside allowed roots and honours --export-root", async () => {
+  const root = mkdtempSync(join(tmpdir(), "iploom-studio-mcp-boundary-"));
+  const outside = mkdtempSync(join(tmpdir(), "iploom-studio-mcp-outside-"));
+  const extraRoot = mkdtempSync(join(tmpdir(), "iploom-studio-mcp-extra-"));
+  const escaped = join(root, "..", `${basename(root)}-escape`);
+  const workspacePath = join(root, "workspace.json");
+  await new WorkspaceStore(workspacePath).save(
+    createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"),
+  );
+  const serverPath = resolve(
+    import.meta.dir,
+    "../../apps/studio/mcp/server.ts",
+  );
+  const clients: Client[] = [];
+  const connect = async (args: string[]) => {
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [serverPath, "--workspace", workspacePath, ...args],
+      cwd: root,
+      stderr: "pipe",
+    });
+    const client = new Client({
+      name: "iploom-studio-mcp-boundary",
+      version: "0.3.0",
+    });
+    await client.connect(transport);
+    clients.push(client);
+    return client;
+  };
+  const exportArgs = {
+    novel_id: "work_tide_clock",
+    chapter_ids: ["chapter_tide_001"],
+    approved_only: true,
+  };
+
+  try {
+    const client = await connect([]);
+
+    const absolute = await call(client, "export_arcreel_bundle", {
+      ...exportArgs,
+      output_dir: outside,
+    });
+    expect(absolute.isError).toBe(true);
+    expect(
+      (absolute.body.error as { message: string }).message,
+    ).toContain("allowed export directories");
+    expect(readdirSync(outside)).toEqual([]);
+
+    const traversal = await call(client, "export_arcreel_bundle", {
+      ...exportArgs,
+      output_dir: `../${basename(root)}-escape`,
+    });
+    expect(traversal.isError).toBe(true);
+    expect(
+      (traversal.body.error as { message: string }).message,
+    ).toContain("allowed export directories");
+    expect(existsSync(escaped)).toBe(false);
+
+    const nested = await call(client, "export_arcreel_bundle", {
+      ...exportArgs,
+      output_dir: "exports/sub",
+    });
+    expect(nested.isError).toBe(false);
+    expect(
+      dirname((nested.body as unknown as { directory: string }).directory),
+    ).toBe(join(root, "exports", "sub"));
+
+    const extraClient = await connect(["--export-root", extraRoot]);
+    const allowed = await call(extraClient, "export_arcreel_bundle", {
+      ...exportArgs,
+      output_dir: extraRoot,
+    });
+    expect(allowed.isError).toBe(false);
+    expect(
+      dirname((allowed.body as unknown as { directory: string }).directory),
+    ).toBe(extraRoot);
+    expect(readdirSync(extraRoot)).toHaveLength(1);
+
+    const stillOutside = await call(extraClient, "export_arcreel_bundle", {
+      ...exportArgs,
+      output_dir: outside,
+    });
+    expect(stillOutside.isError).toBe(true);
+    expect(readdirSync(outside)).toEqual([]);
+
+    // The default workspace `exports` root stays available beside extra roots.
+    const defaultRoot = await call(extraClient, "export_arcreel_bundle", {
+      ...exportArgs,
+    });
+    expect(defaultRoot.isError).toBe(false);
+    expect(
+      dirname((defaultRoot.body as unknown as { directory: string }).directory),
+    ).toBe(join(root, "exports"));
+  } finally {
+    await Promise.all(
+      clients.map((client) => client.close().catch(() => undefined)),
+    );
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+    rmSync(extraRoot, { recursive: true, force: true });
   }
 }, 20_000);
 

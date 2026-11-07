@@ -79,7 +79,7 @@ try {
     name: "export_arcreel_bundle",
     arguments: {
       novel_id: "work_tide_clock",
-      output_dir: "bundle-export",
+      output_dir: "exports/bundle-export",
     },
   });
   if (exported.isError) throw new Error("Bundled MCP export failed");

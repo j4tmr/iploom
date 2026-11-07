@@ -1,7 +1,6 @@
 import { constants, existsSync } from "node:fs";
-import { access, mkdir, stat, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { access, mkdir, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import {
   app,
   BrowserWindow,
@@ -24,16 +23,21 @@ import {
   unavailableUpdateCheck,
   type UpdateCheckResult,
 } from "../src/core/updates.ts";
-import type {
-  ArcReelBundle,
-  StudioWorkspace,
-  UiLocale,
-} from "../src/core/types.ts";
+import type { StudioWorkspace, UiLocale } from "../src/core/types.ts";
 import {
   WorkspaceStore,
   type LoadedWorkspace,
   type WorkspaceSnapshot,
 } from "../src/node/workspace-store.ts";
+import {
+  canonicalPath,
+  isTrustedRendererUrl as isTrustedRendererValue,
+  parseArcReelBundle,
+  parseDevUrl as parseDevUrlValue,
+  revealKnownPath,
+  safeExternalUrl,
+  workspaceRevealFolders,
+} from "../src/node/desktop-guards.ts";
 import { createElectronMcpConfig } from "../src/node/mcp-config.ts";
 import { AI_CANCELED_MESSAGE, aiConfigSchema, aiRequestSchema, isReportableAiError, runCompletion } from "../src/node/ai-client.ts";
 import type { AiConfig } from "../src/core/ai.ts";
@@ -46,7 +50,6 @@ import type {
 const APP_ID = "com.j4tmr.iploom.studio";
 const RENDERER_FILE = join(__dirname, "..", "renderer", "index.html");
 const RENDERER_ROOT = dirname(RENDERER_FILE);
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const UPDATE_CHECK_TIMEOUT_MS = 10_000;
 
 let mainWindow: BrowserWindow | null = null;
@@ -76,58 +79,15 @@ let recoveryWorkspace: StudioWorkspace | null = null;
 
 app.setName("IPloom Studio");
 
-function canonicalFolder(value: string): string {
-  const absolute = resolve(value);
-  return process.platform === "win32" ? absolute.toLocaleLowerCase() : absolute;
-}
-
-function isWithin(parent: string, child: string): boolean {
-  const path = relative(canonicalFolder(parent), canonicalFolder(child));
-  return (
-    path === "" ||
-    (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path))
-  );
-}
-
 function parseDevUrl(): URL | null {
-  if (app.isPackaged) return null;
-  const raw = process.env.IPLOOM_STUDIO_DEV_URL?.trim();
-  if (!raw) return null;
-  const url = new URL(raw);
-  if (url.protocol !== "http:" || !LOOPBACK_HOSTS.has(url.hostname)) {
-    throw new Error(
-      "IPLOOM_STUDIO_DEV_URL must be a loopback HTTP URL in development",
-    );
-  }
-  return url;
+  return parseDevUrlValue(process.env.IPLOOM_STUDIO_DEV_URL, app.isPackaged);
 }
 
 function isTrustedRendererUrl(value: string): boolean {
-  try {
-    const target = new URL(value);
-    if (devUrl) return target.origin === devUrl.origin;
-    if (target.protocol !== "file:") return false;
-    return isWithin(RENDERER_ROOT, fileURLToPath(target));
-  } catch {
-    return false;
-  }
-}
-
-function safeExternalUrl(value: string): URL | null {
-  try {
-    const url = new URL(value);
-    if (
-      (url.protocol !== "https:" && url.protocol !== "http:") ||
-      url.username ||
-      url.password ||
-      value.length > 8_192
-    ) {
-      return null;
-    }
-    return url;
-  } catch {
-    return null;
-  }
+  return isTrustedRendererValue(value, {
+    rendererRoot: RENDERER_ROOT,
+    devOrigin: devUrl,
+  });
 }
 
 async function openExternalSafely(value: string): Promise<void> {
@@ -395,13 +355,15 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-function rememberFolders(workspace: StudioWorkspace): void {
+function rememberFolders(): void {
   const store = requireStore();
-  allowedFolders.add(canonicalFolder(dirname(store.filePath)));
-  allowedFolders.add(canonicalFolder(store.snapshotDirectory));
-  for (const record of workspace.exports) {
-    if (record.outputPath)
-      allowedFolders.add(canonicalFolder(record.outputPath));
+  // Only locations the main process itself created. `workspace.exports[]` is
+  // renderer-writable, so an outputPath from disk can never widen this list.
+  for (const folder of workspaceRevealFolders(
+    store.filePath,
+    store.snapshotDirectory,
+  )) {
+    allowedFolders.add(folder);
   }
 }
 
@@ -409,42 +371,18 @@ async function loadWorkspace(): Promise<LoadedWorkspace> {
   const store = requireStore();
   try {
     const loaded = await store.load();
-    rememberFolders(loaded.workspace);
+    rememberFolders();
     return loaded;
   } catch (error) {
     if (await exists(store.filePath)) throw error;
     const workspace = createDemoWorkspace(defaultLocale());
     await store.save(workspace);
-    rememberFolders(workspace);
+    rememberFolders();
     return {
       workspace,
       path: store.filePath,
       recoveredFromBackup: false,
     };
-  }
-}
-
-function assertArcReelBundle(value: unknown): asserts value is ArcReelBundle {
-  if (!value || typeof value !== "object") {
-    throw new Error("Invalid ArcReel bundle");
-  }
-  const bundle = value as Partial<ArcReelBundle>;
-  if (
-    bundle.schema !== "iploom.arcreel/v1" ||
-    typeof bundle.workTitle !== "string" ||
-    typeof bundle.generatedAt !== "string" ||
-    !Array.isArray(bundle.files)
-  ) {
-    throw new Error("Invalid ArcReel bundle");
-  }
-  for (const file of bundle.files) {
-    if (
-      !file ||
-      typeof file.path !== "string" ||
-      typeof file.content !== "string"
-    ) {
-      throw new Error("Invalid ArcReel bundle file");
-    }
   }
 }
 
@@ -504,8 +442,8 @@ function mcpClientConfig(): McpClientConfig {
   };
 }
 
-async function exportArcReel(bundle: ArcReelBundle): Promise<WrittenBundle> {
-  assertArcReelBundle(bundle);
+async function exportArcReel(bundleInput: unknown): Promise<WrittenBundle> {
+  const bundle = parseArcReelBundle(bundleInput);
   const options: OpenDialogOptions = {
     title:
       bundle.workLanguage === "zh-CN"
@@ -523,7 +461,7 @@ async function exportArcReel(bundle: ArcReelBundle): Promise<WrittenBundle> {
     return { directory: "", files: 0, bytes: 0, canceled: true };
   }
   const written = await requireStore().exportArcReel(bundle, destination);
-  allowedFolders.add(canonicalFolder(written.directory));
+  allowedFolders.add(canonicalPath(written.directory));
   return written;
 }
 
@@ -595,7 +533,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     "iploom:export-arc-reel",
-    async (event, bundle: ArcReelBundle) => {
+    async (event, bundle: unknown) => {
       assertTrustedSender(event);
       return exportArcReel(bundle);
     },
@@ -627,17 +565,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("iploom:open-folder", async (event, value: string) => {
     assertTrustedSender(event);
-    if (typeof value !== "string" || !value.trim()) {
-      throw new Error("Folder path must be a string");
-    }
-    const folder = canonicalFolder(value);
-    if (![...allowedFolders].some((allowed) => isWithin(allowed, folder))) {
-      throw new Error("Folder is outside this workspace's export history");
-    }
-    const info = await stat(value);
-    if (!info.isDirectory()) throw new Error("Path is not a directory");
-    const failure = await shell.openPath(resolve(value));
-    if (failure) throw new Error(failure);
+    await revealKnownPath(value, {
+      allowedFolders,
+      showItemInFolder: (path) => shell.showItemInFolder(path),
+    });
   });
 
   ipcMain.handle("iploom:open-external", async (event, value: string) => {
@@ -673,7 +604,7 @@ function registerIpcHandlers(): void {
         throw new Error("Snapshot path must be a string");
       }
       const loaded = await requireStore().restoreSnapshot(snapshotPath);
-      rememberFolders(loaded.workspace);
+      rememberFolders();
       return loaded;
     },
   );
@@ -689,7 +620,7 @@ function registerIpcHandlers(): void {
     const snapshotPath = await store.createSnapshot("before-reset-demo");
     const workspace = createDemoWorkspace(locale);
     await store.save(workspace);
-    rememberFolders(workspace);
+    rememberFolders();
     return {
       workspace,
       path: store.filePath,
