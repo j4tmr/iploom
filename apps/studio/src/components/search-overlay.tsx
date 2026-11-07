@@ -95,12 +95,15 @@ export function SearchOverlay({
   useEffect(() => setActive(0), [query]);
   // Keep the highlighted result inside the scroll viewport while the query
   // changes. `block: "nearest"` scrolls only when it has actually left it.
+  // The result set is a dependency too: new results re-render the list while
+  // `setActive(0)` bails at index 0, so otherwise the list keeps its old
+  // scroll offset and the highlighted first result can sit out of view.
   useEffect(() => {
     if (!open) return;
     document
       .getElementById(optionId(active))
       ?.scrollIntoView?.({ block: "nearest" });
-  }, [active, open]);
+  }, [active, open, results]);
   if (!open) return null;
 
   return (

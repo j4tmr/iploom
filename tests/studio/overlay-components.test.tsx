@@ -412,3 +412,37 @@ test("the palette exposes its results and keeps the active one in view", () => {
     Element.prototype.scrollIntoView = previous;
   }
 });
+
+test("a new query scrolls the highlighted result back into view", () => {
+  const scrollIntoView = mock(() => {});
+  const previous = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = scrollIntoView as typeof Element.prototype.scrollIntoView;
+
+  try {
+    const view = render(
+      <SearchOverlay
+        open
+        workspace={createDemoWorkspace("en")}
+        locale="en"
+        t={translator("en")}
+        onClose={() => {}}
+        onSelect={() => {}}
+      />,
+    );
+
+    // An empty query renders only the hint, so opening by itself cannot scroll.
+    expect(scrollIntoView).toHaveBeenCalledTimes(0);
+
+    const input = view.getByRole("combobox") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "the" } });
+
+    const options = view.getAllByRole("option");
+    expect(options.length).toBeGreaterThan(1);
+    // The highlight stays at the first result; the new result set alone must
+    // bring it back after the list was scrolled by the previous query.
+    expect(input.getAttribute("aria-activedescendant")).toBe(options[0]!.id);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest" });
+  } finally {
+    Element.prototype.scrollIntoView = previous;
+  }
+});
