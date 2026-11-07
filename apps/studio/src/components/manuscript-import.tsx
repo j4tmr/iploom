@@ -76,8 +76,17 @@ export function ManuscriptImport({ locale, onClose, onImport }: { locale: UiLoca
     } catch (error) { setMessage(String(error)); }
     finally { active.current = ""; setBusy(false); }
   };
-  return <Modal open onClose={() => { if (!busy) onClose(); }} wide title={en ? "Import existing novel" : "导入已有小说"} description={en ? "TXT / Markdown or pasted text. Word, EPUB and PDF: export to plain text first. Import creates a new world and novel without overwriting existing work." : "支持 TXT / Markdown 或粘贴文本。Word、EPUB、PDF 请先导出纯文本；导入会新建世界与小说，不覆盖已有作品。"} footer={<>
-    <Button disabled={busy} onClick={onClose}>{en ? "Close" : "关闭"}</Button>
+  // Pasted text, a chosen file and an edited analysis are all real work that
+  // the import dialog would drop on close, so confirm first (never while a
+  // model request is running: closing is blocked, not confirmed).
+  const requestClose = () => {
+    if (busy) return;
+    const dirty = Boolean(title.trim() || text.trim() || analysis.trim() || results.length);
+    if (dirty && !window.confirm(en ? "This import has text or analysis that will not be kept. Close anyway?" : "这次导入的原文或分析尚未导入，关闭后会丢失。确定关闭？")) return;
+    onClose();
+  };
+  return <Modal open onClose={requestClose} wide title={en ? "Import existing novel" : "导入已有小说"} description={en ? "TXT / Markdown or pasted text. Word, EPUB and PDF: export to plain text first. Import creates a new world and novel without overwriting existing work." : "支持 TXT / Markdown 或粘贴文本。Word、EPUB、PDF 请先导出纯文本；导入会新建世界与小说，不覆盖已有作品。"} footer={<>
+    <Button disabled={busy} onClick={requestClose}>{en ? "Close" : "关闭"}</Button>
     <Button data-testid="import-confirm" variant="primary" disabled={busy || !title.trim() || !chapters.length || Boolean(parseError) || (Boolean(analysis) && !reviewed)} onClick={() => {
       try { const imported = buildManuscriptImport(title, chapters, analysis ? JSON.parse(analysis) : [], locale); onImport(imported); onClose(); } catch (error) { setMessage(String(error)); }
     }}>{analysis ? (en ? "Import reviewed assets and manuscript" : "导入已审阅资产与原稿") : (en ? "Import manuscript only" : "仅导入原稿")}</Button>

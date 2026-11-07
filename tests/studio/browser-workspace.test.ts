@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  StaleBrowserWorkspaceError,
   browserSnapshotKey,
   browserWorkspaceKey,
   loadBrowserSnapshot,
@@ -67,6 +68,76 @@ test("browser demo reset keeps the previous workspace in one snapshot slot", () 
   expect(
     JSON.parse(storage.getItem(browserWorkspaceKey)!).settings.locale,
   ).toBe("zh-CN");
+});
+
+test("an older browser revision cannot overwrite a newer stored workspace", () => {
+  const base = createDemoWorkspace("en");
+  const newer = structuredClone(base);
+  newer.revision = base.revision + 5;
+  const storage = storageWith(JSON.stringify(newer));
+  const older = structuredClone(base);
+  older.revision = base.revision + 1;
+
+  expect(() => saveBrowserWorkspace(storage, older)).toThrow(
+    StaleBrowserWorkspaceError,
+  );
+  // The newer workspace stays untouched, so the stale tab cannot roll it back.
+  expect(storage.getItem(browserWorkspaceKey)).toBe(JSON.stringify(newer));
+});
+
+test("a stale browser save is marked non-retryable", () => {
+  const base = createDemoWorkspace("en");
+  const newer = structuredClone(base);
+  newer.revision = base.revision + 5;
+  const storage = storageWith(JSON.stringify(newer));
+
+  try {
+    saveBrowserWorkspace(storage, base);
+    throw new Error("expected a stale save to be rejected");
+  } catch (error) {
+    expect(error).toBeInstanceOf(StaleBrowserWorkspaceError);
+    expect((error as { retryable?: boolean }).retryable).toBe(false);
+  }
+});
+
+test("equal or newer browser revisions are accepted", () => {
+  const base = createDemoWorkspace("en");
+  const current = structuredClone(base);
+  current.revision = base.revision + 3;
+  const storage = storageWith(JSON.stringify(current));
+
+  const equal = structuredClone(base);
+  equal.revision = current.revision;
+  saveBrowserWorkspace(storage, equal);
+  expect(JSON.parse(storage.getItem(browserWorkspaceKey)!).revision).toBe(
+    current.revision,
+  );
+
+  const newer = structuredClone(base);
+  newer.revision = current.revision + 1;
+  saveBrowserWorkspace(storage, newer);
+  expect(JSON.parse(storage.getItem(browserWorkspaceKey)!).revision).toBe(
+    newer.revision,
+  );
+});
+
+test("unreadable stored data cannot block a healthy save", () => {
+  const storage = storageWith("{broken");
+  const workspace = createDemoWorkspace("en");
+  saveBrowserWorkspace(storage, workspace);
+  expect(loadBrowserWorkspace(storage, "en").workspace).toEqual(workspace);
+});
+
+test("snapshot restore and demo reset may intentionally roll a revision back", () => {
+  const base = createDemoWorkspace("en");
+  const newer = structuredClone(base);
+  newer.revision = base.revision + 9;
+  const storage = storageWith(JSON.stringify(newer));
+
+  saveBrowserWorkspace(storage, base, { allowRollback: true });
+  expect(JSON.parse(storage.getItem(browserWorkspaceKey)!).revision).toBe(
+    base.revision,
+  );
 });
 
 test("browser never replaces a healthy snapshot with corrupt data", () => {

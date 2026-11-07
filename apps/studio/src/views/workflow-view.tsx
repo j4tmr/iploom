@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { displayText } from "../core/factory.ts";
 import { MAX_WORKFLOW_RESULT_LENGTH } from "../core/types.ts";
 import type {
@@ -74,7 +74,7 @@ export function WorkflowView({
   onAddSubtask: (task: WorkflowTask) => void;
   onDeleteTask: (task: WorkflowTask) => void;
   onStatusChange: (task: WorkflowTask, status: WorkflowTaskStatus) => void;
-  onSaveResult: (task: WorkflowTask, result: string) => void;
+  onSaveResult: (task: WorkflowTask, result: string) => boolean;
   onOpenWork: (workId: string) => void;
 }) {
   const summary = workflowSummary(workspace);
@@ -89,6 +89,20 @@ export function WorkflowView({
     selected ? displayText(selected.result, locale) : "",
   );
   const [briefCopied, setBriefCopied] = useState(false);
+  const [conflictText, setConflictText] = useState<string | null>(null);
+  // The workspace text this editor was last synced to, plus the text currently
+  // in the textarea. Together they answer "did the user type something the
+  // workspace does not have yet?" without treating a save round-trip as an
+  // external edit.
+  const baseRef = useRef({
+    id: selected?.id ?? "",
+    text: selected ? displayText(selected.result, locale) : "",
+  });
+  const textRef = useRef(resultText);
+
+  useEffect(() => {
+    textRef.current = resultText;
+  }, [resultText]);
 
   useEffect(() => {
     if (
@@ -100,9 +114,45 @@ export function WorkflowView({
   }, [selectedId, workspace.workflowTasks]);
 
   useEffect(() => {
-    setResultText(selected ? displayText(selected.result, locale) : "");
+    const incoming = selected ? displayText(selected.result, locale) : "";
+    const base = baseRef.current;
+    const selectionChanged = (selected?.id ?? "") !== base.id;
+    if (incoming === base.text && !selectionChanged) {
+      setBriefCopied(false);
+      return;
+    }
+    const dirty = textRef.current !== base.text;
+    if (!dirty || selectionChanged) {
+      // Nothing typed, or the user already confirmed a switch: follow the
+      // workspace. A programmatic selection repair lands here too.
+      setResultText(incoming);
+      baseRef.current = { id: selected?.id ?? "", text: incoming };
+      setConflictText(null);
+    } else {
+      // The same task's saved result changed underneath unsaved local edits
+      // (an AI run, a snapshot restore, another window). Keep the local text
+      // and offer the incoming version instead of overwriting it silently.
+      setConflictText(incoming);
+    }
     setBriefCopied(false);
   }, [locale, selected?.id, selected?.result.zh, selected?.result.en]);
+
+  const isDirty = selected ? resultText !== baseRef.current.text : false;
+
+  const switchTo = (taskId: string) => {
+    if (taskId === selected?.id) return;
+    if (isDirty) {
+      const confirmed = window.confirm(
+        local(
+          locale,
+          "当前任务的结果有未保存的修改，切换后这些修改会丢失。继续切换？",
+          "This result has unsaved edits. Switching tasks will discard them. Continue?",
+        ),
+      );
+      if (!confirmed) return;
+    }
+    setSelectedId(taskId);
+  };
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -265,7 +315,7 @@ export function WorkflowView({
                         "--task-depth": Math.min(depth, 4) * 15 + "px",
                       } as React.CSSProperties
                     }
-                    onClick={() => setSelectedId(task.id)}
+                    onClick={() => switchTo(task.id)}
                   >
                     <span className="workflow-row-mark">
                       {depth ? <Icon name="link" size={14} /> : null}
@@ -393,13 +443,13 @@ export function WorkflowView({
               {parent || children.length || dependencies.length ? (
                 <section className="workflow-links">
                   {parent ? (
-                    <button onClick={() => setSelectedId(parent.id)}>
+                    <button onClick={() => switchTo(parent.id)}>
                       <Icon name="arrowLeft" size={14} />
                       {t("workflowParent")}: {displayText(parent.title, locale)}
                     </button>
                   ) : null}
                   {children.map((child) => (
-                    <button key={child.id} onClick={() => setSelectedId(child.id)}>
+                    <button key={child.id} onClick={() => switchTo(child.id)}>
                       <Icon name="arrow" size={14} />
                       {t("workflowSubtasks")}: {displayText(child.title, locale)}
                     </button>
@@ -407,7 +457,7 @@ export function WorkflowView({
                   {dependencies.map((dependency) => (
                     <button
                       key={dependency.id}
-                      onClick={() => setSelectedId(dependency.id)}
+                      onClick={() => switchTo(dependency.id)}
                     >
                       <Icon name="link" size={14} />
                       {t("workflowDepends")}: {displayText(dependency.title, locale)}
@@ -429,6 +479,31 @@ export function WorkflowView({
                     placeholder={t("workflowResultPlaceholder")}
                   />
                 </label>
+                {conflictText !== null ? (
+                  <div className="workflow-readiness waiting workflow-conflict">
+                    <Icon name="link" size={16} />
+                    <span>
+                      {local(
+                        locale,
+                        "这个结果的已保存版本在别处被更新了。你的修改仍保留在这里，未被覆盖。",
+                        "The saved version of this result changed elsewhere. Your edits are still here and were not overwritten.",
+                      )}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setResultText(conflictText);
+                        baseRef.current = {
+                          id: selected.id,
+                          text: conflictText,
+                        };
+                        setConflictText(null);
+                      }}
+                    >
+                      {local(locale, "载入已保存版本", "Load saved version")}
+                    </Button>
+                  </div>
+                ) : null}
                 <div className="workflow-result-actions">
                   <select
                     className="input select"
@@ -456,7 +531,14 @@ export function WorkflowView({
                       resultText === displayText(selected.result, locale) ||
                       resultText.length > MAX_WORKFLOW_RESULT_LENGTH
                     }
-                    onClick={() => onSaveResult(selected, resultText)}
+                    onClick={() => {
+                      if (onSaveResult(selected, resultText)) {
+                        // The save round-trip is not an external edit: move
+                        // the baseline forward so the sync effect stays quiet.
+                        baseRef.current = { id: selected.id, text: resultText };
+                        setConflictText(null);
+                      }
+                    }}
                   >
                     {t("save")}
                   </Button>

@@ -134,7 +134,7 @@ export const browserFallback: StudioBridge = {
     const snapshot = loadBrowserSnapshot(localStorage);
     if (!snapshot) throw new Error("No browser snapshot is available.");
     const snapshotPath = saveBrowserSnapshot(localStorage);
-    saveBrowserWorkspace(localStorage, snapshot.workspace);
+    saveBrowserWorkspace(localStorage, snapshot.workspace, { allowRollback: true });
     return { ...snapshot, snapshotPath };
   },
   onFlushRequest() {
@@ -191,7 +191,7 @@ export const browserFallback: StudioBridge = {
   async resetDemo(locale) {
     const snapshotPath = saveBrowserSnapshot(localStorage);
     const workspace = createDemoWorkspace(locale);
-    saveBrowserWorkspace(localStorage, workspace);
+    saveBrowserWorkspace(localStorage, workspace, { allowRollback: true });
     return {
       workspace,
       path: "Browser localStorage",

@@ -17,8 +17,49 @@ export function loadBrowserWorkspace(storage: WorkspaceStorage, locale: UiLocale
   };
 }
 
-export function saveBrowserWorkspace(storage: WorkspaceStorage, workspace: StudioWorkspace): void {
+/**
+ * Two browser tabs share one localStorage key. Saving an older revision after
+ * another tab has written a newer one would roll the workspace back, so the
+ * write is refused instead (and marked non-retryable: retrying cannot help).
+ */
+export class StaleBrowserWorkspaceError extends Error {
+  readonly retryable = false;
+
+  constructor(
+    readonly storedRevision: number,
+    readonly incomingRevision: number,
+  ) {
+    super(
+      `Refusing to overwrite browser workspace revision ${storedRevision} with older revision ${incomingRevision}. Reload to continue from the newer workspace.`,
+    );
+    this.name = "StaleBrowserWorkspaceError";
+  }
+}
+
+export interface BrowserSaveOptions {
+  /** Snapshot restore and demo reset intentionally move the workspace backwards. */
+  allowRollback?: boolean;
+}
+
+export function saveBrowserWorkspace(
+  storage: WorkspaceStorage,
+  workspace: StudioWorkspace,
+  options: BrowserSaveOptions = {},
+): void {
   const valid = validateWorkspace(workspace);
+  const raw = storage.getItem(browserWorkspaceKey);
+  if (raw !== null && !options.allowRollback) {
+    let storedRevision: number | null = null;
+    try {
+      storedRevision = validateWorkspace(JSON.parse(raw)).revision;
+    } catch {
+      // Unreadable stored data must stay replaceable by a healthy workspace.
+      storedRevision = null;
+    }
+    if (storedRevision !== null && storedRevision > valid.revision) {
+      throw new StaleBrowserWorkspaceError(storedRevision, valid.revision);
+    }
+  }
   storage.setItem(browserWorkspaceKey, JSON.stringify(valid));
 }
 

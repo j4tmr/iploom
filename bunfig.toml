@@ -1,0 +1,5 @@
+[test]
+# The React component tests run against happy-dom, and it must be in place
+# before any test module (which imports react-dom) is evaluated — see the
+# comment in tests/studio/dom-setup.ts for why a plain import is too late.
+preload = ["./tests/studio/dom-setup.ts"]

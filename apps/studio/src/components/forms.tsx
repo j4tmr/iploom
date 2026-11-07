@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createId, displayText } from "../core/factory.ts";
 import { STANDARD_KINDS, standardKindLabel, standardRefsFor } from "../core/standards.ts";
 import { CHAPTER_LIMITS, MAX_LOCALIZED_LENGTH } from "../core/types.ts";
@@ -74,16 +74,37 @@ export function CharacterModal({
     initial?.universeIds ?? (defaultUniverseId ? [defaultUniverseId] : []),
   );
   const canSave = (nameZh.trim() || nameEn.trim()) && universeIds.length > 0;
+  // The modal is mounted per edit session (app.tsx keys it), so the first
+  // render is the untouched baseline. Everything after that is user input.
+  const snapshot = JSON.stringify([
+    nameZh, nameEn, roleZh, roleEn, summaryZh, summaryEn, appearance,
+    visualPrompt, personality, motivation, flaw, secret, voice, tags, color,
+    reusable, universeIds,
+  ]);
+  const baselineRef = useRef(snapshot);
+  const requestClose = () => {
+    if (
+      snapshot !== baselineRef.current &&
+      !window.confirm(
+        locale === "zh-CN"
+          ? "这个人物还有未保存的修改，关闭后会丢失。确定关闭？"
+          : "This character has unsaved changes that will be lost. Close anyway?",
+      )
+    ) {
+      return;
+    }
+    onClose();
+  };
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={requestClose}
       title={initial ? t("editCharacterTitle") : t("createCharacterTitle")}
       description={t("characterLead")}
       wide
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={requestClose}>
             {t("cancel")}
           </Button>
           <Button

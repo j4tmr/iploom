@@ -31,6 +31,23 @@ test("retrySave rethrows the last error after exhausting attempts", async () => 
   expect(calls).toBe(3);
 });
 
+test("retrySave does not retry an error marked as permanent", async () => {
+  let calls = 0;
+  const permanent = Object.assign(new Error("stale browser revision"), {
+    retryable: false,
+  });
+  await expect(
+    retrySave(
+      async () => {
+        calls += 1;
+        throw permanent;
+      },
+      { attempts: 5, sleep: noSleep },
+    ),
+  ).rejects.toThrow("stale browser revision");
+  expect(calls).toBe(1);
+});
+
 test("retrySave stops when a newer save superseded it", async () => {
   let current = true;
   let calls = 0;

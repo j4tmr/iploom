@@ -95,6 +95,7 @@ const zh = {
   loading: "正在打开工作区…",
   saving: "保存中…",
   saved: "已保存",
+  unsaved: "未保存",
   changeRejected: "更改未应用：",
   resultTooLong: "结果超过 {limit} 字符的保存上限，请先复制并精简后再保存。",
   exportWorkMissing: "导出已完成，但小说已被删除，本次导出未记入历史。",
@@ -558,6 +559,7 @@ const en: Record<MessageKey, string> = {
   loading: "Opening workspace…",
   saving: "Saving…",
   saved: "Saved",
+  unsaved: "Unsaved",
   changeRejected: "Change not applied:",
   resultTooLong:
     "The result exceeds the {limit}-character save limit. Copy and shorten it before saving.",
