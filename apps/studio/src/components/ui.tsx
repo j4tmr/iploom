@@ -256,12 +256,13 @@ export function Modal({
   // applies a descendant's `autoFocus` while committing, so a passive effect
   // would read the dialog's own field as the previously focused element and
   // the restore would target a node that is unmounted by then.
-  const opener = useRef<HTMLElement | null>(null);
+  const opener = useRef<HTMLElement | SVGElement | null>(null);
   const wasOpen = useRef(false);
   if (open && !wasOpen.current) {
+    const active = document.activeElement;
     opener.current =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
+      active instanceof HTMLElement || active instanceof SVGElement
+        ? active
         : null;
   }
   wasOpen.current = open;

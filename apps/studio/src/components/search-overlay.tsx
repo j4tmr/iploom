@@ -78,12 +78,13 @@ export function SearchOverlay({
   // Hand focus back to whatever opened the palette. Without this a palette
   // opened above a dialog drops focus on <body> when it closes, and the
   // dialog's Tab trap (bound to the dialog element) can no longer see the key.
-  const opener = useRef<HTMLElement | null>(null);
+  const opener = useRef<HTMLElement | SVGElement | null>(null);
   useEffect(() => {
     if (!open) return;
+    const active = document.activeElement;
     opener.current =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
+      active instanceof HTMLElement || active instanceof SVGElement
+        ? active
         : null;
     return () => {
       const target = opener.current;
@@ -91,6 +92,14 @@ export function SearchOverlay({
       if (target?.isConnected) target.focus();
     };
   }, [open]);
+  // Selecting a result can open a dialog in the same commit that unmounts the
+  // palette. Return focus to the palette's own opener first, so the dialog's
+  // render-time opener capture (ui.tsx) records a connected element instead
+  // of the search input that is about to disappear.
+  const restoreOpener = () => {
+    const target = opener.current;
+    if (target?.isConnected) target.focus();
+  };
 
   useEffect(() => setActive(0), [query]);
   // Keep the highlighted result inside the scroll viewport while the query
@@ -120,6 +129,14 @@ export function SearchOverlay({
         role="dialog"
         aria-modal="true"
         aria-label={t("searchDialogLabel")}
+        onKeyDown={(event) => {
+          // The result buttons are not tab stops, so the search input is the
+          // palette's only sequential stop. Keep Tab from leaving the
+          // aria-modal layer for the controls behind the backdrop.
+          if (event.key !== "Tab") return;
+          event.preventDefault();
+          inputRef.current?.focus();
+        }}
       >
         <div className="command-input-row">
           <Icon name="search" size={20} />
@@ -155,6 +172,7 @@ export function SearchOverlay({
                 setActive((current) => Math.max(0, current - 1));
               } else if (event.key === "Enter" && results[active]) {
                 event.preventDefault();
+                restoreOpener();
                 onSelect(results[active]!);
                 onClose();
               }
@@ -189,6 +207,7 @@ export function SearchOverlay({
                 className={`command-result ${index === active ? "active" : ""}`}
                 onMouseEnter={() => setActive(index)}
                 onClick={() => {
+                  restoreOpener();
                   onSelect(hit);
                   onClose();
                 }}
