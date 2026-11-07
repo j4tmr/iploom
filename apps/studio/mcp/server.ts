@@ -258,7 +258,7 @@ function compactValue(
   if (typeof value === "string") {
     if (value.length <= COMPACT_STRING_CHARS) return value;
     clipped.push(path);
-    return `${value.slice(0, COMPACT_STRING_CHARS)}…`;
+    return `${clipEnd(value, 0, COMPACT_STRING_CHARS)}…`;
   }
   if (Array.isArray(value)) {
     const items = value.map((item, index) =>
@@ -897,11 +897,11 @@ function invalidStandard(error: unknown): ToolError {
   if (error instanceof z.ZodError) {
     const issues = error.issues
       .slice(0, 5)
-      .map((issue) => `${issue.path.join(".") || "standard"}: ${issue.message}`)
-      .join("; ");
+      .map((issue) => `${issue.path.join(".") || "standard"}: ${issue.message}`);
     return new ToolError(
       "invalid_arguments",
-      `Invalid foundation standard: ${issues || "validation failed"}`,
+      `Invalid foundation standard: ${issues.join("; ") || "validation failed"}`,
+      issues,
     );
   }
   return new ToolError("invalid_arguments", errorMessage(error));
@@ -926,14 +926,6 @@ function findStandard(
       `Foundation standard not found: ${standardId}`,
     );
   return standard;
-}
-
-function ensureUniverse(workspace: StudioWorkspace, universeId: string): void {
-  if (!workspace.universes.some((universe) => universe.id === universeId))
-    throw new ToolError(
-      "invalid_arguments",
-      `Unknown story world: ${universeId}`,
-    );
 }
 
 function errorMessage(error: unknown): string {
@@ -1700,7 +1692,7 @@ export function createStudioMcpServer(
         .boolean()
         .default(false)
         .describe(
-          "返回规则正文，而不是只返回字數 / Return the rule text instead of only its size.",
+          "返回完整规则正文，而不是只返回字数；正文可能让本次响应超出默认 50 KB 预算，长篇正文请改用 get_standard 分窗读取 / Return the full rule text instead of only its size; large bodies can push this response past the default 50 KB budget, so window long rules with get_standard instead.",
         ),
     }),
     async (args) => {
@@ -1746,12 +1738,34 @@ export function createStudioMcpServer(
     {
       title: "读取基础规则 / Read foundation standard",
       description:
-        "读取一条基础规则，返回分窗的规则正文、适用范围与引用它的 AI 工作流任务；用 body_offset 与 next_offset 续读。Read one foundation standard with its scope and the workflow tasks that pin it by id; the rule text is windowed, continue it with body_offset and next_offset.",
+        "读取一条基础规则，返回分窗的规则正文、适用范围与引用它的 AI 工作流任务；两种语言各自用 body_offsets 中对应的 next_offset 续读。Read one foundation standard with its scope and the workflow tasks that pin it by id; each language body continues from its own next_offset via body_offsets.",
       annotations: READ_ONLY_ANNOTATIONS,
     },
     z.object({
       standard_id: standardIdSchema,
-      body_offset: pageOffsetSchema,
+      body_offset: pageOffsetSchema.describe(
+        "两种语言共享的起始位置；后续请用 body_offsets 按语言分别续读 / Shared starting offset for both languages; continue per language with body_offsets.",
+      ),
+      body_offsets: z
+        .object({
+          zh: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("中文正文起点 / Chinese body offset."),
+          en: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("英文正文起点 / English body offset."),
+        })
+        .strict()
+        .optional()
+        .describe(
+          "按语言分别续读，把每种语言自己的 next_offset 传回；省略的语言从 body_offset 开始 / Per-language continuation; pass each language's own next_offset. Omitted languages start at body_offset.",
+        ),
       body_max_chars: z
         .number()
         .int()
@@ -1775,8 +1789,16 @@ export function createStudioMcpServer(
         standard: {
           ...standardView(standard),
           body: {
-            zh: textWindow(standard.body.zh, args.body_offset, args.body_max_chars),
-            en: textWindow(standard.body.en, args.body_offset, args.body_max_chars),
+            zh: textWindow(
+              standard.body.zh,
+              args.body_offsets?.zh ?? args.body_offset,
+              args.body_max_chars,
+            ),
+            en: textWindow(
+              standard.body.en,
+              args.body_offsets?.en ?? args.body_offset,
+              args.body_max_chars,
+            ),
           },
         },
         applies_to: standard.universeId ?? "project",
@@ -1823,7 +1845,7 @@ export function createStudioMcpServer(
             "invalid_arguments",
             "The workspace already contains the maximum of 1000 foundation standards.",
           );
-        if (standard.universeId) ensureUniverse(current, standard.universeId);
+        if (standard.universeId) findWorld(current, standard.universeId);
         current.standards.push(standard);
         current.updatedAt = now;
       });
@@ -1869,7 +1891,7 @@ export function createStudioMcpServer(
         const universeId = scopeProvided
           ? args.universe_id || undefined
           : existing.universeId;
-        if (universeId) ensureUniverse(current, universeId);
+        if (universeId) findWorld(current, universeId);
         const title = {
           zh: args.title?.zh ?? existing.title.zh,
           en: args.title?.en ?? existing.title.en,

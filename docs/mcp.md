@@ -57,11 +57,11 @@ Every collection response is a page rather than a bare array:
 - List tools accept `offset` and `limit` (default 20, maximum 200); `get_novel` also pages `chapters`, `list_standards` pages `standards`.
 - `get_story_world` pages six collections with one shared `limit` but independent offsets: pass `offsets` (for example `{"characters": 20, "lore": 40}`) so advancing one collection leaves the others on their own page. Omitted collections start at 0.
 - `get_relationship_graph` uses the same idea with top-level `nodes_offset` and `edges_offset`.
-- Each response stays under a roughly 50 KB budget; a page carries fewer items when large entries would exceed it, so `count` can be below `limit`.
+- Default responses stay under a roughly 50 KB budget; a page carries fewer items when large entries would exceed it, so `count` can be below `limit`. Opt-ins that ask for a large payload — `list_standards` with `include_body`, or a `max_chars` far above the default — can push a single response past that budget.
 - Follow `next_offset` until it is `null`; across all pages every item appears exactly once, and `total` does not change while the workspace revision does not change.
 - `search_ip` applies `world_id` and `kind` before ranking, so out-of-scope hits cannot crowd real matches out of the page.
 - `get_chapter` windows prose: pass `offset` and `max_chars` (default 6,000) and concatenate `content.text` until `content.next_offset` is `null` to rebuild the full chapter.
-- `get_standard` windows bodies the same way with `body_offset` and `body_max_chars` (default 4,000), applied to both `body.zh` and `body.en`. Windows never split a surrogate pair: an offset that lands between the two halves is pulled back, and a `max_chars` of 1 returns the whole two-code-unit character.
+- `get_standard` windows bodies the same way with `body_offset` and `body_max_chars` (default 4,000), applied to both `body.zh` and `body.en`. Because each language body has its own length, continue each one from its own `next_offset` via `body_offsets` (`{"zh": 4000, "en": 4002}`); a language omitted from `body_offsets` starts at `body_offset`. A shared offset would skip or repeat text once one language hits a surrogate pair at the cut. Windows never split a surrogate pair: an offset that lands between the two halves is pulled back, and a `max_chars` of 1 returns the whole two-code-unit character.
 
 ### Bounded views and write acknowledgements
 
@@ -80,7 +80,7 @@ Failures return `isError: true` with a JSON text block that clients can parse:
 { "error": { "code": "invalid_arguments", "message": "...", "issues": ["query: ..."] } }
 ```
 
-`issues` is present for `invalid_arguments`; unknown ids and task references return `not_found`. Both keep the connection alive so a client can correct the call without reconnecting.
+`issues` is present when the failure carries field-level details: argument parsing and foundation-standard validation. Unknown ids — including a story world referenced by `create_standard` or `update_standard` — and unknown task references return `not_found`. Both keep the connection alive so a client can correct the call without reconnecting.
 
 ### Export destination boundary
 

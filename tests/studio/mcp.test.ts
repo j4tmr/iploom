@@ -431,9 +431,16 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
       body: { zh: "正文", en: "Body" },
     });
     expect(invalidKind.isError).toBe(true);
-    expect(
-      (invalidKind.body.error as { code: string; message: string }).code,
-    ).toBe("invalid_arguments");
+    const invalidKindError = invalidKind.body.error as {
+      code: string;
+      message: string;
+      issues?: string[];
+    };
+    expect(invalidKindError.code).toBe("invalid_arguments");
+    expect(invalidKindError.issues?.length).toBeGreaterThan(0);
+    expect(invalidKindError.message).toContain(
+      invalidKindError.issues?.[0] as string,
+    );
     expect(invalidKind.text).not.toContain("\n    at ");
 
     const emptyTitle = await call(client, "create_standard", {
@@ -442,9 +449,16 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
       body: { zh: "正文", en: "Body" },
     });
     expect(emptyTitle.isError).toBe(true);
-    expect(
-      (emptyTitle.body.error as { code: string; message: string }).code,
-    ).toBe("invalid_arguments");
+    const emptyTitleError = emptyTitle.body.error as {
+      code: string;
+      message: string;
+      issues?: string[];
+    };
+    expect(emptyTitleError.code).toBe("invalid_arguments");
+    expect(emptyTitleError.issues?.length).toBeGreaterThan(0);
+    expect(emptyTitleError.message).toContain(
+      emptyTitleError.issues?.[0] as string,
+    );
     expect(emptyTitle.text).not.toContain("\n    at ");
 
     const unknownUpdate = await call(client, "update_standard", {

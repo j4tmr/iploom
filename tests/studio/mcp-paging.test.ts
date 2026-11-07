@@ -38,6 +38,11 @@ const BULK_STANDARD_BODY = "潮".repeat(20_000);
 const BULK_STANDARD_BODY_EN = "a".repeat(20_000);
 const EMOJI_STANDARD_ID = "std_emoji_window";
 const EMOJI_STANDARD_BODY = "😀潮";
+const SPLIT_STANDARD_ID = "std_split_window";
+const SPLIT_STANDARD_BODY_ZH = `aaaax${"潮".repeat(12)}`;
+const SPLIT_STANDARD_BODY_EN = `aaaa😀${"y".repeat(12)}`;
+const COMPACT_LORE_ID = "lore_compact_surrogate";
+const COMPACT_LORE_BODY = `${"a".repeat(239)}😀tail`;
 const BLOCKER_TASKS = 24;
 const CHAPTER_CHARACTER_IDS = 25;
 
@@ -126,6 +131,18 @@ function buildLargeWorkspace(): StudioWorkspace {
     });
   }
 
+  // A compacted field whose 240-code-unit cut would land inside a surrogate
+  // pair pins `compactValue` to whole code points.
+  workspace.lore.push({
+    id: COMPACT_LORE_ID,
+    universeId: "uni_ninth_station",
+    category: "mystery",
+    title: { zh: "截断边界", en: "Compact boundary" },
+    body: COMPACT_LORE_BODY,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+
   const extraCharacterIds = Array.from(
     { length: CHAPTER_CHARACTER_IDS },
     (_, slot) => `char_extra_${slot.toString().padStart(2, "0")}`,
@@ -170,6 +187,20 @@ function buildLargeWorkspace(): StudioWorkspace {
     title: { zh: "表情窗口", en: "Emoji window" },
     kind: "style",
     body: { zh: EMOJI_STANDARD_BODY, en: "😀" },
+    status: "draft",
+    version: 1,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+
+  // At the same `body_max_chars` the Chinese window ends after "aaaax" while
+  // the English one takes the whole surrogate pair, so each language has to
+  // continue from its own offset instead of a shared one.
+  workspace.standards.push({
+    id: SPLIT_STANDARD_ID,
+    title: { zh: "双语分窗", en: "Split window" },
+    kind: "style",
+    body: { zh: SPLIT_STANDARD_BODY_ZH, en: SPLIT_STANDARD_BODY_EN },
     status: "draft",
     version: 1,
     createdAt: NOW,
@@ -565,6 +596,76 @@ describe("MCP paging, scoping and bounded responses", () => {
     expect(pieces.join("")).toBe(BULK_STANDARD_BODY);
   });
 
+  test("continues each standard body from its own offset", async () => {
+    const first = await call(inline, "get_standard", {
+      standard_id: SPLIT_STANDARD_ID,
+      body_max_chars: 5,
+    });
+    expect(first.isError).toBe(false);
+    const firstBody = (
+      first.body.standard as { body: { zh: TextWindowBody; en: TextWindowBody } }
+    ).body;
+    // The English window takes the whole surrogate pair and is one code unit
+    // longer, so a shared offset would skip or repeat text on the next call.
+    expect(firstBody.zh.text).toBe("aaaax");
+    expect(firstBody.zh.next_offset).toBe(5);
+    expect(firstBody.en.text).toBe("aaaa😀");
+    expect(firstBody.en.next_offset).toBe(6);
+
+    // A language omitted from body_offsets falls back to body_offset.
+    const mixed = await call(inline, "get_standard", {
+      standard_id: SPLIT_STANDARD_ID,
+      body_offset: 5,
+      body_offsets: { en: 6 },
+      body_max_chars: 5,
+    });
+    expect(mixed.isError).toBe(false);
+    const mixedBody = (
+      mixed.body.standard as { body: { zh: TextWindowBody; en: TextWindowBody } }
+    ).body;
+    expect(mixedBody.zh.offset).toBe(5);
+    expect(mixedBody.en.offset).toBe(6);
+
+    const zhPieces = [firstBody.zh.text];
+    const enPieces = [firstBody.en.text];
+    let zhOffset = firstBody.zh.next_offset;
+    let enOffset = firstBody.en.next_offset;
+    for (
+      let guard = 0;
+      guard < 20 && (zhOffset !== null || enOffset !== null);
+      guard += 1
+    ) {
+      const result = await call(inline, "get_standard", {
+        standard_id: SPLIT_STANDARD_ID,
+        body_max_chars: 5,
+        body_offsets: {
+          ...(zhOffset === null ? {} : { zh: zhOffset }),
+          ...(enOffset === null ? {} : { en: enOffset }),
+        },
+      });
+      expect(result.isError).toBe(false);
+      const body = (
+        result.body.standard as {
+          body: { zh: TextWindowBody; en: TextWindowBody };
+        }
+      ).body;
+      if (zhOffset !== null) {
+        expect(body.zh.offset).toBe(zhOffset);
+        zhPieces.push(body.zh.text);
+        zhOffset = body.zh.next_offset;
+      }
+      if (enOffset !== null) {
+        expect(body.en.offset).toBe(enOffset);
+        enPieces.push(body.en.text);
+        enOffset = body.en.next_offset;
+      }
+    }
+    expect(zhOffset).toBeNull();
+    expect(enOffset).toBeNull();
+    expect(zhPieces.join("")).toBe(SPLIT_STANDARD_BODY_ZH);
+    expect(enPieces.join("")).toBe(SPLIT_STANDARD_BODY_EN);
+  });
+
   test("lists foundation standards compactly by default", async () => {
     const result = await call(inline, "list_standards");
     expect(result.isError).toBe(false);
@@ -572,7 +673,7 @@ describe("MCP paging, scoping and bounded responses", () => {
       result.body,
       "standards",
     );
-    expect(standards.total).toBe(8);
+    expect(standards.total).toBe(9);
     for (const standard of standards.items) {
       expect(standard.body).toBeUndefined();
       expect(standard.body_chars).toBeDefined();
@@ -583,6 +684,55 @@ describe("MCP paging, scoping and bounded responses", () => {
     expect((bulk?.body_chars as { zh?: number }).zh).toBe(
       BULK_STANDARD_BODY.length,
     );
+  });
+
+  test("returns full standard bodies only when include_body is set", async () => {
+    const firstPage = await call(inline, "list_standards", {
+      kind: "style",
+      include_body: true,
+      limit: 200,
+    });
+    expect(firstPage.isError).toBe(false);
+    const first = readPage<{ id: string; body?: { zh: string; en: string } }>(
+      firstPage.body,
+      "standards",
+    );
+    expect(first.items[0]?.id).toBe("std_baseline_language");
+    expect(first.items[0]?.body).toBeDefined();
+    expect(first.next_offset).toBe(1);
+
+    const secondPage = await call(inline, "list_standards", {
+      kind: "style",
+      include_body: true,
+      offset: 1,
+      limit: 200,
+    });
+    expect(secondPage.isError).toBe(false);
+    const second = readPage<{ id: string; body?: { zh: string; en: string } }>(
+      secondPage.body,
+      "standards",
+    );
+    expect(second.items[0]?.id).toBe(BULK_STANDARD_ID);
+    expect(second.items[0]?.body?.zh).toBe(BULK_STANDARD_BODY);
+    expect(second.items[0]?.body?.en).toBe(BULK_STANDARD_BODY_EN);
+  });
+
+  test("clips compact views without splitting a surrogate pair", async () => {
+    const result = await call(inline, "get_story_world", {
+      world_id: "uni_ninth_station",
+      offsets: { lore: BULK_LORE },
+      limit: 5,
+    });
+    expect(result.isError).toBe(false);
+    const lore = readPage<{
+      id: string;
+      body: string;
+      truncated_fields?: string[];
+    }>(result.body, "lore");
+    const entry = lore.items.find((item) => item.id === COMPACT_LORE_ID);
+    expect(entry).toBeDefined();
+    expect(entry?.body).toBe(`${"a".repeat(239)}😀…`);
+    expect(entry?.truncated_fields).toContain("body");
   });
 
   test("pages each story-world collection at its own offset", async () => {
@@ -726,6 +876,22 @@ describe("MCP paging, scoping and bounded responses", () => {
     });
     expect(result.isError).toBe(true);
     expect((result.body.error as { code: string }).code).toBe("not_found");
+
+    const created = await call(inline, "create_standard", {
+      kind: "style",
+      title: { zh: "未知世界", en: "Unknown world" },
+      body: { zh: "正文", en: "Body" },
+      universe_id: "uni_missing",
+    });
+    expect(created.isError).toBe(true);
+    expect((created.body.error as { code: string }).code).toBe("not_found");
+
+    const updated = await call(inline, "update_standard", {
+      standard_id: SPLIT_STANDARD_ID,
+      universe_id: "uni_missing",
+    });
+    expect(updated.isError).toBe(true);
+    expect((updated.body.error as { code: string }).code).toBe("not_found");
   });
 
   test("write acknowledgements report sizes and merge language patches", async () => {
