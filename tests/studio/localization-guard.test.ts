@@ -3,12 +3,14 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const SRC = join(import.meta.dir, "../../apps/studio/src");
+const ELECTRON_DIRECTORY = join(import.meta.dir, "../../apps/studio/electron");
 const SCANNED_DIRECTORIES = ["components", "views"];
 
 /**
  * Inline locale branching duplicates copy at the call site, so one language
  * silently falls back to the other and the zh dictionary no longer types the
- * en dictionary. Every user-visible string belongs in `i18n.ts` instead.
+ * en dictionary. Every user-visible string belongs in `i18n.ts` (renderer) or
+ * the injected main-process catalog `src/node/messages.ts` instead.
  *
  * The detector deliberately matches only branching on the `locale` argument
  * itself (and the `local(locale, zh, en)` helper that hides the same branch),
@@ -70,9 +72,15 @@ describe("localization guard", () => {
     ).toEqual([]);
   });
 
-  test("components and views route all locale copy through i18n.ts", () => {
-    const violations = SCANNED_DIRECTORIES.flatMap((directory) =>
-      sourceFiles(join(SRC, directory)).flatMap((file) =>
+  test("renderer trees and the Electron main process avoid inline locale copy", () => {
+    // The Electron entry point now owns native dialogs and IPC errors too, so
+    // a locale branch there has the same failure mode as one in the renderer.
+    const roots = [
+      ...SCANNED_DIRECTORIES.map((directory) => join(SRC, directory)),
+      ELECTRON_DIRECTORY,
+    ];
+    const violations = roots.flatMap((root) =>
+      sourceFiles(root).flatMap((file) =>
         findInlineLocaleCopy(readFileSync(file, "utf8")).map(
           (hit) =>
             `${relative(SRC, file)}:${hit.line} [${hit.pattern}] ${hit.text}`,

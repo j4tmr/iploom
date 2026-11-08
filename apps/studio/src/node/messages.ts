@@ -49,6 +49,8 @@ export interface MainMessages {
     configureBusy: string;
     runBusy: string;
     notConfigured: string;
+    invalidConfig: string;
+    invalidRequest: string;
   };
   store: {
     unsafeExportPath(value: string): string;
@@ -90,6 +92,28 @@ export interface MainMessages {
   mcpConfig: {
     binaryMissing: string;
     bunMissing: string;
+  };
+  dialogs: {
+    ok: string;
+    retry: string;
+    keepEditing: string;
+    exit: string;
+    reload: string;
+    quit: string;
+    closeFailedCopyAndExit: string;
+    closeFailedExitWithoutSaving: string;
+    reloadCanceledTitle: string;
+    reloadCanceledMessage: string;
+    closeFailedTitle: string;
+    closeFailedDetail: string;
+    noRecoveryCopyTitle: string;
+    noRecoveryCopyMessage: string;
+    recoverySavedTitle: string;
+    recoverySavedMessage(path: string): string;
+    recoveryFailedTitle: string;
+    crashTitle: string;
+    crashMessage(reason: string): string;
+    crashDetail: string;
   };
 }
 
@@ -156,6 +180,9 @@ export const englishMainMessages: MainMessages = {
       "Wait for the current AI task or cancel it before changing configuration.",
     runBusy: "Another AI task is running. Wait or cancel it first.",
     notConfigured: "Configure the model API in Settings first.",
+    invalidConfig:
+      "Enter a valid endpoint URL, model ID and API key, then retry.",
+    invalidRequest: "The AI request is invalid. Shorten the prompt and retry.",
   },
   store: {
     unsafeExportPath: (value) => `Unsafe export path: ${value}`,
@@ -209,6 +236,37 @@ export const englishMainMessages: MainMessages = {
     binaryMissing: "Bundled MCP server is missing from this installation.",
     bunMissing:
       "The development MCP server needs Bun, but no Bun executable was found.",
+  },
+  dialogs: {
+    ok: "OK",
+    retry: "Retry",
+    keepEditing: "Keep Editing",
+    exit: "Exit",
+    reload: "Reload",
+    quit: "Quit",
+    closeFailedCopyAndExit: "Save a Copy and Exit",
+    closeFailedExitWithoutSaving: "Exit Without Saving",
+    reloadCanceledTitle: "Reload canceled",
+    reloadCanceledMessage:
+      "The editor could not confirm its save, so the reload was canceled.",
+    closeFailedTitle: "IPloom Studio could not finish saving",
+    closeFailedDetail:
+      "Retry the save, save a copy of the in-memory workspace, or exit without saving. " +
+      "Exiting without saving discards edits made since the last successful save.",
+    noRecoveryCopyTitle: "No workspace copy is available",
+    noRecoveryCopyMessage:
+      "The editor has not handed the workspace to the main process yet. " +
+      "Choose Retry, or keep editing and try again.",
+    recoverySavedTitle: "Recovery copy saved",
+    recoverySavedMessage: (path) =>
+      `Your in-memory workspace was saved to ${path}.`,
+    recoveryFailedTitle: "Could not save a recovery copy",
+    crashTitle: "IPloom Studio stopped responding",
+    crashMessage: (reason) =>
+      `The editor process closed unexpectedly (${reason}).`,
+    crashDetail:
+      "Reloading restores the last saved workspace. Edits made since the " +
+      "last successful save cannot be recovered.",
   },
 };
 
@@ -268,6 +326,8 @@ export const zhMainMessages: MainMessages = {
     configureBusy: "请等待当前 AI 任务完成或取消后再修改配置。",
     runBusy: "已有 AI 任务在运行。请等待或先取消。",
     notConfigured: "请先在设置中配置模型 API。",
+    invalidConfig: "请输入有效的端点 URL、模型 ID 与 API 密钥后重试。",
+    invalidRequest: "AI 请求无效。请缩短提示词后重试。",
   },
   store: {
     unsafeExportPath: (value) => `不安全的导出路径：${value}`,
@@ -311,6 +371,32 @@ export const zhMainMessages: MainMessages = {
   mcpConfig: {
     binaryMissing: "此安装缺少内置的 MCP 服务器。",
     bunMissing: "开发用 MCP 服务器需要 Bun，但未找到 Bun 可执行文件。",
+  },
+  dialogs: {
+    ok: "确定",
+    retry: "重试",
+    keepEditing: "继续编辑",
+    exit: "退出",
+    reload: "重新加载",
+    quit: "退出应用",
+    closeFailedCopyAndExit: "另存副本并退出",
+    closeFailedExitWithoutSaving: "不保存退出",
+    reloadCanceledTitle: "已取消重新加载",
+    reloadCanceledMessage: "编辑器无法确认已保存，因此取消了重新加载。",
+    closeFailedTitle: "IPloom Studio 无法完成保存",
+    closeFailedDetail:
+      "请重试保存、将内存中的工作区另存为副本，或不保存直接退出。" +
+      "不保存退出会丢弃上次成功保存之后的所有编辑。",
+    noRecoveryCopyTitle: "没有可用的工作区副本",
+    noRecoveryCopyMessage:
+      "编辑器尚未将工作区交给主进程。请选择重试，或继续编辑后再试。",
+    recoverySavedTitle: "恢复副本已保存",
+    recoverySavedMessage: (path) => `内存中的工作区已保存到 ${path}。`,
+    recoveryFailedTitle: "无法保存恢复副本",
+    crashTitle: "IPloom Studio 已停止响应",
+    crashMessage: (reason) => `编辑器进程意外关闭（${reason}）。`,
+    crashDetail:
+      "重新加载会恢复上次保存的工作区。上次成功保存之后的编辑无法恢复。",
   },
 };
 
