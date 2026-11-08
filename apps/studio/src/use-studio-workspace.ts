@@ -6,7 +6,12 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { bridge, browserFallback, type LoadedWorkspace } from "./platform.ts";
+import {
+  bridge as platformBridge,
+  browserFallback as platformBrowserFallback,
+  type LoadedWorkspace,
+  type StudioBridge,
+} from "./platform.ts";
 import {
   applyWorkspaceChange,
   type WorkspaceChangeResult,
@@ -68,7 +73,40 @@ function cloneWorkspace(workspace: StudioWorkspace): StudioWorkspace {
   return structuredClone(workspace);
 }
 
-export function useStudioWorkspace(): StudioWorkspaceState {
+/**
+ * The bridge methods the workspace hook drives. Narrowed so a test can supply
+ * a fake without stubbing the whole `StudioBridge` surface — and, unlike
+ * `mock.module`, without replacing the real module for every later test file in
+ * the same process.
+ */
+export type WorkspaceBridge = Pick<
+  StudioBridge,
+  "load" | "save" | "onFlushRequest" | "flushComplete"
+>;
+
+/**
+ * Everything the hook needs from the platform layer. Callers should pass a
+ * module-level constant: the load effect re-runs whenever `bridge`'s identity
+ * changes, so an inline object literal would reload the workspace each render.
+ */
+export interface WorkspacePlatform {
+  bridge: WorkspaceBridge;
+  /**
+   * The browser fallback, passed only so the hook can tell a desktop bridge
+   * from the in-browser one and show the beforeunload guard for the latter.
+   */
+  browserFallback: WorkspaceBridge;
+}
+
+const defaultPlatform: WorkspacePlatform = {
+  bridge: platformBridge,
+  browserFallback: platformBrowserFallback,
+};
+
+export function useStudioWorkspace(
+  platform: WorkspacePlatform = defaultPlatform,
+): StudioWorkspaceState {
+  const { bridge, browserFallback } = platform;
   const [workspace, setWorkspace] = useState<StudioWorkspace | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -107,57 +145,63 @@ export function useStudioWorkspace(): StudioWorkspaceState {
     return () => {
       active = false;
     };
-  }, []);
+  }, [bridge]);
 
-  const persist = useCallback((next: StudioWorkspace) => {
-    const sequence = ++saveSequence.current;
-    setSaveState("saving");
-    const attempt = async () => {
-      // Optimistic concurrency: the base is the revision this renderer last
-      // knew the file held. Serializing attempts guarantees the previous save
-      // has already refreshed the ref. retrySave deliberately re-sends this
-      // same base; an identical re-save is accepted when the response was lost
-      // after the file was written.
-      const baseRevision = savedRevision.current;
-      try {
-        await retrySave(() => bridge.save(next, baseRevision), {
-          isCurrent: () => sequence === saveSequence.current,
-          sleep: (milliseconds) =>
-            new Promise<void>((resolve) => {
-              let timer: number | null = null;
-              const wake = () => {
-                if (timer !== null) {
-                  window.clearTimeout(timer);
-                  timer = null;
-                }
-                if (retryWake.current === wake) retryWake.current = null;
-                resolve();
-              };
-              timer = window.setTimeout(wake, milliseconds);
-              retryWake.current = wake;
-            }),
-        });
-        // The file now holds this revision even when a newer edit has already
-        // superseded the indicator update, so a queued save must base on it.
-        savedRevision.current = Math.max(savedRevision.current, next.revision);
-        if (sequence === saveSequence.current) {
-          setSaveState("saved");
-          setError(null);
+  const persist = useCallback(
+    (next: StudioWorkspace) => {
+      const sequence = ++saveSequence.current;
+      setSaveState("saving");
+      const attempt = async () => {
+        // Optimistic concurrency: the base is the revision this renderer last
+        // knew the file held. Serializing attempts guarantees the previous save
+        // has already refreshed the ref. retrySave deliberately re-sends this
+        // same base; an identical re-save is accepted when the response was lost
+        // after the file was written.
+        const baseRevision = savedRevision.current;
+        try {
+          await retrySave(() => bridge.save(next, baseRevision), {
+            isCurrent: () => sequence === saveSequence.current,
+            sleep: (milliseconds) =>
+              new Promise<void>((resolve) => {
+                let timer: number | null = null;
+                const wake = () => {
+                  if (timer !== null) {
+                    window.clearTimeout(timer);
+                    timer = null;
+                  }
+                  if (retryWake.current === wake) retryWake.current = null;
+                  resolve();
+                };
+                timer = window.setTimeout(wake, milliseconds);
+                retryWake.current = wake;
+              }),
+          });
+          // The file now holds this revision even when a newer edit has already
+          // superseded the indicator update, so a queued save must base on it.
+          savedRevision.current = Math.max(
+            savedRevision.current,
+            next.revision,
+          );
+          if (sequence === saveSequence.current) {
+            setSaveState("saved");
+            setError(null);
+          }
+        } catch (reason) {
+          if (sequence === saveSequence.current) {
+            setSaveState("error");
+            setError(reason instanceof Error ? reason.message : String(reason));
+          }
+          throw reason;
         }
-      } catch (reason) {
-        if (sequence === saveSequence.current) {
-          setSaveState("error");
-          setError(reason instanceof Error ? reason.message : String(reason));
-        }
-        throw reason;
-      }
-    };
-    // Overlapping autosaves (debounce plus Cmd+S or a close flush) must not
-    // race their base revisions against each other.
-    const pending = saveQueue.current.then(attempt);
-    saveQueue.current = pending.catch(() => undefined);
-    return pending;
-  }, []);
+      };
+      // Overlapping autosaves (debounce plus Cmd+S or a close flush) must not
+      // race their base revisions against each other.
+      const pending = saveQueue.current.then(attempt);
+      saveQueue.current = pending.catch(() => undefined);
+      return pending;
+    },
+    [bridge],
+  );
 
   /**
    * Arm the 450 ms autosave for the current revision. A single timer: calling
@@ -305,7 +349,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
           .catch(() => undefined);
       }
     });
-  }, [saveNow]);
+  }, [saveNow, bridge]);
 
   const setLocale = useCallback(
     (locale: UiLocale) => {
@@ -334,7 +378,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [dirty]);
+  }, [dirty, bridge, browserFallback]);
 
   return {
     workspace,

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, expect, mock, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { NewerBrowserWorkspaceVersionError } from "../../apps/studio/src/browser-workspace.ts";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
@@ -7,6 +7,11 @@ import {
   type StudioWorkspace,
 } from "../../apps/studio/src/core/types.ts";
 import type { LoadedWorkspace } from "../../apps/studio/src/platform.ts";
+import {
+  applyTheme,
+  useStudioWorkspace,
+  type WorkspacePlatform,
+} from "../../apps/studio/src/use-studio-workspace.ts";
 
 const initial = createDemoWorkspace("en");
 const savedRevisions: number[] = [];
@@ -67,14 +72,10 @@ const mockBridge = {
   },
 };
 
-mock.module("../../apps/studio/src/platform.ts", () => ({
+const mockPlatform: WorkspacePlatform = {
   bridge: mockBridge,
   browserFallback: mockBridge,
-}));
-
-const { applyTheme, useStudioWorkspace } = await import(
-  "../../apps/studio/src/use-studio-workspace.ts"
-);
+};
 
 function loadedWorkspace(workspace: StudioWorkspace): LoadedWorkspace {
   return { workspace, path: "workspace.json", recoveredFromBackup: false };
@@ -96,10 +97,6 @@ afterEach(() => {
   cleanup();
 });
 
-afterAll(() => {
-  mock.restore();
-});
-
 test("replacing the workspace drops a retry left in backoff", async () => {
   resetBridge();
   failNextSave = true;
@@ -107,7 +104,7 @@ test("replacing the workspace drops a retry left in backoff", async () => {
     resolveFirstSave = resolve;
   });
 
-  const { result } = renderHook(() => useStudioWorkspace());
+  const { result } = renderHook(() => useStudioWorkspace(mockPlatform));
   await waitFor(() => expect(result.current.saveState).toBe("saved"));
 
   act(() => {
@@ -160,7 +157,7 @@ test("invalidating before a restore dispatch drops a retry during the in-flight 
     resolveFirstSave = resolve;
   });
 
-  const { result } = renderHook(() => useStudioWorkspace());
+  const { result } = renderHook(() => useStudioWorkspace(mockPlatform));
   await waitFor(() => expect(result.current.saveState).toBe("saved"));
 
   act(() => {
@@ -214,7 +211,7 @@ test("dispatchWorkspaceReplacement invalidates before the bridge operation settl
     resolveFirstSave = resolve;
   });
 
-  const { result } = renderHook(() => useStudioWorkspace());
+  const { result } = renderHook(() => useStudioWorkspace(mockPlatform));
   await waitFor(() => expect(result.current.saveState).toBe("saved"));
 
   act(() => {
@@ -266,7 +263,7 @@ test("dispatchWorkspaceReplacement invalidates before the bridge operation settl
 
 test("a rejected workspace replacement re-arms the dirty edit's autosave", async () => {
   resetBridge();
-  const { result } = renderHook(() => useStudioWorkspace());
+  const { result } = renderHook(() => useStudioWorkspace(mockPlatform));
   await waitFor(() => expect(result.current.saveState).toBe("saved"));
 
   act(() => {
@@ -317,7 +314,7 @@ test("a non-retryable newer-schema save stays visible without retrying", async (
     WORKSPACE_SCHEMA_VERSION + 1,
   );
 
-  const { result } = renderHook(() => useStudioWorkspace());
+  const { result } = renderHook(() => useStudioWorkspace(mockPlatform));
   await waitFor(() => expect(result.current.saveState).toBe("saved"));
 
   act(() => {
@@ -339,7 +336,7 @@ test("a load failure surfaces as an error state", async () => {
   resetBridge();
   loadError = new Error("workspace file is unreadable");
 
-  const { result } = renderHook(() => useStudioWorkspace());
+  const { result } = renderHook(() => useStudioWorkspace(mockPlatform));
 
   await waitFor(() => expect(result.current.saveState).toBe("error"));
   expect(result.current.error).toBe("workspace file is unreadable");
@@ -350,7 +347,7 @@ test("autosave debounces, retries a transient failure, then marks the workspace 
   resetBridge();
   failNextSave = true;
 
-  const { result } = renderHook(() => useStudioWorkspace());
+  const { result } = renderHook(() => useStudioWorkspace(mockPlatform));
   await waitFor(() => expect(result.current.saveState).toBe("saved"));
 
   act(() => {
@@ -373,7 +370,7 @@ test("autosave debounces, retries a transient failure, then marks the workspace 
 test("autosave failure is swallowed by the pending save task", async () => {
   resetBridge();
 
-  const { result } = renderHook(() => useStudioWorkspace());
+  const { result } = renderHook(() => useStudioWorkspace(mockPlatform));
   await waitFor(() => expect(result.current.saveState).toBe("saved"));
 
   saveError = new NewerBrowserWorkspaceVersionError(
@@ -394,7 +391,7 @@ test("autosave failure is swallowed by the pending save task", async () => {
 test("applyChange refuses before load and applies a valid edit after load", async () => {
   resetBridge();
 
-  const { result } = renderHook(() => useStudioWorkspace());
+  const { result } = renderHook(() => useStudioWorkspace(mockPlatform));
 
   // The load promise has not resolved yet, so there is no workspace to edit.
   const early = result.current.applyChange((draft) => {
@@ -422,7 +419,7 @@ test("applyChange refuses before load and applies a valid edit after load", asyn
 test("flush requests save first and then acknowledge", async () => {
   resetBridge();
 
-  const { result } = renderHook(() => useStudioWorkspace());
+  const { result } = renderHook(() => useStudioWorkspace(mockPlatform));
   await waitFor(() => expect(result.current.saveState).toBe("saved"));
   expect(flushListener).not.toBeNull();
 
@@ -446,7 +443,7 @@ test("flush requests save first and then acknowledge", async () => {
 test("a failing flush reports the save error without rejecting", async () => {
   resetBridge();
 
-  const { result } = renderHook(() => useStudioWorkspace());
+  const { result } = renderHook(() => useStudioWorkspace(mockPlatform));
   await waitFor(() => expect(result.current.saveState).toBe("saved"));
 
   act(() => {
@@ -474,7 +471,7 @@ test("a failing flush reports the save error without rejecting", async () => {
 test("setLocale updates the workspace locale", async () => {
   resetBridge();
 
-  const { result } = renderHook(() => useStudioWorkspace());
+  const { result } = renderHook(() => useStudioWorkspace(mockPlatform));
   await waitFor(() => expect(result.current.saveState).toBe("saved"));
 
   act(() => {
@@ -488,7 +485,7 @@ test("setLocale updates the workspace locale", async () => {
 test("a dirty browser workspace blocks tab close", async () => {
   resetBridge();
 
-  const { result } = renderHook(() => useStudioWorkspace());
+  const { result } = renderHook(() => useStudioWorkspace(mockPlatform));
   await waitFor(() => expect(result.current.saveState).toBe("saved"));
 
   act(() => {
