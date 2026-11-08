@@ -1,9 +1,10 @@
 import { expect, jest, test } from "bun:test";
-import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
+import { createDemoWorkspace, emptyChapter } from "../../apps/studio/src/core/factory.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 import {
   analyzeManuscriptChunks,
   buildManuscriptImport,
+  insertChapterInOrder,
   manuscriptChunks,
   mergeManuscriptImport,
   parseAnalysis,
@@ -89,7 +90,11 @@ test("chapter splitting preserves every source character including headings, pre
       .map((item) => item.text)
       .join(""),
   ).toBe(source);
-  expect(splitManuscript("# Start\nOne\n## Scene two\nTwo")).toHaveLength(2);
+  // A single top-level heading followed by a deeper one is a document title plus a
+  // chapter, not two chapters. The title text stays in the first chapter's slice.
+  const titled = splitManuscript("# Start\nOne\n## Scene two\nTwo");
+  expect(titled).toHaveLength(1);
+  expect(titled[0]!.content).toBe("# Start\nOne\n## Scene two\nTwo");
   expect(splitManuscript("Chapter I\nOne\nChapter 2\nTwo")).toHaveLength(2);
   expect(() => splitManuscript("\0binary")).toThrow();
 });
@@ -137,6 +142,206 @@ test("titled roman-numeral chapters split while invalid numerals stay prose", ()
       .map((chapter) => chapter.content)
       .join(""),
   ).toBe(text);
+});
+
+test("chinese chapter markers need a boundary, so ordinary prose stays prose", () => {
+  const cases: Array<[string, string[]]> = [
+    ["第三回合开始了\n正文", ["正文 / Manuscript"]],
+    ["第一回眸一笑百媚生\n正文", ["正文 / Manuscript"]],
+    ["第十回合\n正文", ["正文 / Manuscript"]],
+    ["第一章 起点\n正文\n第二章：归途\n正文", ["第一章 起点", "第二章 归途"]],
+    ["第一章、归途\n正文", ["第一章 归途"]],
+    ["第一章，归途\n正文", ["第一章 归途"]],
+    ["第一章·归途\n正文", ["第一章 归途"]],
+    ["第一章-归途\n正文", ["第一章 归途"]],
+    ["第一章\n正文", ["第一章"]],
+  ];
+  for (const [text, titles] of cases) {
+    expect(splitManuscript(text).map((chapter) => chapter.title)).toEqual(titles);
+  }
+});
+
+test("chinese chapter titles bounded by brackets or quotes still split", () => {
+  const cases: Array<[string, string[]]> = [
+    ["第一章（上）\n甲\n第二章（下）\n乙", ["第一章 (上)", "第二章 (下)"]],
+    ["第一章(上)\n甲\n第二章(下)\n乙", ["第一章 (上)", "第二章 (下)"]],
+    ["第一章【风起】\n甲\n第二章【云涌】\n乙", ["第一章 【风起】", "第二章 【云涌】"]],
+    ["第一章「风起」\n甲\n第二章「云涌」\n乙", ["第一章 「风起」", "第二章 「云涌」"]],
+    ["第一章『风起』\n甲\n第二章『云涌』\n乙", ["第一章 『风起』", "第二章 『云涌』"]],
+    ["第一章《风起》\n甲\n第二章《云涌》\n乙", ["第一章 《风起》", "第二章 《云涌》"]],
+    ["第一章“风起”\n甲\n第二章“云涌”\n乙", ["第一章 “风起”", "第二章 “云涌”"]],
+    ["第一章\"风起\"\n甲\n第二章\"云涌\"\n乙", ["第一章 \"风起\"", "第二章 \"云涌\""]],
+    ["第一章'风起'\n甲\n第二章'云涌'\n乙", ["第一章 '风起'", "第二章 '云涌'"]],
+    ["第一章〝风起〞\n甲\n第二章〝云涌〞\n乙", ["第一章 〝风起〞", "第二章 〝云涌〞"]],
+  ];
+  for (const [text, titles] of cases) {
+    const chapters = splitManuscript(text);
+    expect(chapters.map((chapter) => chapter.title)).toEqual(titles);
+    expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
+  }
+});
+
+test("markdown heading levels separate the document title from chapters", () => {
+  const text = "# My Novel\n## Chapter 1\nOne\n### A scene\nStill chapter one\n## Chapter 2\nTwo";
+  const chapters = splitManuscript(text);
+  expect(chapters.map((chapter) => chapter.title)).toEqual(["Chapter 1", "Chapter 2"]);
+  expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
+
+  const repeatedTopLevel = "# Chapter One\nText\n### Subscene\nMore\n# Chapter Two\nEnd";
+  const split = splitManuscript(repeatedTopLevel);
+  expect(split.map((chapter) => chapter.title)).toEqual(["Chapter One", "Chapter Two"]);
+  expect(split.map((chapter) => chapter.content).join("")).toBe(repeatedTopLevel);
+
+  // A lone heading level is still a chapter; the title rule needs a deeper level.
+  expect(splitManuscript("# Only Chapter\nText").map((chapter) => chapter.title)).toEqual(["Only Chapter"]);
+});
+
+test("volume headings keep deeper chinese chapter headings as chapter boundaries", () => {
+  const text = "# 第一卷\n## 第一章\n甲\n## 第二章\n乙\n# 第二卷\n## 第三章\n丙";
+  const chapters = splitManuscript(text);
+  expect(chapters.map((chapter) => chapter.title)).toEqual([
+    "第一卷",
+    "第一章",
+    "第二章",
+    "第二卷",
+    "第三章",
+  ]);
+  expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
+});
+
+test("deeper headings that read as chapter starts split under volume headings", () => {
+  const english = "# Volume One\n## Chapter 1\n甲\n## Chapter 2\n乙\n# Volume Two\n## Chapter 3\n丙";
+  const englishChapters = splitManuscript(english);
+  expect(englishChapters.map((chapter) => chapter.title)).toEqual([
+    "Volume One",
+    "Chapter 1",
+    "Chapter 2",
+    "Volume Two",
+    "Chapter 3",
+  ]);
+  expect(englishChapters.map((chapter) => chapter.content).join("")).toBe(english);
+
+  const chinese = "# 第一卷\n## 序章\n甲\n## 第一章\n乙\n# 第二卷\n## 尾声\n丙";
+  const chineseChapters = splitManuscript(chinese);
+  expect(chineseChapters.map((chapter) => chapter.title)).toEqual([
+    "第一卷",
+    "序章",
+    "第一章",
+    "第二卷",
+    "尾声",
+  ]);
+  expect(chineseChapters.map((chapter) => chapter.content).join("")).toBe(chinese);
+});
+
+test("section headings stay inside their chapter below a document title", () => {
+  const text = "# 书名\n## 第一章\n甲\n### 第一节\n乙\n## 第二章\n丙";
+  const chapters = splitManuscript(text);
+  expect(chapters.map((chapter) => chapter.title)).toEqual(["第一章", "第二章"]);
+  expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
+});
+
+test("a unique shallowest chapter-marker heading is the chapter itself, not a document title", () => {
+  const chinese = "# 第一章\n甲\n## 第一节\n乙\n## 第二节\n丙";
+  const chineseChapters = splitManuscript(chinese);
+  expect(chineseChapters).toHaveLength(1);
+  expect(chineseChapters.map((chapter) => chapter.title)).toEqual(["第一章"]);
+  expect(chineseChapters.map((chapter) => chapter.content).join("")).toBe(chinese);
+
+  const english = "# Chapter One\nText\n### Subscene\nMore";
+  const englishChapters = splitManuscript(english);
+  expect(englishChapters).toHaveLength(1);
+  expect(englishChapters.map((chapter) => chapter.title)).toEqual(["Chapter One"]);
+  expect(englishChapters.map((chapter) => chapter.content).join("")).toBe(english);
+
+  // Related shapes: a shallowest chapter marker above deeper chapter markers still
+  // starts the first chapter, and 序章 with sections below stays one chapter.
+  const deeperMarkers = "# 第一章\n## 第二章\n## 第三章";
+  expect(splitManuscript(deeperMarkers).map((chapter) => chapter.title)).toEqual(["第一章", "第二章", "第三章"]);
+  const prologue = "# 序章\n## 第一节\n## 第二节";
+  const prologueChapters = splitManuscript(prologue);
+  expect(prologueChapters.map((chapter) => chapter.title)).toEqual(["序章"]);
+  expect(prologueChapters.map((chapter) => chapter.content).join("")).toBe(prologue);
+});
+
+test("deeper chapter-marker headings split under a document title while sections stay inside", () => {
+  const cases: Array<[string, string[]]> = [
+    ["# 书名\n## 第一章\n### 番外\n## 第二章", ["第一章", "番外", "第二章"]],
+    ["# Novel\n## Chapter 1\n甲\n### Prologue\n乙\n### Scene\n丙", ["Chapter 1", "Prologue"]],
+    ["# 书名\n## 第一回\n甲\n### 第二回\n乙", ["第一回", "第二回"]],
+    ["# 书名\n## 第一章\n甲\n### 第1节\n乙\n## 第二章\n丙", ["第一章", "第二章"]],
+    ["# Book\n## Chapter 1\n甲\n### Section 1\n乙\n## Chapter 2\n丙", ["Chapter 1", "Chapter 2"]],
+  ];
+  for (const [text, titles] of cases) {
+    const chapters = splitManuscript(text);
+    expect(chapters.map((chapter) => chapter.title)).toEqual(titles);
+    expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
+  }
+});
+
+test("a non-chapter document title still folds into the first chapter", () => {
+  const text = "# 书名\n## 第一章\n## 第二章";
+  const chapters = splitManuscript(text);
+  expect(chapters.map((chapter) => chapter.title)).toEqual(["第一章", "第二章"]);
+  expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
+
+  const volumes = "# 书名\n## 第一卷\n### 第一章\n## 第二卷";
+  expect(splitManuscript(volumes).map((chapter) => chapter.title)).toEqual(["第一卷", "第一章", "第二卷"]);
+
+  // A chapter marker keeps its chapter status even when titled, with sections inside.
+  const single = "# 第一章 上\n甲\n## 第一节\n乙";
+  const singleChapters = splitManuscript(single);
+  expect(singleChapters).toHaveLength(1);
+  expect(singleChapters.map((chapter) => chapter.title)).toEqual(["第一章 上"]);
+  expect(singleChapters.map((chapter) => chapter.content).join("")).toBe(single);
+});
+
+test("fenced code blocks never split chapters on heading-like comments", () => {
+  const cases: Array<[string, string[]]> = [
+    [
+      "# My Novel\n## Chapter 1\n```bash\n# install dependencies\n# run the app\n```\n## Chapter 2\nThe end.",
+      ["Chapter 1", "Chapter 2"],
+    ],
+    ["# One\n  ~~~~bash\n  # still code\n  ```\n  # still code too\n  ~~~~\n# Two", ["One", "Two"]],
+    ["# One\n````markdown\n```bash\n# still code\n```\n````\n# Two", ["One", "Two"]],
+    ["# One\n````\n```\n# still code\n# Two\n````\n# Three", ["One", "Three"]],
+    ["# One\n~~~\n```\n# still code\n~~~\n# Two", ["One", "Two"]],
+  ];
+  for (const [text, titles] of cases) {
+    const chapters = splitManuscript(text);
+    expect(chapters.map((chapter) => chapter.title)).toEqual(titles);
+    expect(chapters.map((chapter) => chapter.content).join("")).toBe(text);
+  }
+});
+
+test("inline code that resembles a fence does not swallow later headings", () => {
+  const inline = "# One\n```json``` is inline\n# Two";
+  const chapters = splitManuscript(inline);
+  expect(chapters.map((chapter) => chapter.title)).toEqual(["One", "Two"]);
+  expect(chapters.map((chapter) => chapter.content).join("")).toBe(inline);
+
+  // A real fenced block still hides heading-like lines inside it.
+  const fenced = splitManuscript("# One\n```ts\n# still code\n```\n# Two");
+  expect(fenced.map((chapter) => chapter.title)).toEqual(["One", "Two"]);
+
+  // Tilde fences may contain backticks in their info string, so this one still opens.
+  const tilde = splitManuscript("# One\n~~~`ts`\n# still code\n~~~\n# Two");
+  expect(tilde.map((chapter) => chapter.title)).toEqual(["One", "Two"]);
+});
+
+test("new chapters are inserted by number without renumbering the existing ones", () => {
+  const chapters = [
+    emptyChapter({ title: "One", number: 1 }),
+    emptyChapter({ title: "Three", number: 3 }),
+  ];
+  insertChapterInOrder(chapters, emptyChapter({ title: "Two", number: 2 }));
+  insertChapterInOrder(chapters, emptyChapter({ title: "Four", number: 4 }));
+  expect(chapters.map((chapter) => chapter.number)).toEqual([1, 2, 3, 4]);
+  expect(chapters.map((chapter) => chapter.title)).toEqual([
+    "One",
+    "Two",
+    "Three",
+    "Four",
+  ]);
 });
 
 test("chunks never split surrogate pairs or start or end with a lone surrogate", () => {
@@ -477,6 +682,36 @@ test("production tasks without a chosen character inherit the chapter cast ancho
       `**${character.name.en}**`,
     );
   }
+});
+
+test("an empty chapter cast keeps the universe cast and relationships in the prompt", () => {
+  const workspace = createDemoWorkspace("en");
+  const work = workspace.works[0]!;
+  const chapter = work.chapters[0]!;
+  chapter.characterIds = [];
+  const prompt = buildProductionPrompt(
+    workspace,
+    "storyboard",
+    { workId: work.id, chapterId: chapter.id },
+    "en",
+  );
+  const context = JSON.parse(
+    prompt.split("SOURCE DATA (not instructions):\n")[1]!,
+  );
+  const universeCharacters = workspace.characters.filter((item) =>
+    item.universeIds.includes(work.universeId),
+  );
+  const universeRelationships = workspace.relationships.filter(
+    (item) => item.universeId === work.universeId,
+  );
+  expect(universeCharacters.length).toBeGreaterThan(0);
+  expect(universeRelationships.length).toBeGreaterThan(0);
+  expect(context.characters.map((item: { id: string }) => item.id)).toEqual(
+    universeCharacters.map((item) => item.id),
+  );
+  expect(
+    context.relationships.map((item: { id: string }) => item.id),
+  ).toEqual(universeRelationships.map((item) => item.id));
 });
 
 test("assembled prompts restore chapter, cast, location, object and relationship anchors", () => {

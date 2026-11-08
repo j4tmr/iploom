@@ -34,9 +34,11 @@ export interface WorkflowSummary {
  * Writes a reviewed result into the matching task and reports whether the task
  * was still present. The pre-run result is kept in `previousResult` (first
  * snapshot wins, so the earliest approved design survives repeated runs), run
- * metadata is recorded, and done tasks that consume this output are flagged
- * for re-review. Callers that report success must check the return value: a
- * workspace change that finds no target is still a valid no-op.
+ * metadata is recorded, and done tasks that consume a result which actually
+ * changed are flagged for re-review regardless of the producer's own status.
+ * A first-ever result supersedes nothing and therefore flags nobody. Callers
+ * that report success must check the return value: a workspace change that
+ * finds no target is still a valid no-op.
  */
 export function setWorkflowTaskResult(
   draft: StudioWorkspace,
@@ -49,16 +51,13 @@ export function setWorkflowTaskResult(
   if (!target) return false;
   const key = locale === "zh-CN" ? "zh" : "en";
   const previous = target.result[key];
-  if (
-    !target.previousResult &&
-    (target.result.zh.trim() || target.result.en.trim()) &&
-    previous !== result
-  ) {
+  const hadResult = Boolean(target.result.zh.trim() || target.result.en.trim());
+  if (!target.previousResult && hadResult && previous !== result) {
     target.previousResult = { ...target.result };
   }
   target.result = { ...target.result, [key]: result };
   if (runMeta) target.lastRun = runMeta;
-  if (previous !== result && previous.trim() && target.status === "done") {
+  if (hadResult && previous !== result) {
     for (const dependentId of taskDependentIds(draft.workflowTasks, taskId)) {
       const dependent = draft.workflowTasks.find(
         (item) => item.id === dependentId,

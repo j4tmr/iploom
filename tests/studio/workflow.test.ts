@@ -89,6 +89,42 @@ describe("workflow task results", () => {
     expect(dependent.resultSuperseded).toBeUndefined();
   });
 
+  test("replacing a prior result on an active or review task flags done dependents", () => {
+    for (const status of ["active", "review"] as const) {
+      const workspace = createDemoWorkspace("en");
+      const source = workspace.workflowTasks.find(
+        (item) => item.id === "task_world_rules",
+      )!;
+      const dependent = workspace.workflowTasks.find(
+        (item) => item.id === "task_chapter_three",
+      )!;
+      source.status = status;
+      source.result.en = "Approved world rules.";
+      dependent.status = "done";
+      expect(
+        setWorkflowTaskResult(workspace, source.id, "Rewritten rules.", "en"),
+      ).toBe(true);
+      expect(dependent.resultSuperseded).toBe(true);
+    }
+  });
+
+  test("the first-ever result does not flag done dependents", () => {
+    const workspace = createDemoWorkspace("en");
+    const source = workspace.workflowTasks.find(
+      (item) => item.id === "task_world_rules",
+    )!;
+    const dependent = workspace.workflowTasks.find(
+      (item) => item.id === "task_chapter_three",
+    )!;
+    source.status = "active";
+    source.result = { zh: "", en: "" };
+    dependent.status = "done";
+    expect(
+      setWorkflowTaskResult(workspace, source.id, "First result.", "en"),
+    ).toBe(true);
+    expect(dependent.resultSuperseded).toBeUndefined();
+  });
+
   test("writing an identical result changes nothing structural", () => {
     const workspace = createDemoWorkspace("en");
     const task = workspace.workflowTasks[0]!;

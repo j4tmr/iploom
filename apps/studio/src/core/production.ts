@@ -136,11 +136,16 @@ export function buildProductionPrompt(
   const work = workspace.works.find((item) => item.id === scope.workId);
   const universeId = work?.universeId ?? scope.universeId;
   const chapter = work?.chapters.find((item) => item.id === scope.chapterId);
+  // An explicit or inherited empty cast means "no filter": filtering by an empty
+  // list would match nobody and strip every character and relationship from the
+  // prompt, which is how the empty chapter cast used to behave.
   const characterIds = scope.characterIds?.length
     ? scope.characterIds
     : scope.characterId
       ? [scope.characterId]
-      : chapter?.characterIds;
+      : chapter?.characterIds.length
+        ? chapter.characterIds
+        : undefined;
   const standards =
     options.includeStandards === false
       ? []
