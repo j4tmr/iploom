@@ -410,6 +410,74 @@ test("get_workflow_result returns full text and the first snapshot without writi
     });
     expect(missing.isError).toBe(true);
     expect((missing.body.error as { code: string }).code).toBe("not_found");
+
+    // A window reassembles both languages exactly, one page at a time.
+    const win1 = await call(inline, "get_workflow_result", {
+      task_id: "task_world_rules",
+      offset: 0,
+      max_chars: 4,
+    });
+    expect(win1.isError).toBe(false);
+    const win1Body = win1.body as {
+      result: Record<
+        "zh" | "en",
+        {
+          text: string;
+          total_chars: number;
+          next_offset: number | null;
+          truncated: boolean;
+        }
+      >;
+    };
+    expect(win1Body.result.zh.text).toBe(zhSecond.slice(0, 4));
+    expect(win1Body.result.en.text).toBe(enFirst.slice(0, 4));
+    expect(win1Body.result.zh.next_offset).toBe(4);
+    expect(win1Body.result.zh.truncated).toBe(true);
+
+    const win2 = await call(inline, "get_workflow_result", {
+      task_id: "task_world_rules",
+      result_offsets: { zh: 4, en: 4 },
+      max_chars: 4,
+    });
+    expect(win2.isError).toBe(false);
+    const win2Body = win2.body as {
+      result: Record<
+        "zh" | "en",
+        {
+          text: string;
+          total_chars: number;
+          next_offset: number | null;
+          truncated: boolean;
+        }
+      >;
+    };
+    expect(win2Body.result.zh.text).toBe(zhSecond.slice(4, 8));
+    expect(win2Body.result.zh.next_offset).toBe(8);
+    expect(win2Body.result.zh.truncated).toBe(true);
+    expect(win2Body.result.en.next_offset).toBe(8);
+
+    // A past-the-end offset returns empty text and ends paging.
+    const win3 = await call(inline, "get_workflow_result", {
+      task_id: "task_world_rules",
+      result_offsets: { zh: 22, en: 61 },
+      max_chars: 4,
+    });
+    expect(win3.isError).toBe(false);
+    const win3Body = win3.body as {
+      result: Record<
+        "zh" | "en",
+        {
+          text: string;
+          total_chars: number;
+          next_offset: number | null;
+          truncated: boolean;
+        }
+      >;
+    };
+    expect(win3Body.result.zh.text).toBe("");
+    expect(win3Body.result.zh.next_offset).toBeNull();
+    expect(win3Body.result.en.text).toBe("");
+    expect(win3Body.result.en.next_offset).toBeNull();
   } finally {
     await inline.close();
     rmSync(root, { recursive: true, force: true });
