@@ -930,6 +930,28 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     expect(savedTask.result_excerpt.zh).toContain("第三章草案");
     expect(savedTask.previous_result_chars).toBeNull();
 
+    const readWorkflowResult = await call(client, "get_workflow_result", {
+      task_id: "task_chapter_three",
+    });
+    expect(readWorkflowResult.isError).toBe(false);
+    expect(readWorkflowResult.body.revision).toBe(18);
+    expect(readWorkflowResult.body.result).toEqual({
+      zh: "第三章草案：钟楼在潮汐前停摆。",
+      en: "Chapter three draft: the clock tower stops before the tide.",
+    });
+    expect(readWorkflowResult.body.previous_result).toBeNull();
+    expect(
+      (readWorkflowResult.body.task as { result?: unknown }).result,
+    ).toBeUndefined();
+
+    const missingWorkflowResult = await call(client, "get_workflow_result", {
+      task_id: "task_missing",
+    });
+    expect(missingWorkflowResult.isError).toBe(true);
+    expect((missingWorkflowResult.body.error as { code: string }).code).toBe(
+      "not_found",
+    );
+
     const clearedWorkflowResult = await call(client, "save_workflow_result", {
       task_id: "task_chapter_three",
       result: { zh: "", en: "" },

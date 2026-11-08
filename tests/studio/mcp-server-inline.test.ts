@@ -348,6 +348,74 @@ test("inline MCP server confines exports to allowed roots and honours exportRoot
   }
 });
 
+test("get_workflow_result returns full text and the first snapshot without writing", async () => {
+  const root = mkdtempSync(join(tmpdir(), "iploom-studio-inline-result-read-"));
+  const workspacePath = join(root, "workspace.json");
+  const store = new WorkspaceStore(workspacePath);
+  await store.save(createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z"));
+  const inline = await connectInline(workspacePath);
+  const zhFirst = "世界规则审查：潮汐每日提前十一分钟。";
+  const enFirst =
+    "World rule review: the tide advances eleven minutes each day.";
+  const zhSecond = "世界规则审查（修订）：潮汐提前，钟声晚一拍。";
+  try {
+    const empty = await call(inline, "get_workflow_result", {
+      task_id: "task_world_rules",
+    });
+    expect(empty.isError).toBe(false);
+    expect(empty.body.revision).toBe(7);
+    expect(empty.body.result).toEqual({ zh: "", en: "" });
+    expect(empty.body.previous_result).toBeNull();
+    const emptyTask = empty.body.task as {
+      id: string;
+      result?: unknown;
+      result_chars: { zh: number; en: number };
+    };
+    expect(emptyTask.id).toBe("task_world_rules");
+    // The summary keeps its compact shape; full text lives in `result`.
+    expect(emptyTask.result).toBeUndefined();
+    expect(emptyTask.result_chars).toEqual({ zh: 0, en: 0 });
+
+    const firstSave = await call(inline, "save_workflow_result", {
+      task_id: "task_world_rules",
+      result: { zh: zhFirst, en: enFirst },
+    });
+    expect(firstSave.isError).toBe(false);
+    const secondSave = await call(inline, "save_workflow_result", {
+      task_id: "task_world_rules",
+      result: { zh: zhSecond },
+    });
+    expect(secondSave.isError).toBe(false);
+    expect(secondSave.body.revision).toBe(9);
+
+    const read = await call(inline, "get_workflow_result", {
+      task_id: "task_world_rules",
+    });
+    expect(read.isError).toBe(false);
+    expect(read.body.revision).toBe(9);
+    // Both languages come back in full, including the one the patch omitted.
+    expect(read.body.result).toEqual({ zh: zhSecond, en: enFirst });
+    // The first pre-change snapshot survives the later revision.
+    expect(read.body.previous_result).toEqual({ zh: zhFirst, en: enFirst });
+    expect(
+      (read.body.task as { result_chars: { zh: number; en: number } })
+        .result_chars,
+    ).toEqual({ zh: zhSecond.length, en: enFirst.length });
+
+    // Reading never writes or bumps the revision.
+    expect((await store.load()).workspace.revision).toBe(9);
+
+    const missing = await call(inline, "get_workflow_result", {
+      task_id: "task_missing",
+    });
+    expect(missing.isError).toBe(true);
+    expect((missing.body.error as { code: string }).code).toBe("not_found");
+  } finally {
+    await inline.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("save_workflow_result merges languages, keeps the first snapshot and protects done tasks", async () => {
   const root = mkdtempSync(join(tmpdir(), "iploom-studio-inline-result-"));
   const workspacePath = join(root, "workspace.json");

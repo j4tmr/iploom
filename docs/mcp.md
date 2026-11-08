@@ -32,6 +32,7 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 | `list_timeline_events`   | yes       | List story timeline events with world/novel/chapter/subject/status filters               |
 | `list_workflow_tasks`    | yes       | List AI authoring tasks with readiness, blockers and optional world/novel/status filters |
 | `get_workflow_brief`     | yes       | Generate a deterministic, task-scoped bilingual Markdown brief                           |
+| `get_workflow_result`    | yes       | Read a workflow task's full bilingual result and first pre-change snapshot               |
 | `list_standards`         | yes       | List foundation standards with kind, status, scope and pinned task count                 |
 | `get_standard`           | yes       | Read one standard, its applied scope and the tasks that pin its version                  |
 | `create_standard`        | no        | Register a foundation standard as a draft (or active) with schema validation             |
@@ -41,7 +42,7 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 | `save_workflow_result`   | no        | Save produced result text to a workflow task and move it to review                       |
 | `export_arcreel_bundle`  | no        | Write an ArcReel-style handoff package                                                   |
 
-Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The server registers 18 tools: twelve read-only, five workspace writes (`create_standard`, `update_standard`, `create_timeline_event`, `update_timeline_event`, `save_workflow_result`) and one export (`export_arcreel_bundle`). Those six are the only tools that can change local state; writes are serialized and re-validated against the workspace schema. Tool names and access levels come from `apps/studio/src/core/mcp-tools.ts`, the single source the server, the settings copy and the verification script all share.
+Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The server registers 19 tools: thirteen read-only, five workspace writes (`create_standard`, `update_standard`, `create_timeline_event`, `update_timeline_event`, `save_workflow_result`) and one export (`export_arcreel_bundle`). Those six are the only tools that can change local state; writes are serialized and re-validated against the workspace schema. Tool names and access levels come from `apps/studio/src/core/mcp-tools.ts`, the single source the server, the settings copy and the verification script all share.
 
 ### Response shape and paging
 
@@ -74,6 +75,7 @@ Responses echo the fields a client needs for the next call, not every nested lis
 - Entity views cap repeated identifiers at 20 items and add the true size alongside: `character_ids`/`character_id_count`, `depends_on_ids`/`depends_on_id_count`, `pinned_by_task_ids`/`pinned_by_task_count`.
 - `list_timeline_events` orders events by chapter, in-world time, order and creation time; its default view clips long state, evidence and prompt fields and names them in `truncated_fields`, while `include_details` returns the full record.
 - `list_workflow_tasks` previews at most 10 unfinished prerequisites in `blockers` and reports the full number in `blocker_count`; the summary object counts all of them.
+- `get_workflow_result` is the one workflow read that returns stored text in full: `result` (`{ zh, en }`) holds the current text and `previous_result` the first pre-change snapshot, or `null` when none exists. It never writes or bumps the revision, and each language is bounded by the stored 200,000-character cap.
 - `create_standard` and `update_standard` acknowledge with the compact standard view. Bodies are reported as `body_chars` (`{ zh, en }` character counts) rather than echoed back, so a large write does not inflate the response. A language patch merges per language: sending only `title.zh` keeps the existing English title and both bodies.
 - `create_timeline_event` and `update_timeline_event` acknowledge with the compact timeline event view: long state, evidence and production-prompt fields are clipped and named in `truncated_fields`. Omitted fields keep their stored values, a title patch merges per language, and `chapter_id: null` clears the chapter together with any scene.
 - `save_workflow_result` acknowledges with the compact workflow task view, whose result is reported as `result_chars` and a short `result_excerpt` rather than echoed back. A result patch merges per language: omitting `zh` keeps the stored Chinese text, and an empty string clears one language only while the other still has text. The pre-change snapshot moves to `previous_result_chars`, done dependents are flagged `result_superseded`, and `queued` or `active` tasks become `review`; a `done` task is rejected until it is reopened in the app.

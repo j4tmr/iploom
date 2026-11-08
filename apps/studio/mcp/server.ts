@@ -2073,6 +2073,40 @@ export function createStudioMcpServer(
   );
 
   register(
+    "get_workflow_result",
+    {
+      title: "读取 AI 任务结果 / Workflow result",
+      description:
+        "读取一个 AI 任务当前保存的中英文完整结果，以及首次改动前的快照（若有）；只读，不改变工作区。文本直接返回，便于在修订前核对待改内容；每种语言最多 200,000 字符。Return the full stored Chinese and English result of one workflow task and, when present, the first pre-change snapshot; read-only, with no workspace change. The text is returned directly so a client can inspect what it is about to revise; each language is capped at 200,000 characters.",
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    z.object({
+      task_id: workflowTaskIdSchema,
+    }),
+    async (args) => {
+      const loaded = await store.load();
+      const { workspace } = loaded;
+      const task = workspace.workflowTasks.find(
+        (item) => item.id === args.task_id,
+      );
+      if (!task)
+        throw new ToolError(
+          "not_found",
+          `Unknown workflow task: ${args.task_id}`,
+        );
+      return {
+        schema: MCP_SCHEMA,
+        revision: workspace.revision,
+        task: workflowTaskSummaryView(workspace, task),
+        result: { zh: task.result.zh, en: task.result.en },
+        previous_result: task.previousResult
+          ? { zh: task.previousResult.zh, en: task.previousResult.en }
+          : null,
+      };
+    },
+  );
+
+  register(
     "list_standards",
     {
       title: "基础规则列表 / Foundation standards",
