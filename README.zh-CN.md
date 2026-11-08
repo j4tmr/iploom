@@ -47,17 +47,17 @@ IP 宇宙
 
 ## 新版 AI 制作台
 
-已有小说可导入并通过可配置模型 API 提取世界、人物、关系与场景。制作台提供九类可编辑提示词、任务依赖、实时产出与作者审阅，面向后续漫剧制作。见 [AI 制作指南](docs/ai-production.md)。这些能力已包含在下方 0.9.0 安装包中。
+已有小说可导入并通过可配置模型 API 提取世界、人物、关系与场景。制作台提供九类可编辑提示词、任务依赖、实时产出与作者审阅，面向后续漫剧制作。见 [AI 制作指南](docs/ai-production.md)。这些能力已包含在下方 0.10.0 安装包中。
 
 ## 下载
 
-当前发行版 **0.9.0**，直接下载：
+当前发行版 **0.10.0**，直接下载：
 
-| macOS (Apple silicon + Intel)                                                                                                                                                                                                     | Windows x64                                                                                              |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [DMG](https://github.com/j4tmr/iploom/releases/download/studio-v0.9.0/IPloom-Studio-0.9.0-darwin-universal.dmg) · [ZIP](https://github.com/j4tmr/iploom/releases/download/studio-v0.9.0/IPloom-Studio-0.9.0-darwin-universal.zip) | [EXE](https://github.com/j4tmr/iploom/releases/download/studio-v0.9.0/IPloom-Studio-0.9.0-win32-x64.exe) |
+| macOS (Apple silicon + Intel)                                                                                                                                                                                                         | Windows x64                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| [DMG](https://github.com/j4tmr/iploom/releases/download/studio-v0.10.0/IPloom-Studio-0.10.0-darwin-universal.dmg) · [ZIP](https://github.com/j4tmr/iploom/releases/download/studio-v0.10.0/IPloom-Studio-0.10.0-darwin-universal.zip) | [EXE](https://github.com/j4tmr/iploom/releases/download/studio-v0.10.0/IPloom-Studio-0.10.0-win32-x64.exe) |
 
-[Releases](https://github.com/j4tmr/iploom/releases) · [SHA256SUMS.txt](https://github.com/j4tmr/iploom/releases/download/studio-v0.9.0/SHA256SUMS.txt)
+[Releases](https://github.com/j4tmr/iploom/releases) · [SHA256SUMS.txt](https://github.com/j4tmr/iploom/releases/download/studio-v0.10.0/SHA256SUMS.txt)
 
 - macOS：同时支持 Apple silicon 与 Intel 的 universal DMG / ZIP。
 - Windows：x64 NSIS 安装包。
@@ -65,7 +65,7 @@ IP 宇宙
 - **构建溯源**：每个 `.dmg`、`.zip` 与 `.exe` 都由发布工作流生成构建证明，可用 GitHub CLI 校验：
 
   ```sh
-  gh attestation verify IPloom-Studio-0.9.0-darwin-universal.dmg --repo j4tmr/iploom
+  gh attestation verify IPloom-Studio-0.10.0-darwin-universal.dmg --repo j4tmr/iploom
   ```
 
 当前发行版**未签名**，macOS Gatekeeper 或 Windows SmartScreen 可能提示风险。macOS 15 及以后，Control 键点按 →“打开”已不再能绕过 Gatekeeper：若首次启动被拦截，请打开**系统设置 → 隐私与安全性**，在“安全性”中点按 IPloom Studio 提示旁的**仍要打开**，完成认证后选择**打开**。Windows 上使用“更多信息 → 仍要运行”。请先核验校验和与构建溯源，确认来源可信后再继续。后续可在不改变应用格式的前提下补充正式签名。

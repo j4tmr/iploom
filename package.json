@@ -1,6 +1,6 @@
 {
   "name": "iploom-studio",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "description": "IPloom Studio — a local-first, bilingual IP bible and novel workspace with ArcReel-ready 3D comic-drama handoffs.",
