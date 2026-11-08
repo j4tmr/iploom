@@ -24,6 +24,7 @@ export const MCP_TOOLS = [
   { name: "list_timeline_events", access: "read" },
   { name: "list_workflow_tasks", access: "read" },
   { name: "get_workflow_brief", access: "read" },
+  { name: "get_workflow_result", access: "read" },
   { name: "list_standards", access: "read" },
   { name: "get_standard", access: "read" },
   { name: "create_standard", access: "write" },

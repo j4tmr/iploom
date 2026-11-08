@@ -42,7 +42,7 @@ The result is a small, inspectable IP graph instead of a folder of files whose r
 - **Local persistence** — atomic `workspace.json` writes, a `.bak` recovery copy, schema migration, a save-before-close handshake and visible save state.
 - **ArcReel-style handoff** — selected chapters become a directory of world, episode and storyboard JSON plus a Markdown handoff.
 - **Foundation standards** — project-wide language, format, naming, numeric, entity-prompt and continuity rules, optionally AI-drafted, injected into every prompt and workflow brief with pinned versions.
-- **Local MCP server** — eighteen tools for IP queries, story timeline events, foundation rules, workflow briefs, workflow results and handoff export; twelve are read-only and five write workspace records.
+- **Local MCP server** — nineteen tools for IP queries, story timeline events, foundation rules, workflow briefs, full workflow results and handoff export; thirteen are read-only and five write workspace records.
 - **Desktop security baseline** — context isolation, sandboxed renderer, strict CSP, validated IPC and an explicit export boundary.
 - **No account and no telemetry** — the app does not require a cloud service.
 

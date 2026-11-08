@@ -469,6 +469,7 @@ describe("MCP paging, scoping and bounded responses", () => {
       ["get_relationship_graph", { world_id: "uni_mist_harbor" }, "nodes"],
       ["list_workflow_tasks", {}, "tasks"],
       ["get_workflow_brief", { task_id: "task_world_rules" }, "task"],
+      ["get_workflow_result", { task_id: "task_world_rules" }, "result"],
       ["list_standards", {}, "standards"],
       ["get_standard", { standard_id: BULK_STANDARD_ID }, "standard"],
     ];
