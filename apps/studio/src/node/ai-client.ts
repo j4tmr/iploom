@@ -10,7 +10,18 @@ export const aiConfigSchema = z
   })
   .strict()
   .superRefine((config, ctx) => {
-    const url = new URL(config.endpoint);
+    // Refinements still run after .url() fails in zod 4, so an empty or scheme-less endpoint
+    // must not reach the URL constructor and surface as a raw TypeError over IPC.
+    let url: URL;
+    try {
+      url = new URL(config.endpoint);
+    } catch {
+      ctx.addIssue({
+        code: "custom",
+        message: "Enter a valid URL such as https://host/v1.",
+      });
+      return;
+    }
     if (
       url.username ||
       url.password ||
