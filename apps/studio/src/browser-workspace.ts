@@ -1,4 +1,5 @@
 import { createDemoWorkspace } from "./core/factory.ts";
+import { loadWorkspace } from "./core/integrity.ts";
 import { validateWorkspace } from "./core/validate.ts";
 import {
   WORKSPACE_SCHEMA_VERSION,
@@ -34,7 +35,7 @@ export function loadBrowserWorkspace(
     };
   }
   return {
-    workspace: validateWorkspace(JSON.parse(raw)),
+    workspace: loadWorkspace(JSON.parse(raw)),
     path: "Browser localStorage",
     recoveredFromBackup: false,
   };
@@ -123,13 +124,13 @@ export function saveBrowserWorkspace(
     if (!options.allowRollback && stored !== null) {
       let storedWorkspace: StudioWorkspace | null = null;
       try {
-        storedWorkspace = validateWorkspace(stored);
+        storedWorkspace = loadWorkspace(stored);
       } catch {
         // Unreadable stored data must stay replaceable by a healthy workspace.
         storedWorkspace = null;
       }
       if (storedWorkspace !== null) {
-        // Both sides are `validateWorkspace` output, so this is the same
+        // Both sides are validated workspace output, so this is the same
         // zod-canonical comparison the desktop store uses.
         const identical =
           JSON.stringify(storedWorkspace) === JSON.stringify(valid);
@@ -161,7 +162,7 @@ export function saveBrowserSnapshot(storage: WorkspaceStorage): string | null {
   const raw = storage.getItem(browserWorkspaceKey);
   if (raw === null) return null;
   try {
-    validateWorkspace(JSON.parse(raw));
+    loadWorkspace(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -174,7 +175,7 @@ export function loadBrowserSnapshot(storage: WorkspaceStorage) {
   return raw === null
     ? null
     : {
-        workspace: validateWorkspace(JSON.parse(raw)),
+        workspace: loadWorkspace(JSON.parse(raw)),
         path: "Browser localStorage",
         recoveredFromBackup: false,
       };

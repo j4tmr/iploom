@@ -1,9 +1,182 @@
+import { migrateWorkspace } from "./migrations.ts";
 import type { StoryWork, StudioWorkspace, TimelineEvent } from "./types.ts";
 import {
   validateWorkspace,
   WorkspaceValidationError,
   type WorkspaceIssueDetail,
 } from "./validate.ts";
+
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Keep string ids that resolve inside the work's universe, drop duplicates and
+ * ids that cannot resolve, and leave malformed entries for validation to
+ * report. Returns undefined when there is no array to repair.
+ */
+function pruneCharacterRefs(
+  ids: unknown,
+  belongsToUniverse: (id: string) => boolean,
+): { ids: unknown[]; changed: boolean } | undefined {
+  if (!Array.isArray(ids)) return undefined;
+  const seen = new Set<string>();
+  const kept = ids.filter((id) => {
+    if (typeof id !== "string") return true;
+    if (!belongsToUniverse(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  return { ids: kept, changed: kept.length !== ids.length };
+}
+
+/**
+ * Drop chapter and scene references that cannot resolve inside their work's
+ * universe.
+ *
+ * Workspaces written before universe ownership was validated can still contain
+ * cast members or locations from another universe. The editor scopes its
+ * pickers to the work universe, so those references are invisible there, and
+ * exporters silently drop them. A strict validator alone would make such a
+ * workspace impossible to save, so loading prunes them first: character ids
+ * that do not exist or do not belong to the work universe are removed (first
+ * occurrence kept), and location ids owned by another universe are cleared.
+ * A location id that does not exist at all is left for validation to report
+ * instead of silently dropping a likely typo.
+ *
+ * The input is never mutated and `revision` is untouched, so loading a legacy
+ * workspace does not look like an edit. Applying the function to its own
+ * output changes nothing (idempotent).
+ */
+export function repairCrossUniverseReferences(
+  workspace: StudioWorkspace,
+): StudioWorkspace;
+export function repairCrossUniverseReferences(value: unknown): unknown;
+export function repairCrossUniverseReferences(value: unknown): unknown {
+  if (!isUnknownRecord(value)) return value;
+
+  const characterUniverses = new Map<string, Set<string>>();
+  if (Array.isArray(value.characters)) {
+    for (const character of value.characters) {
+      if (!isUnknownRecord(character)) continue;
+      const { id, universeIds } = character;
+      if (typeof id !== "string" || !Array.isArray(universeIds)) continue;
+      characterUniverses.set(
+        id,
+        new Set(
+          universeIds.filter((item): item is string => typeof item === "string"),
+        ),
+      );
+    }
+  }
+  const locationUniverses = new Map<string, string>();
+  if (Array.isArray(value.locations)) {
+    for (const location of value.locations) {
+      if (!isUnknownRecord(location)) continue;
+      const { id, universeId } = location;
+      if (typeof id === "string" && typeof universeId === "string")
+        locationUniverses.set(id, universeId);
+    }
+  }
+  if (!Array.isArray(value.works)) return value;
+
+  let workspaceChanged = false;
+  const works = value.works.map((work) => {
+    if (!isUnknownRecord(work) || typeof work.universeId !== "string")
+      return work;
+    if (!Array.isArray(work.chapters)) return work;
+    const universeId = work.universeId;
+    const memberOfUniverse = (characterId: string) =>
+      characterUniverses.get(characterId)?.has(universeId) === true;
+    const foreignLocation = (locationId: string) => {
+      const owner = locationUniverses.get(locationId);
+      return owner !== undefined && owner !== universeId;
+    };
+
+    let workChanged = false;
+    const chapters = work.chapters.map((chapter) => {
+      if (!isUnknownRecord(chapter)) return chapter;
+      let chapterChanged = false;
+
+      let chapterCharacterIds = chapter.characterIds;
+      const cast = pruneCharacterRefs(chapter.characterIds, memberOfUniverse);
+      if (cast?.changed) {
+        chapterCharacterIds = cast.ids;
+        chapterChanged = true;
+      }
+
+      let scenesChanged = false;
+      const scenes = Array.isArray(chapter.scenes)
+        ? chapter.scenes.map((scene) => {
+            if (!isUnknownRecord(scene)) return scene;
+            let sceneChanged = false;
+            let sceneCharacterIds = scene.characterIds;
+            const sceneCast = pruneCharacterRefs(
+              scene.characterIds,
+              memberOfUniverse,
+            );
+            if (sceneCast?.changed) {
+              sceneCharacterIds = sceneCast.ids;
+              sceneChanged = true;
+            }
+            let sceneLocationId = scene.locationId;
+            if (
+              typeof sceneLocationId === "string" &&
+              foreignLocation(sceneLocationId)
+            ) {
+              sceneLocationId = undefined;
+              sceneChanged = true;
+            }
+            if (!sceneChanged) return scene;
+            scenesChanged = true;
+            const repairedScene: Record<string, unknown> = {
+              ...scene,
+              characterIds: sceneCharacterIds,
+            };
+            if (sceneLocationId === undefined) delete repairedScene.locationId;
+            else repairedScene.locationId = sceneLocationId;
+            return repairedScene;
+          })
+        : chapter.scenes;
+      if (scenesChanged) chapterChanged = true;
+
+      const clearLocation =
+        typeof chapter.locationId === "string" &&
+        foreignLocation(chapter.locationId);
+      if (clearLocation) chapterChanged = true;
+
+      if (!chapterChanged) return chapter;
+      workChanged = true;
+      const repairedChapter: Record<string, unknown> = {
+        ...chapter,
+        characterIds: chapterCharacterIds,
+        scenes,
+      };
+      if (clearLocation) delete repairedChapter.locationId;
+      return repairedChapter;
+    });
+
+    if (!workChanged) return work;
+    workspaceChanged = true;
+    return { ...work, chapters };
+  });
+
+  return workspaceChanged ? { ...value, works } : value;
+}
+
+/**
+ * Decode a persisted workspace: migrate old schema versions, prune legacy
+ * cross-universe chapter and scene references, then validate strictly.
+ *
+ * Every read from disk, localStorage, a snapshot or a backup goes through
+ * this function. `validateWorkspace` itself stays strict so a new invalid
+ * edit is still rejected instead of being repaired behind the user's back.
+ */
+export function loadWorkspace(value: unknown): StudioWorkspace {
+  return validateWorkspace(
+    repairCrossUniverseReferences(migrateWorkspace(value)),
+  );
+}
 
 export interface WorkspaceChangeApplied {
   ok: true;

@@ -290,3 +290,44 @@ test("browser never replaces a healthy snapshot with corrupt data", () => {
   expect(saveBrowserSnapshot(storage)).toBeNull();
   expect(loadBrowserSnapshot(storage)?.workspace).toEqual(workspace);
 });
+
+test("legacy cross-universe references are repaired on browser load and stay saveable", () => {
+  const legacy = createDemoWorkspace("en");
+  const chapter = legacy.works.find(
+    (work) => work.id === "work_last_train",
+  )!.chapters[0]!;
+  chapter.characterIds = ["char_echo", "char_lin"];
+  chapter.locationId = "loc_old_tower";
+  const raw = JSON.stringify(legacy);
+  const storage = storageWith(raw);
+
+  const { workspace } = loadBrowserWorkspace(storage, "en");
+  const repaired = workspace.works.find(
+    (work) => work.id === "work_last_train",
+  )!.chapters[0]!;
+  expect(repaired.characterIds).toEqual(["char_echo"]);
+  expect(repaired.locationId).toBeUndefined();
+  expect(workspace.revision).toBe(legacy.revision);
+  // Opening the workspace does not rewrite the stored bytes by itself.
+  expect(storage.getItem(browserWorkspaceKey)).toBe(raw);
+
+  expect(saveBrowserSnapshot(storage)).toBe(browserSnapshotKey);
+  const snapshot = loadBrowserSnapshot(storage)!.workspace;
+  expect(
+    snapshot.works.find((work) => work.id === "work_last_train")!.chapters[0]!
+      .characterIds,
+  ).toEqual(["char_echo"]);
+
+  saveBrowserWorkspace(storage, workspace);
+  const stored = JSON.parse(storage.getItem(browserWorkspaceKey)!) as {
+    works: {
+      id: string;
+      chapters: { characterIds: string[]; locationId?: string }[];
+    }[];
+  };
+  const storedChapter = stored.works.find(
+    (work) => work.id === "work_last_train",
+  )!.chapters[0]!;
+  expect(storedChapter.characterIds).toEqual(["char_echo"]);
+  expect("locationId" in storedChapter).toBe(false);
+});

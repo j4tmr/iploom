@@ -6,8 +6,10 @@ import {
   deleteCharacterFromDraft,
   deleteUniverseFromDraft,
   deleteWorkFromDraft,
+  loadWorkspace,
   reassignStandardUniverse,
   reassignWorkUniverse,
+  repairCrossUniverseReferences,
   saveWorkFromEditor,
   unlinkCharacterFromUniverse,
 } from "../../apps/studio/src/core/integrity.ts";
@@ -242,7 +244,12 @@ describe("workspace integrity", () => {
       characterIds: ["char_lin", "char_echo"],
       shots: [],
     });
-    expect(() => validateWorkspace(workspace)).not.toThrow();
+    // Pre-#37 workspaces could contain this residue. Raw validation now
+    // rejects it, while the load path repairs it before the delete cascade.
+    expect(() => validateWorkspace(workspace)).toThrow(
+      /belongs to another universe/,
+    );
+    expect(() => validateWorkspace(loadWorkspace(workspace))).not.toThrow();
 
     const outcome = applyWorkspaceChange(workspace, (draft) => {
       deleteUniverseFromDraft(draft, "uni_mist_harbor");
@@ -595,6 +602,20 @@ describe("workspace integrity", () => {
         ? { ...character, universeIds: ["uni_ninth_station"] }
         : character,
     );
+    // Keep the fixture valid after dropping the other membership: chapters in
+    // the remaining universe are the references this test cares about.
+    for (const work of workspace.works) {
+      if (work.universeId === "uni_ninth_station") continue;
+      for (const chapter of work.chapters) {
+        chapter.characterIds = chapter.characterIds.filter(
+          (id) => id !== "char_echo",
+        );
+        for (const scene of chapter.scenes)
+          scene.characterIds = scene.characterIds.filter(
+            (id) => id !== "char_echo",
+          );
+      }
+    }
     workspace.timelineEvents.push({
       id: "timeline_echo_platform",
       universeId: "uni_ninth_station",
@@ -878,5 +899,83 @@ describe("workspace integrity", () => {
     const issue = overCap.details.find((item) => item.path === path);
     expect(issue?.code).toBe("too_big");
     expect(issue?.maximum).toBe(CHAPTER_LIMITS.title);
+  });
+
+  test("chapter and scene references from another universe are rejected", () => {
+    const foreignChapterCast = demo();
+    workById(foreignChapterCast, "work_last_train").chapters[0]!.characterIds.push(
+      "char_lin",
+    );
+    expect(() => validateWorkspace(foreignChapterCast)).toThrow(
+      /character belongs to another universe/,
+    );
+
+    const foreignChapterLocation = demo();
+    workById(
+      foreignChapterLocation,
+      "work_last_train",
+    ).chapters[0]!.locationId = "loc_old_tower";
+    expect(() => validateWorkspace(foreignChapterLocation)).toThrow(
+      /location belongs to another universe/,
+    );
+
+    const foreignSceneCast = demo();
+    workById(foreignSceneCast, "work_last_train").chapters[0]!.scenes.push({
+      id: "scene_foreign_cast",
+      title: "Foreign cast",
+      summary: "",
+      characterIds: ["char_lin"],
+      shots: [],
+    });
+    expect(() => validateWorkspace(foreignSceneCast)).toThrow(
+      /character belongs to another universe/,
+    );
+
+    const foreignSceneLocation = demo();
+    workById(
+      foreignSceneLocation,
+      "work_last_train",
+    ).chapters[0]!.scenes.push({
+      id: "scene_foreign_location",
+      title: "Foreign location",
+      summary: "",
+      locationId: "loc_old_tower",
+      characterIds: [],
+      shots: [],
+    });
+    expect(() => validateWorkspace(foreignSceneLocation)).toThrow(
+      /location belongs to another universe/,
+    );
+  });
+
+  test("legacy cross-universe references are repaired idempotently", () => {
+    const workspace = demo();
+    const chapter = workById(workspace, "work_last_train").chapters[0]!;
+    chapter.characterIds = ["char_echo", "char_lin", "char_echo", "char_shen"];
+    chapter.characterIds.push("char_ghost");
+    chapter.locationId = "loc_old_tower";
+    chapter.scenes.push({
+      id: "scene_legacy_cross",
+      title: "Legacy cross-world scene",
+      summary: "",
+      locationId: "loc_old_tower",
+      characterIds: ["char_gu", "char_lin", "char_gu", "char_ghost"],
+      shots: [],
+    });
+    const before = JSON.stringify(workspace);
+    const revision = workspace.revision;
+
+    const repaired = repairCrossUniverseReferences(workspace);
+    expect(JSON.stringify(workspace)).toBe(before);
+    expect(repaired.revision).toBe(revision);
+    expect(() => validateWorkspace(repaired)).not.toThrow();
+
+    const repairedChapter = workById(repaired, "work_last_train").chapters[0]!;
+    expect(repairedChapter.characterIds).toEqual(["char_echo"]);
+    expect(repairedChapter.locationId).toBeUndefined();
+    expect(repairedChapter.scenes[0]!.characterIds).toEqual(["char_gu"]);
+    expect(repairedChapter.scenes[0]!.locationId).toBeUndefined();
+
+    expect(repairCrossUniverseReferences(repaired)).toBe(repaired);
   });
 });
