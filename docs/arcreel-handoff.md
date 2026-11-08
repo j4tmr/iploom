@@ -33,7 +33,7 @@ The directory name keeps the work title's Chinese characters and appends the man
   "content_sha256": "<64 hex characters>",
   "generator": {
     "name": "IPloom Studio",
-    "version": "0.4.0",
+    "version": "0.6.0",
     "homepage": "https://github.com/j4tmr/iploom"
   },
   "source": {

@@ -1,6 +1,6 @@
 # AI production desk / AI 制作台
 
-These features ship in the 0.4.0 installers. / 以下能力已包含在 0.4.0 安装包中。
+These features ship in the 0.6.0 installers. / 以下能力已包含在 0.6.0 安装包中。
 
 ## Import an existing novel / 导入已有小说
 
