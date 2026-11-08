@@ -903,6 +903,63 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
       "Lin keeps the night watch alone",
     );
     expect(storedTimelineEvent?.productionPrompt.length).toBeGreaterThan(240);
+
+    const savedWorkflowResult = await call(client, "save_workflow_result", {
+      task_id: "task_chapter_three",
+      result: {
+        zh: "第三章草案：钟楼在潮汐前停摆。",
+        en: "Chapter three draft: the clock tower stops before the tide.",
+      },
+    });
+    expect(savedWorkflowResult.isError).toBe(false);
+    expect(savedWorkflowResult.body.revision).toBe(18);
+    const savedTask = savedWorkflowResult.body.task as {
+      id: string;
+      status: string;
+      result?: unknown;
+      result_chars: { zh: number; en: number };
+      result_excerpt: { zh: string; en: string };
+      previous_result_chars: unknown;
+    };
+    expect(savedTask.id).toBe("task_chapter_three");
+    expect(savedTask.status).toBe("review");
+    // The compact view reports sizes and an excerpt, never the full result.
+    expect(savedTask.result).toBeUndefined();
+    expect(savedTask.result_chars.zh).toBeGreaterThan(0);
+    expect(savedTask.result_chars.en).toBeGreaterThan(0);
+    expect(savedTask.result_excerpt.zh).toContain("第三章草案");
+    expect(savedTask.previous_result_chars).toBeNull();
+
+    const clearedWorkflowResult = await call(client, "save_workflow_result", {
+      task_id: "task_chapter_three",
+      result: { zh: "", en: "" },
+    });
+    expect(clearedWorkflowResult.isError).toBe(true);
+    expect((clearedWorkflowResult.body.error as { code: string }).code).toBe(
+      "invalid_arguments",
+    );
+
+    const persistedWorkflow = JSON.parse(
+      readFileSync(workspacePath, "utf8"),
+    ) as {
+      revision: number;
+      workflowTasks: Array<{
+        id: string;
+        status: string;
+        result: { zh: string; en: string };
+        previousResult?: { zh: string; en: string };
+      }>;
+    };
+    expect(persistedWorkflow.revision).toBe(18);
+    const storedTask = persistedWorkflow.workflowTasks.find(
+      (task) => task.id === "task_chapter_three",
+    );
+    expect(storedTask?.status).toBe("review");
+    expect(storedTask?.result.zh).toBe("第三章草案：钟楼在潮汐前停摆。");
+    expect(storedTask?.result.en).toBe(
+      "Chapter three draft: the clock tower stops before the tide.",
+    );
+    expect(storedTask?.previousResult).toBeUndefined();
   } finally {
     await client.close().catch(() => undefined);
     rmSync(root, { recursive: true, force: true });

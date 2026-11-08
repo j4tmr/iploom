@@ -302,18 +302,19 @@ describe("createElectronMcpConfig", () => {
 describe("MCP tool registry", () => {
   test("partitions the registered tools by access level", () => {
     expect(MCP_TOOL_COUNTS).toEqual({
-      total: 17,
+      total: 18,
       read: 12,
-      write: 4,
+      write: 5,
       export: 1,
     });
-    expect(MCP_TOOL_NAMES).toHaveLength(17);
+    expect(MCP_TOOL_NAMES).toHaveLength(18);
     expect(MCP_READ_TOOL_NAMES).toHaveLength(12);
     expect(MCP_WRITE_TOOL_NAMES).toEqual([
       "create_standard",
       "update_standard",
       "create_timeline_event",
       "update_timeline_event",
+      "save_workflow_result",
     ]);
     expect(MCP_EXPORT_TOOL_NAMES).toEqual(["export_arcreel_bundle"]);
     expect(
@@ -327,10 +328,10 @@ describe("MCP tool registry", () => {
 
   test("describes the split for both interface languages", () => {
     expect(mcpToolsNote("en")).toBe(
-      "12 read-only query tools + 4 workspace writers + 1 local export tool.",
+      "12 read-only query tools + 5 workspace writers + 1 local export tool.",
     );
     expect(mcpToolsNote("zh-CN")).toBe(
-      "12 个只读查询工具 + 4 个工作区写入工具 + 1 个本地导出工具。",
+      "12 个只读查询工具 + 5 个工作区写入工具 + 1 个本地导出工具。",
     );
   });
 });

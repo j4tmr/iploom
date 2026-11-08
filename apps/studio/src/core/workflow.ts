@@ -2,6 +2,7 @@ import { displayText } from "./factory.ts";
 import { standardsPromptSection } from "./standards.ts";
 import { relevantTimelineEvents, timelineAnchorLabel } from "./timeline.ts";
 import type {
+  LocalizedText,
   StudioWorkspace,
   TimelineEvent,
   UiLocale,
@@ -47,17 +48,37 @@ export function setWorkflowTaskResult(
   locale: UiLocale,
   runMeta?: WorkflowTaskRunMeta,
 ): boolean {
+  return setWorkflowTaskResultLocalized(
+    draft,
+    taskId,
+    locale === "zh-CN" ? { zh: result } : { en: result },
+    runMeta,
+  );
+}
+
+/**
+ * The bilingual form of {@link setWorkflowTaskResult}: omitted languages keep
+ * their stored text, and the snapshot and superseded flags are decided once
+ * for the whole patch. Deciding per language would snapshot the text halfway
+ * through a two-language first save.
+ */
+export function setWorkflowTaskResultLocalized(
+  draft: StudioWorkspace,
+  taskId: string,
+  patch: Partial<LocalizedText>,
+  runMeta?: WorkflowTaskRunMeta,
+): boolean {
   const target = draft.workflowTasks.find((item) => item.id === taskId);
   if (!target) return false;
-  const key = locale === "zh-CN" ? "zh" : "en";
-  const previous = target.result[key];
+  const next = { ...target.result, ...patch };
   const hadResult = Boolean(target.result.zh.trim() || target.result.en.trim());
-  if (!target.previousResult && hadResult && previous !== result) {
+  const changed = next.zh !== target.result.zh || next.en !== target.result.en;
+  if (!target.previousResult && hadResult && changed) {
     target.previousResult = { ...target.result };
   }
-  target.result = { ...target.result, [key]: result };
+  target.result = next;
   if (runMeta) target.lastRun = runMeta;
-  if (hadResult && previous !== result) {
+  if (hadResult && changed) {
     for (const dependentId of taskDependentIds(draft.workflowTasks, taskId)) {
       const dependent = draft.workflowTasks.find(
         (item) => item.id === dependentId,

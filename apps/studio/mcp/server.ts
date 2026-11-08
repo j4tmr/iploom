@@ -27,26 +27,28 @@ import {
 } from "../src/core/timeline.ts";
 import {
   buildWorkflowBrief,
+  setWorkflowTaskResultLocalized,
   workflowSummary,
   workflowTaskReadiness,
 } from "../src/core/workflow.ts";
-import type {
-  Chapter,
-  Character,
-  LocalizedText,
-  LoreEntry,
-  Relationship,
-  SearchHit,
-  StoryFaction,
-  StoryLocation,
-  StoryScene,
-  StoryUniverse,
-  StoryWork,
-  StudioWorkspace,
-  TimelineEvent,
-  UiLocale,
-  WorkspaceStandard,
-  WorkflowTask,
+import {
+  MAX_WORKFLOW_RESULT_LENGTH,
+  type Chapter,
+  type Character,
+  type LocalizedText,
+  type LoreEntry,
+  type Relationship,
+  type SearchHit,
+  type StoryFaction,
+  type StoryLocation,
+  type StoryScene,
+  type StoryUniverse,
+  type StoryWork,
+  type StudioWorkspace,
+  type TimelineEvent,
+  type UiLocale,
+  type WorkspaceStandard,
+  type WorkflowTask,
 } from "../src/core/types.ts";
 import { APP_VERSION } from "../src/core/version.ts";
 import {
@@ -404,6 +406,28 @@ const standardBodyPatchSchema = z
   .strict()
   .describe(
     "双语正文补丁；省略的语言保持原值 / Localized body patch; omitted languages keep their value.",
+  );
+/**
+ * Result patches follow the same rule as standard patches: an omitted language
+ * keeps the stored text, and an explicit empty string clears one language only
+ * while the other still has text.
+ */
+const workflowResultPatchSchema = z
+  .object({
+    zh: z
+      .string()
+      .max(MAX_WORKFLOW_RESULT_LENGTH)
+      .optional()
+      .describe("中文结果 / Chinese result."),
+    en: z
+      .string()
+      .max(MAX_WORKFLOW_RESULT_LENGTH)
+      .optional()
+      .describe("英文结果 / English result."),
+  })
+  .strict()
+  .describe(
+    "双语结果补丁；省略的语言保持原值，空字符串清空该语言 / Localized result patch; omitted languages keep their value and an empty string clears that language.",
   );
 
 const pageOffsetSchema = z
@@ -1325,8 +1349,8 @@ export function createStudioMcpServer(
     { name: "IPloom Studio", version: APP_VERSION },
     {
       instructions:
-        `IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节、关系、AI 工作流与项目基础规则；search_ip 支持中英双语子串检索。共 ${total} 个工具：前 ${read} 个只读查询、${write} 个工作区写入、${exportCount} 个本地导出。列表类工具统一返回分页对象 { total, offset, count, next_offset, truncated, items }，next_offset 为 null 表示已到末页，默认单次结果不超过 50 KB。create_standard 与 update_standard 修改基础规则；create_timeline_event 与 update_timeline_event 新建或修订故事时间线事件，canon_status 默认为 proposed，只有显式传 canon 才标记为正典；export_arcreel_bundle 是唯一写盘导出工具，只能写入工作区同目录的 exports，或服务端启动时用 --export-root 显式允许的目录。\n` +
-        `IPloom Studio local IP memory: list story worlds before reading novels, chapters, relationships, AI workflow and foundation standards. ${total} tools: the first ${read} are read-only queries, ${write} write workspace records, ${exportCount} writes a local export. Every list tool returns a page object { total, offset, count, next_offset, truncated, items }; next_offset === null ends paging, and a default response stays under 50 KB. create_standard and update_standard change foundation standards; create_timeline_event and update_timeline_event create or revise story timeline events, with canon_status defaulting to proposed unless canon is explicit; export_arcreel_bundle is the only tool that writes files and may only write inside the exports directory beside workspace.json or a directory enabled with --export-root at server start.`,
+        `IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节、关系、AI 工作流与项目基础规则；search_ip 支持中英双语子串检索。共 ${total} 个工具：前 ${read} 个只读查询、${write} 个工作区写入、${exportCount} 个本地导出。列表类工具统一返回分页对象 { total, offset, count, next_offset, truncated, items }，next_offset 为 null 表示已到末页，默认单次结果不超过 50 KB。create_standard 与 update_standard 修改基础规则；create_timeline_event 与 update_timeline_event 新建或修订故事时间线事件，canon_status 默认为 proposed，只有显式传 canon 才标记为正典；save_workflow_result 把中英文结果写回 AI 任务并置为 review 待审阅，已 done 的任务需先在应用内重新打开；export_arcreel_bundle 是唯一写盘导出工具，只能写入工作区同目录的 exports，或服务端启动时用 --export-root 显式允许的目录。\n` +
+        `IPloom Studio local IP memory: list story worlds before reading novels, chapters, relationships, AI workflow and foundation standards. ${total} tools: the first ${read} are read-only queries, ${write} write workspace records, ${exportCount} writes a local export. Every list tool returns a page object { total, offset, count, next_offset, truncated, items }; next_offset === null ends paging, and a default response stays under 50 KB. create_standard and update_standard change foundation standards; create_timeline_event and update_timeline_event create or revise story timeline events, with canon_status defaulting to proposed unless canon is explicit; save_workflow_result writes Chinese and/or English result text to a workflow task and moves it to review, while a done task must be reopened in the app first; export_arcreel_bundle is the only tool that writes files and may only write inside the exports directory beside workspace.json or a directory enabled with --export-root at server start.`,
     },
   );
 
@@ -2536,6 +2560,74 @@ export function createStudioMcpServer(
         schema: MCP_SCHEMA,
         revision: workspace.revision,
         event: compactRecord(timelineEventView(workspace, updated, locale)),
+      };
+    },
+  );
+
+  register(
+    "save_workflow_result",
+    {
+      title: "保存 AI 任务结果 / Save workflow result",
+      description:
+        "把生成的中英文结果写回已有 AI 任务并置为 review 待审阅；省略的语言保持原值，空字符串可清空该语言（另一种语言必须仍有内容）；已 done 的任务需先在应用内重新打开，改动前的文本保留在 previousResult，依赖该结果的已完成任务会标记 result_superseded。Save produced Chinese and/or English result text to an existing workflow task for review; an omitted language keeps its stored text, an empty string clears one language only while the other still has text, done tasks must be reopened in the app first, the pre-change snapshot stays in previousResult, and done dependents are flagged result_superseded.",
+      annotations: WORKSPACE_WRITE_ANNOTATIONS,
+    },
+    z.object({
+      task_id: workflowTaskIdSchema,
+      result: workflowResultPatchSchema,
+    }),
+    async (args) => {
+      if (args.result.zh === undefined && args.result.en === undefined)
+        throw new ToolError(
+          "invalid_arguments",
+          "result must include zh, en or both; omit a language to keep its stored text.",
+        );
+      const now = new Date().toISOString();
+      let updated: WorkflowTask | undefined;
+      const workspace = await store.update((current) => {
+        const task = current.workflowTasks.find(
+          (item) => item.id === args.task_id,
+        );
+        if (!task)
+          throw new ToolError(
+            "not_found",
+            `Unknown workflow task: ${args.task_id}`,
+          );
+        if (task.status === "done")
+          throw new ToolError(
+            "invalid_arguments",
+            `Workflow task ${args.task_id} is done; reopen it in the app before replacing an approved result.`,
+          );
+        const nextZh = args.result.zh ?? task.result.zh;
+        const nextEn = args.result.en ?? task.result.en;
+        if (!nextZh.trim() && !nextEn.trim())
+          throw new ToolError(
+            "invalid_arguments",
+            "A workflow result must keep non-empty zh or en text.",
+          );
+        const resultPatch: Partial<LocalizedText> = {};
+        if (args.result.zh !== undefined) resultPatch.zh = args.result.zh;
+        if (args.result.en !== undefined) resultPatch.en = args.result.en;
+        setWorkflowTaskResultLocalized(current, task.id, resultPatch);
+        const saved = current.workflowTasks.find(
+          (item) => item.id === args.task_id,
+        );
+        if (!saved)
+          throw new ToolError(
+            "not_found",
+            `Unknown workflow task: ${args.task_id}`,
+          );
+        if (saved.status === "queued" || saved.status === "active")
+          saved.status = "review";
+        current.updatedAt = now;
+        updated = saved;
+      });
+      if (!updated)
+        throw new ToolError("tool_error", "Workflow result save did not run.");
+      return {
+        schema: MCP_SCHEMA,
+        revision: workspace.revision,
+        task: workflowTaskSummaryView(workspace, updated),
       };
     },
   );

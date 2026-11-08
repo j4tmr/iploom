@@ -347,3 +347,154 @@ test("inline MCP server confines exports to allowed roots and honours exportRoot
     rmSync(extra, { recursive: true, force: true });
   }
 });
+
+test("save_workflow_result merges languages, keeps the first snapshot and protects done tasks", async () => {
+  const root = mkdtempSync(join(tmpdir(), "iploom-studio-inline-result-"));
+  const workspacePath = join(root, "workspace.json");
+  const store = new WorkspaceStore(workspacePath);
+  await store.save(createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z"));
+  const inline = await connectInline(workspacePath);
+  const zhFirst = "世界规则审查：潮汐每日提前十一分钟。";
+  const enFirst =
+    "World rule review: the tide advances eleven minutes each day.";
+  try {
+    const first = await call(inline, "save_workflow_result", {
+      task_id: "task_world_rules",
+      result: { zh: zhFirst, en: enFirst },
+    });
+    expect(first.isError).toBe(false);
+    expect(first.body.revision).toBe(8);
+    const firstTask = first.body.task as {
+      id: string;
+      status: string;
+      result?: unknown;
+      result_chars: { zh: number; en: number };
+      result_excerpt: { zh: string; en: string };
+      previous_result_chars: { zh: number; en: number } | null;
+      result_superseded: boolean;
+    };
+    expect(firstTask.id).toBe("task_world_rules");
+    expect(firstTask.status).toBe("review");
+    // The full result is stored but not echoed back.
+    expect(firstTask.result).toBeUndefined();
+    expect(firstTask.result_chars).toEqual({
+      zh: zhFirst.length,
+      en: enFirst.length,
+    });
+    expect(firstTask.result_excerpt.zh).toBe(zhFirst);
+    expect(firstTask.previous_result_chars).toBeNull();
+    expect(firstTask.result_superseded).toBe(false);
+
+    const zhSecond = "世界规则审查（修订）：潮汐提前，钟声晚一拍。";
+    const zhOnly = await call(inline, "save_workflow_result", {
+      task_id: "task_world_rules",
+      result: { zh: zhSecond },
+    });
+    expect(zhOnly.isError).toBe(false);
+    expect(zhOnly.body.revision).toBe(9);
+    const zhOnlyTask = zhOnly.body.task as {
+      result_chars: { zh: number; en: number };
+      previous_result_chars: { zh: number; en: number } | null;
+    };
+    // Omitting en keeps the stored English text.
+    expect(zhOnlyTask.result_chars).toEqual({
+      zh: zhSecond.length,
+      en: enFirst.length,
+    });
+    // The first pre-change snapshot survives later revisions.
+    expect(zhOnlyTask.previous_result_chars).toEqual({
+      zh: zhFirst.length,
+      en: enFirst.length,
+    });
+
+    await store.update((workspace) => {
+      const dependent = workspace.workflowTasks.find(
+        (task) => task.id === "task_chapter_three",
+      );
+      const producer = workspace.workflowTasks.find(
+        (task) => task.id === "task_world_rules",
+      );
+      if (dependent) dependent.status = "done";
+      if (producer) producer.resultSuperseded = true;
+    });
+
+    const zhThird = "世界规则审查（终稿）：潮汐提前且钟楼停摆。";
+    const changed = await call(inline, "save_workflow_result", {
+      task_id: "task_world_rules",
+      result: { zh: zhThird },
+    });
+    expect(changed.isError).toBe(false);
+    expect(changed.body.revision).toBe(11);
+    expect(
+      (changed.body.task as { result_superseded: boolean }).result_superseded,
+    ).toBe(false);
+    let current = (await store.load()).workspace;
+    // A done task that consumes the changed result is flagged for re-review.
+    expect(
+      current.workflowTasks.find((task) => task.id === "task_chapter_three")
+        ?.resultSuperseded,
+    ).toBe(true);
+
+    // A done task keeps its approved result until an author reopens it.
+    const doneTask = await call(inline, "save_workflow_result", {
+      task_id: "task_chapter_three",
+      result: { zh: "未经审阅的新结果。" },
+    });
+    expect(doneTask.isError).toBe(true);
+    const doneError = doneTask.body.error as { code: string; message: string };
+    expect(doneError.code).toBe("invalid_arguments");
+    expect(doneError.message).toContain("done");
+    current = (await store.load()).workspace;
+    expect(current.revision).toBe(11);
+
+    const cleared = await call(inline, "save_workflow_result", {
+      task_id: "task_world_rules",
+      result: { en: "" },
+    });
+    expect(cleared.isError).toBe(false);
+    expect(cleared.body.revision).toBe(12);
+    expect(
+      (cleared.body.task as { result_chars: { zh: number; en: number } })
+        .result_chars,
+    ).toEqual({ zh: zhThird.length, en: 0 });
+
+    // Neither language can both be empty, and neither can the patch be empty.
+    const bothEmpty = await call(inline, "save_workflow_result", {
+      task_id: "task_world_rules",
+      result: { zh: "", en: "" },
+    });
+    expect(bothEmpty.isError).toBe(true);
+    expect((bothEmpty.body.error as { code: string }).code).toBe(
+      "invalid_arguments",
+    );
+    const emptyPatch = await call(inline, "save_workflow_result", {
+      task_id: "task_world_rules",
+      result: {},
+    });
+    expect(emptyPatch.isError).toBe(true);
+    expect((emptyPatch.body.error as { code: string }).code).toBe(
+      "invalid_arguments",
+    );
+    const missingTask = await call(inline, "save_workflow_result", {
+      task_id: "task_missing",
+      result: { zh: "无此任务。" },
+    });
+    expect(missingTask.isError).toBe(true);
+    expect((missingTask.body.error as { code: string }).code).toBe("not_found");
+
+    const stored = (await store.load()).workspace;
+    expect(stored.revision).toBe(12);
+    const storedProducer = stored.workflowTasks.find(
+      (task) => task.id === "task_world_rules",
+    );
+    expect(storedProducer?.status).toBe("review");
+    expect(storedProducer?.result).toEqual({ zh: zhThird, en: "" });
+    expect(storedProducer?.previousResult).toEqual({
+      zh: zhFirst,
+      en: enFirst,
+    });
+  } finally {
+    await inline.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
