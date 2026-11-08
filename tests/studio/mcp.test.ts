@@ -726,6 +726,183 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     );
     expect(baseline?.universe_id).toBeUndefined();
     expect(baseline?.version).toBe(3);
+
+    const createdTimeline = await call(client, "create_timeline_event", {
+      world_id: "uni_mist_harbor",
+      novel_id: "work_tide_clock",
+      chapter_id: "chapter_tide_002",
+      story_time: "第二夜 / Night two",
+      subject_kind: "character",
+      subject_id: "char_lin",
+      event_kind: "state-change",
+      title: { zh: "林接下守夜", en: "Lin takes the night watch" },
+      state_before: "Lin avoids the tower.",
+      state_after: "Lin keeps the night watch.",
+      related_character_ids: ["char_shen"],
+      related_location_ids: ["loc_old_tower"],
+      related_object_ids: ["object_brass_key"],
+      evidence: "Chapter two draft.",
+      production_prompt: "wet cobblestones ".repeat(20),
+    });
+    expect(createdTimeline.isError).toBe(false);
+    expect(createdTimeline.body.revision).toBe(16);
+    const createdEvent = createdTimeline.body.event as {
+      id: string;
+      chapter_id: string | null;
+      story_time: string;
+      canon_status: string;
+      title: { zh: string; en: string };
+      state_before: string;
+      production_prompt: string;
+      truncated_fields?: string[];
+      subject: { kind: string; id: string };
+      related_character_id_count: number;
+      created_at: string;
+    };
+    expect(createdEvent.id.startsWith("timeline_")).toBe(true);
+    expect(createdEvent.chapter_id).toBe("chapter_tide_002");
+    expect(createdEvent.canon_status).toBe("proposed");
+    expect(createdEvent.subject).toMatchObject({
+      kind: "character",
+      id: "char_lin",
+    });
+    expect(createdEvent.related_character_id_count).toBe(1);
+    expect(createdEvent.truncated_fields).toContain("production_prompt");
+    expect(createdEvent.production_prompt.endsWith("…")).toBe(true);
+
+    const missingChapter = await call(client, "create_timeline_event", {
+      world_id: "uni_mist_harbor",
+      novel_id: "work_tide_clock",
+      chapter_id: "chapter_missing",
+      subject_kind: "character",
+      subject_id: "char_lin",
+      event_kind: "other",
+      title: { zh: "缺章事件", en: "Missing chapter event" },
+      state_before: "Before",
+      state_after: "After",
+    });
+    expect(missingChapter.isError).toBe(true);
+    expect((missingChapter.body.error as { code: string }).code).toBe(
+      "not_found",
+    );
+
+    const crossWorld = await call(client, "create_timeline_event", {
+      world_id: "uni_mist_harbor",
+      novel_id: "work_last_train",
+      subject_kind: "character",
+      subject_id: "char_lin",
+      event_kind: "other",
+      title: { zh: "错世界", en: "Wrong world" },
+      state_before: "Before",
+      state_after: "After",
+    });
+    expect(crossWorld.isError).toBe(true);
+    expect((crossWorld.body.error as { code: string }).code).toBe(
+      "invalid_arguments",
+    );
+
+    const emptyTimelineTitle = await call(client, "create_timeline_event", {
+      world_id: "uni_mist_harbor",
+      novel_id: "work_tide_clock",
+      chapter_id: "chapter_tide_001",
+      subject_kind: "character",
+      subject_id: "char_lin",
+      event_kind: "other",
+      title: { zh: "", en: "" },
+      state_before: "Before",
+      state_after: "After",
+    });
+    expect(emptyTimelineTitle.isError).toBe(true);
+    const emptyTimelineTitleError = emptyTimelineTitle.body.error as {
+      code: string;
+      issues?: string[];
+    };
+    expect(emptyTimelineTitleError.code).toBe("invalid_arguments");
+    expect(emptyTimelineTitleError.issues?.length).toBeGreaterThan(0);
+
+    const noAnchor = await call(client, "create_timeline_event", {
+      world_id: "uni_mist_harbor",
+      novel_id: "work_tide_clock",
+      subject_kind: "character",
+      subject_id: "char_lin",
+      event_kind: "other",
+      title: { zh: "无时间", en: "No anchor" },
+      state_before: "Before",
+      state_after: "After",
+    });
+    expect(noAnchor.isError).toBe(true);
+    expect((noAnchor.body.error as { code: string }).code).toBe(
+      "invalid_arguments",
+    );
+
+    const revised = await call(client, "update_timeline_event", {
+      event_id: createdEvent.id,
+      canon_status: "canon",
+      title: { en: "Lin keeps the night watch alone" },
+      chapter_id: null,
+    });
+    expect(revised.isError).toBe(false);
+    expect(revised.body.revision).toBe(17);
+    const revisedEvent = revised.body.event as {
+      chapter_id: string | null;
+      story_time: string;
+      canon_status: string;
+      title: { zh: string; en: string };
+      state_before: string;
+      created_at: string;
+    };
+    expect(revisedEvent.chapter_id).toBeNull();
+    expect(revisedEvent.story_time).toBe("第二夜 / Night two");
+    expect(revisedEvent.canon_status).toBe("canon");
+    expect(revisedEvent.title.zh).toBe("林接下守夜");
+    expect(revisedEvent.title.en).toBe("Lin keeps the night watch alone");
+    expect(revisedEvent.state_before).toBe("Lin avoids the tower.");
+    expect(revisedEvent.created_at).toBe(createdEvent.created_at);
+
+    const sceneWithoutChapter = await call(client, "update_timeline_event", {
+      event_id: createdEvent.id,
+      scene_id: "scene_missing",
+    });
+    expect(sceneWithoutChapter.isError).toBe(true);
+    expect((sceneWithoutChapter.body.error as { code: string }).code).toBe(
+      "invalid_arguments",
+    );
+
+    const unknownEvent = await call(client, "update_timeline_event", {
+      event_id: "timeline_missing",
+      canon_status: "canon",
+    });
+    expect(unknownEvent.isError).toBe(true);
+    expect((unknownEvent.body.error as { code: string }).code).toBe(
+      "not_found",
+    );
+
+    const persistedTimeline = JSON.parse(
+      readFileSync(workspacePath, "utf8"),
+    ) as {
+      revision: number;
+      timelineEvents: Array<{
+        id: string;
+        chapterId?: string;
+        storyTime: string;
+        canonStatus: string;
+        title: { zh: string; en: string };
+        productionPrompt: string;
+      }>;
+    };
+    expect(persistedTimeline.revision).toBe(17);
+    expect(persistedTimeline.timelineEvents).toHaveLength(5);
+    const storedTimelineEvent = persistedTimeline.timelineEvents.find(
+      (item) => item.id === createdEvent.id,
+    );
+    expect(storedTimelineEvent?.chapterId).toBeUndefined();
+    expect(storedTimelineEvent?.storyTime).toBe("第二夜 / Night two");
+    expect(storedTimelineEvent?.canonStatus).toBe("canon");
+    expect(storedTimelineEvent?.title.zh).toBe("林接下守夜");
+    expect(storedTimelineEvent?.title.en).toBe(
+      "Lin keeps the night watch alone",
+    );
+    expect(storedTimelineEvent?.productionPrompt.length).toBeGreaterThan(240);
   } finally {
     await client.close().catch(() => undefined);
     rmSync(root, { recursive: true, force: true });

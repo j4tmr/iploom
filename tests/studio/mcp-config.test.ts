@@ -3,7 +3,7 @@ import { delimiter, join } from "node:path";
 import {
   MCP_EXPORT_TOOL_NAMES,
   MCP_READ_TOOL_NAMES,
-  MCP_STANDARD_WRITE_TOOL_NAMES,
+  MCP_WRITE_TOOL_NAMES,
   MCP_TOOL_COUNTS,
   MCP_TOOL_NAMES,
   mcpToolsNote,
@@ -302,22 +302,24 @@ describe("createElectronMcpConfig", () => {
 describe("MCP tool registry", () => {
   test("partitions the registered tools by access level", () => {
     expect(MCP_TOOL_COUNTS).toEqual({
-      total: 15,
+      total: 17,
       read: 12,
-      write: 2,
+      write: 4,
       export: 1,
     });
-    expect(MCP_TOOL_NAMES).toHaveLength(15);
+    expect(MCP_TOOL_NAMES).toHaveLength(17);
     expect(MCP_READ_TOOL_NAMES).toHaveLength(12);
-    expect(MCP_STANDARD_WRITE_TOOL_NAMES).toEqual([
+    expect(MCP_WRITE_TOOL_NAMES).toEqual([
       "create_standard",
       "update_standard",
+      "create_timeline_event",
+      "update_timeline_event",
     ]);
     expect(MCP_EXPORT_TOOL_NAMES).toEqual(["export_arcreel_bundle"]);
     expect(
       [
         ...MCP_READ_TOOL_NAMES,
-        ...MCP_STANDARD_WRITE_TOOL_NAMES,
+        ...MCP_WRITE_TOOL_NAMES,
         ...MCP_EXPORT_TOOL_NAMES,
       ].sort(),
     ).toEqual([...MCP_TOOL_NAMES].sort());
@@ -325,10 +327,10 @@ describe("MCP tool registry", () => {
 
   test("describes the split for both interface languages", () => {
     expect(mcpToolsNote("en")).toBe(
-      "12 read-only query tools + 2 foundation-standard writers + 1 local export tool.",
+      "12 read-only query tools + 4 workspace writers + 1 local export tool.",
     );
     expect(mcpToolsNote("zh-CN")).toBe(
-      "12 个只读查询工具 + 2 个基础规则写入工具 + 1 个本地导出工具。",
+      "12 个只读查询工具 + 4 个工作区写入工具 + 1 个本地导出工具。",
     );
   });
 });
