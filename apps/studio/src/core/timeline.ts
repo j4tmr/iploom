@@ -98,7 +98,12 @@ export function relevantTimelineEvents(
   const universeId = work?.universeId ?? scope.universeId;
   const chapter = work?.chapters.find((item) => item.id === scope.chapterId);
   const currentChapterNumber = chapter?.number ?? Number.MAX_SAFE_INTEGER;
-  const castIds = chapter?.characterIds ?? [];
+  const castIds = chapter
+    ? [
+        ...chapter.characterIds,
+        ...chapter.scenes.flatMap((scene) => scene.characterIds),
+      ]
+    : [];
   const locationIds = chapter
     ? [
         ...(chapter.locationId ? [chapter.locationId] : []),
@@ -131,14 +136,16 @@ export function relevantTimelineEvents(
       );
     }
     if (!chapter) return true;
-    // A chapter with no cast, location or scene scope is unfiltered by design.
-    if (!castIds.length && !locationIds.length && !sceneIds.length) return true;
+    // A chapter with no cast or location scope is unfiltered by design; an
+    // empty scene alone must not narrow the timeline.
+    if (!castIds.length && !locationIds.length) return true;
     return (
+      // A fact anchored to this chapter belongs to it whatever its subject.
+      event.chapterId === chapter.id ||
       (event.subjectKind === "character" && castIds.includes(event.subjectId)) ||
       (event.subjectKind === "location" &&
         [...castIds, ...locationIds].includes(event.subjectId)) ||
       (event.subjectKind === "scene" && sceneIds.includes(event.subjectId)) ||
-      (event.subjectKind === "object" && event.chapterId === chapter.id) ||
       intersects(event.relatedCharacterIds, castIds) ||
       intersects(event.relatedLocationIds, locationIds)
     );
