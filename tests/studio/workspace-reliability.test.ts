@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
 import {
+  chmod,
   mkdtemp,
   open,
   readdir,
   readFile,
+  rm,
   stat,
   utimes,
   writeFile,
@@ -34,8 +36,12 @@ function named(name: string) {
 
 /** Save twice so the `.bak` slot holds a valid previous workspace. */
 async function saveTwice(store: WorkspaceStore) {
-  await store.save(named("older"));
-  await store.save(named("newer"));
+  const older = named("older");
+  older.revision = 1;
+  await store.save(older);
+  const newer = named("newer");
+  newer.revision = 2;
+  await store.save(newer);
 }
 
 test("a newer schema version fails fast and leaves both files untouched", async () => {
@@ -79,6 +85,38 @@ test("a corrupt primary is quarantined before the backup is handed back", async 
     "repaired",
   );
   expect(await readFile(loaded.rejectedPath!, "utf8")).toBe("{not json");
+});
+
+test("recovering from the backup restores a primary file for snapshots", async () => {
+  const store = await storeInTemp();
+  await saveTwice(store);
+  await writeFile(store.filePath, "{not json", "utf8");
+
+  const loaded = await store.load();
+  expect(loaded.recoveredFromBackup).toBe(true);
+  // The recovered workspace is adopted as the new primary immediately;
+  // otherwise nothing is persisted and the snapshot guard refuses the next
+  // delete/import until an unrelated edit happens to trigger a save.
+  expect(JSON.parse(await readFile(store.filePath, "utf8")).name).toBe("older");
+  expect(await store.createSnapshot("before-delete-world")).not.toBeNull();
+});
+
+test("a read-only directory still hands back a recovered backup", async () => {
+  const store = await storeInTemp();
+  await saveTwice(store);
+  await rm(store.filePath);
+  const directory = join(store.filePath, "..");
+  await chmod(directory, 0o555);
+  try {
+    // Adopting the recovered copy as the new primary is best-effort: the
+    // directory rejects the write, but the workspace must still be returned.
+    const loaded = await store.load();
+    expect(loaded.recoveredFromBackup).toBe(true);
+    expect(loaded.workspace.name).toBe("older");
+    expect(loaded.path).toBe(store.filePath);
+  } finally {
+    await chmod(directory, 0o755);
+  }
 });
 
 test("saving refuses to overwrite an unreadable primary file", async () => {

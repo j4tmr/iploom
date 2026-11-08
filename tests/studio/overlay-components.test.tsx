@@ -1,7 +1,13 @@
 import "./dom-setup";
 import { useState } from "react";
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
-import { cleanup, createEvent, fireEvent, render } from "@testing-library/react";
+import {
+  cleanup,
+  createEvent,
+  fireEvent,
+  render,
+  waitFor,
+} from "@testing-library/react";
 import { CharacterModal } from "../../apps/studio/src/components/forms.tsx";
 import { ManuscriptImport } from "../../apps/studio/src/components/manuscript-import.tsx";
 import { SearchOverlay } from "../../apps/studio/src/components/search-overlay.tsx";
@@ -173,7 +179,7 @@ test("the import dialog asks before discarding pasted manuscript text", () => {
       locale="en"
       t={translator("en")}
       onClose={onClose}
-      onImport={() => {}}
+      onImport={() => true}
     />,
   );
 
@@ -188,6 +194,117 @@ test("the import dialog asks before discarding pasted manuscript text", () => {
   expect((text as HTMLTextAreaElement).value).toBe(
     "Chapter One\n\nThe bell rang.",
   );
+});
+
+const IMPORT_TEXT = "Chapter One\n\nThe bell rang.";
+
+function fillImport(view: ReturnType<typeof render>) {
+  fireEvent.change(view.getByTestId("import-title"), {
+    target: { value: "The Bell" },
+  });
+  fireEvent.change(view.getByTestId("import-text"), {
+    target: { value: IMPORT_TEXT },
+  });
+  return view.getByTestId("import-text") as HTMLTextAreaElement;
+}
+
+test("a failed import keeps the dialog and the pasted manuscript", async () => {
+  const onClose = mock(() => {});
+  const onImport = mock(async () => false);
+  const view = render(
+    <ManuscriptImport
+      locale="en"
+      t={translator("en")}
+      onClose={onClose}
+      onImport={onImport}
+    />,
+  );
+  const text = fillImport(view);
+
+  fireEvent.click(view.getByTestId("import-confirm"));
+
+  await waitFor(() => expect(onImport).toHaveBeenCalledTimes(1));
+  expect(onClose).toHaveBeenCalledTimes(0);
+  expect(text.value).toBe(IMPORT_TEXT);
+  expect(view.getByRole("status").textContent).toContain("did not finish");
+});
+
+test("a rejected import keeps the dialog and shows the error", async () => {
+  const onClose = mock(() => {});
+  const onImport = mock(async () => {
+    throw new Error("snapshot directory is not writable");
+  });
+  const view = render(
+    <ManuscriptImport
+      locale="en"
+      t={translator("en")}
+      onClose={onClose}
+      onImport={onImport}
+    />,
+  );
+  const text = fillImport(view);
+
+  fireEvent.click(view.getByTestId("import-confirm"));
+
+  // The handler catches the rejection and renders it; nothing escapes unhandled.
+  await waitFor(() =>
+    expect(view.getByRole("status").textContent).toContain(
+      "snapshot directory is not writable",
+    ),
+  );
+  expect(onClose).toHaveBeenCalledTimes(0);
+  expect(text.value).toBe(IMPORT_TEXT);
+});
+
+test("a successful import closes the dialog", async () => {
+  const onClose = mock(() => {});
+  const onImport = mock(async () => true);
+  const view = render(
+    <ManuscriptImport
+      locale="en"
+      t={translator("en")}
+      onClose={onClose}
+      onImport={onImport}
+    />,
+  );
+  fillImport(view);
+
+  fireEvent.click(view.getByTestId("import-confirm"));
+
+  await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  expect(onImport).toHaveBeenCalledTimes(1);
+});
+
+test("the import button is disabled while the import is pending", async () => {
+  let finishImport: (accepted: boolean) => void = () => {};
+  const onClose = mock(() => {});
+  const onImport = mock(
+    () => new Promise<boolean>((resolve) => {
+      finishImport = resolve;
+    }),
+  );
+  const view = render(
+    <ManuscriptImport
+      locale="en"
+      t={translator("en")}
+      onClose={onClose}
+      onImport={onImport}
+    />,
+  );
+  fillImport(view);
+
+  const confirm = view.getByTestId("import-confirm") as HTMLButtonElement;
+  fireEvent.click(confirm);
+
+  await waitFor(() => expect(onImport).toHaveBeenCalledTimes(1));
+  expect(confirm.disabled).toBe(true);
+  // Closing is blocked while the commit is pending, without a discard prompt.
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(onClose).toHaveBeenCalledTimes(0);
+
+  finishImport(false);
+  await waitFor(() => expect(confirm.disabled).toBe(false));
+  expect(onClose).toHaveBeenCalledTimes(0);
 });
 
 test("switching workflow tasks with an unsaved result asks first", () => {

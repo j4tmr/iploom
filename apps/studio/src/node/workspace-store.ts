@@ -37,6 +37,42 @@ export interface LoadedWorkspace {
   rejectedReason?: string | null;
 }
 
+/**
+ * The desktop app and the MCP server are separate processes sharing one
+ * workspace file. Saving an older revision after another process wrote a
+ * newer one would roll the workspace back, so the write is refused instead
+ * (and marked non-retryable: retrying cannot help).
+ */
+export class StaleWorkspaceError extends Error {
+  readonly retryable = false;
+
+  constructor(
+    readonly path: string,
+    readonly storedRevision: number,
+    readonly incomingRevision: number,
+    readonly baseRevision?: number,
+  ) {
+    super(
+      storedRevision === incomingRevision
+        ? `Refusing to overwrite ${path} revision ${storedRevision} with different ` +
+            `content. Another process (for example the MCP server) changed the ` +
+            `workspace. Reload the workspace to continue from the newer file; ` +
+            `the file was left untouched.`
+        : baseRevision != null && baseRevision < storedRevision
+          ? `Refusing to overwrite ${path} revision ${storedRevision} with a draft ` +
+            `based on revision ${baseRevision} (incoming revision ${incomingRevision}). ` +
+            `Another process (for example the MCP server) changed the workspace. ` +
+            `Reload the workspace to continue from the newer file; ` +
+            `the file was left untouched.`
+          : `Refusing to overwrite ${path} revision ${storedRevision} with older ` +
+            `revision ${incomingRevision}. Another process (for example the MCP ` +
+            `server) changed the workspace. Reload the workspace to continue from ` +
+            `the newer file; the file was left untouched.`,
+    );
+    this.name = "StaleWorkspaceError";
+  }
+}
+
 export class NewerWorkspaceVersionError extends Error {
   readonly path: string;
   readonly foundVersion: number;
@@ -135,6 +171,29 @@ function formatValidationError(path: string, error: unknown): string {
         ? error.message
         : String(error)
   }`;
+}
+
+/**
+ * Both sides are `validateWorkspace` output, so the comparison is against the
+ * zod-canonical shape: unknown keys are stripped and defaults applied, meaning
+ * an honest idempotent re-save compares equal regardless of the transport.
+ */
+function sameWorkspaceContent(
+  left: StudioWorkspace,
+  right: StudioWorkspace,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export interface WorkspaceSaveOptions {
+  /** Snapshot restore and demo reset intentionally move the workspace backwards. */
+  allowRollback?: boolean;
+  /**
+   * Revision of the last state this writer knows was persisted (optimistic
+   * concurrency). An external writer may have advanced the file since then;
+   * saving over it is only safe when the content is identical.
+   */
+  baseRevision?: number;
 }
 
 export interface WrittenBundle {
@@ -237,28 +296,43 @@ export class WorkspaceStore {
       const version = schemaVersionOf(parsed);
       if (version !== null && version > WORKSPACE_SCHEMA_VERSION)
         throw new NewerWorkspaceVersionError(candidate, version);
+      let workspace: StudioWorkspace;
       try {
-        const workspace = validateWorkspace(migrateWorkspace(parsed));
-        if (fromBackup && primaryError !== null) {
-          const rejectedPath = await this.quarantinePrimary(primaryError);
-          return {
-            workspace,
-            path: this.filePath,
-            recoveredFromBackup: true,
-            rejectedPath,
-            rejectedReason: primaryError,
-          };
-        }
-        return {
-          workspace,
-          path: this.filePath,
-          recoveredFromBackup: fromBackup,
-        };
+        workspace = validateWorkspace(migrateWorkspace(parsed));
       } catch (error) {
         const detail = formatValidationError(candidate, error);
         errors.push(detail);
         if (!fromBackup) primaryError = detail;
+        continue;
       }
+      if (fromBackup) {
+        const rejectedPath =
+          primaryError === null
+            ? null
+            : await this.quarantinePrimary(primaryError);
+        // Adopt the recovered copy as the new primary immediately. Without a
+        // primary file the snapshot guard has nothing healthy to snapshot and
+        // refuses every delete/import until an unrelated edit triggers a save.
+        // Best-effort: a read-only workspace directory must still hand the
+        // recovered workspace back to the editor.
+        try {
+          await this.save(workspace);
+        } catch {
+          // The next successful write path adopts the recovered state.
+        }
+        return {
+          workspace,
+          path: this.filePath,
+          recoveredFromBackup: true,
+          rejectedPath,
+          rejectedReason: primaryError,
+        };
+      }
+      return {
+        workspace,
+        path: this.filePath,
+        recoveredFromBackup: false,
+      };
     }
     throw new Error(
       `Workspace is missing or invalid. ${errors.join(" | ") || this.filePath}`,
@@ -318,9 +392,14 @@ export class WorkspaceStore {
     );
   }
 
-  async save(workspace: StudioWorkspace): Promise<void> {
+  async save(
+    workspace: StudioWorkspace,
+    options: WorkspaceSaveOptions = {},
+  ): Promise<void> {
     const valid = validateWorkspace(workspace);
-    const pending = this.saveQueue.then(() => this.writeWorkspace(valid));
+    const pending = this.saveQueue.then(() =>
+      this.writeWorkspace(valid, options),
+    );
     this.saveQueue = pending.catch(() => undefined);
     return pending;
   }
@@ -348,7 +427,10 @@ export class WorkspaceStore {
     return pending;
   }
 
-  private async writeWorkspace(workspace: StudioWorkspace): Promise<void> {
+  private async writeWorkspace(
+    workspace: StudioWorkspace,
+    options: WorkspaceSaveOptions,
+  ): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
     const temp = `${this.filePath}.tmp-${process.pid}-${Date.now()}-${Math.random()
       .toString(36)
@@ -359,20 +441,46 @@ export class WorkspaceStore {
       await writeFileDurable(temp, content);
       if (await exists(this.filePath)) {
         const previous = await readFile(this.filePath, "utf8");
-        let healthy = false;
+        let current: StudioWorkspace | null = null;
         try {
-          validateWorkspace(migrateWorkspace(JSON.parse(previous)));
-          healthy = true;
+          current = validateWorkspace(migrateWorkspace(JSON.parse(previous)));
         } catch {
           // Saving over an unreadable primary file would destroy data that a
           // later build (or a manual repair) could still recover. `load()`
           // quarantines such files before returning the backup; reaching this
           // branch means the file changed after that check.
         }
-        if (!healthy) {
+        if (current === null) {
           throw new Error(
             `Refusing to overwrite unreadable workspace file ${this.filePath}. ` +
               `Reload the workspace so the file can be quarantined first.`,
+          );
+        }
+        // The editor keeps the whole workspace in memory and autosaves it
+        // without reloading while another process (the MCP server) may have
+        // written a newer revision. Refusing here keeps that change instead of
+        // silently rolling the file back. An equal revision is not proof that
+        // the content is the same: an editor that loaded R and bumped its
+        // local copy to R+1 would otherwise silently overwrite the external
+        // writer's R+1. A `baseRevision` older than the file is the same
+        // situation after several local edits (draft R+2 over an external
+        // R+1), which revision ordering alone cannot detect. Only an identical
+        // re-save (idempotent retry, lost response) passes.
+        const identical = sameWorkspaceContent(current, workspace);
+        const advancedSinceBase =
+          options.baseRevision != null &&
+          options.baseRevision < current.revision;
+        if (
+          !options.allowRollback &&
+          (current.revision > workspace.revision ||
+            (!identical &&
+              (current.revision === workspace.revision || advancedSinceBase)))
+        ) {
+          throw new StaleWorkspaceError(
+            this.filePath,
+            current.revision,
+            workspace.revision,
+            options.baseRevision,
           );
         }
         // Renaming the previous primary keeps the `.bak` byte-identical to the
@@ -494,7 +602,7 @@ export class WorkspaceStore {
     const raw = await readFile(target, "utf8");
     const workspace = validateWorkspace(migrateWorkspace(JSON.parse(raw)));
     await this.createSnapshot("before-restore");
-    await this.save(workspace);
+    await this.save(workspace, { allowRollback: true });
     return {
       workspace,
       path: this.filePath,

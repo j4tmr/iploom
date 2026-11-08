@@ -15,11 +15,26 @@ export function loadBrowserWorkspace(
   locale: UiLocale,
 ) {
   const raw = storage.getItem(browserWorkspaceKey);
+  if (raw === null) {
+    const workspace = createDemoWorkspace(locale);
+    try {
+      // Persist the initial demo right away. Loading does not mark the
+      // workspace dirty, so no autosave would ever write it, and without a
+      // stored workspace the snapshot guard has nothing to protect and refuses
+      // the first delete/import until some unrelated edit is saved.
+      storage.setItem(browserWorkspaceKey, JSON.stringify(workspace));
+    } catch {
+      // Read-only or full storage still opens the demo; the snapshot guard
+      // keeps refusing destructive actions, which is the safe outcome.
+    }
+    return {
+      workspace,
+      path: "Browser localStorage",
+      recoveredFromBackup: false,
+    };
+  }
   return {
-    workspace:
-      raw === null
-        ? createDemoWorkspace(locale)
-        : validateWorkspace(JSON.parse(raw)),
+    workspace: validateWorkspace(JSON.parse(raw)),
     path: "Browser localStorage",
     recoveredFromBackup: false,
   };
@@ -36,9 +51,14 @@ export class StaleBrowserWorkspaceError extends Error {
   constructor(
     readonly storedRevision: number,
     readonly incomingRevision: number,
+    readonly baseRevision?: number,
   ) {
     super(
-      `Refusing to overwrite browser workspace revision ${storedRevision} with older revision ${incomingRevision}. Reload to continue from the newer workspace.`,
+      storedRevision === incomingRevision
+        ? `Refusing to overwrite browser workspace revision ${storedRevision} with different content. Reload to continue from the newer workspace.`
+        : baseRevision != null && baseRevision < storedRevision
+          ? `Refusing to save a browser workspace draft based on revision ${baseRevision} over revision ${storedRevision} (incoming revision ${incomingRevision}). Reload to continue from the newer workspace.`
+          : `Refusing to overwrite browser workspace revision ${storedRevision} with older revision ${incomingRevision}. Reload to continue from the newer workspace.`,
     );
     this.name = "StaleBrowserWorkspaceError";
   }
@@ -75,6 +95,8 @@ function storedSchemaVersion(value: unknown): number | null {
 export interface BrowserSaveOptions {
   /** Snapshot restore and demo reset intentionally move the workspace backwards. */
   allowRollback?: boolean;
+  /** Revision of the last state this tab knows was persisted. */
+  baseRevision?: number;
 }
 
 export function saveBrowserWorkspace(
@@ -99,15 +121,32 @@ export function saveBrowserWorkspace(
       throw new NewerBrowserWorkspaceVersionError(storedVersion);
     }
     if (!options.allowRollback && stored !== null) {
-      let storedRevision: number | null = null;
+      let storedWorkspace: StudioWorkspace | null = null;
       try {
-        storedRevision = validateWorkspace(stored).revision;
+        storedWorkspace = validateWorkspace(stored);
       } catch {
         // Unreadable stored data must stay replaceable by a healthy workspace.
-        storedRevision = null;
+        storedWorkspace = null;
       }
-      if (storedRevision !== null && storedRevision > valid.revision) {
-        throw new StaleBrowserWorkspaceError(storedRevision, valid.revision);
+      if (storedWorkspace !== null) {
+        // Both sides are `validateWorkspace` output, so this is the same
+        // zod-canonical comparison the desktop store uses.
+        const identical =
+          JSON.stringify(storedWorkspace) === JSON.stringify(valid);
+        const advancedSinceBase =
+          options.baseRevision != null &&
+          options.baseRevision < storedWorkspace.revision;
+        if (
+          storedWorkspace.revision > valid.revision ||
+          (!identical &&
+            (storedWorkspace.revision === valid.revision || advancedSinceBase))
+        ) {
+          throw new StaleBrowserWorkspaceError(
+            storedWorkspace.revision,
+            valid.revision,
+            options.baseRevision,
+          );
+        }
       }
     }
   }

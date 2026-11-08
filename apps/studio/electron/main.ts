@@ -25,10 +25,16 @@ import {
 } from "../src/core/updates.ts";
 import type { StudioWorkspace, UiLocale } from "../src/core/types.ts";
 import {
+  StaleWorkspaceError,
   WorkspaceStore,
   type LoadedWorkspace,
   type WorkspaceSnapshot,
 } from "../src/node/workspace-store.ts";
+import {
+  isStaleSaveError,
+  markStaleWorkspaceMessage,
+  stripStaleWorkspaceMarker,
+} from "../src/save-errors.ts";
 import {
   canonicalPath,
   isTrustedRendererUrl as isTrustedRendererValue,
@@ -233,6 +239,18 @@ async function reloadAfterFlush(window: BrowserWindow): Promise<void> {
     if (window.isDestroyed() || window.webContents.isDestroyed()) return;
     window.webContents.reload();
   } catch (error) {
+    // A stale flush means the newer workspace is already on disk: reload to
+    // adopt it. Cancelling (as for a real write failure) would keep the stale
+    // in-memory copy, whose later edits could overwrite the newer file.
+    if (isStaleSaveError(error)) {
+      console.warn(
+        "[IPloom Studio] reloading to adopt the newer workspace on disk",
+      );
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+        window.webContents.reload();
+      }
+      return;
+    }
     console.error("[IPloom Studio] reload flush failed", error);
     if (smokeMode) {
       exitSmoke(1);
@@ -309,7 +327,11 @@ async function closeAfterFlush(
         }
         return;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        // The flush handshake marks stale saves so reload can adopt the newer
+        // file; the close dialog must still show the human-readable message.
+        const message = stripStaleWorkspaceMarker(
+          error instanceof Error ? error.message : String(error),
+        );
         console.error("[IPloom Studio] close flush failed", error);
         if (smokeMode) {
           exitSmoke(1);
@@ -410,7 +432,12 @@ async function loadWorkspace(): Promise<LoadedWorkspace> {
   } catch (error) {
     if (await exists(store.filePath)) throw error;
     const workspace = createDemoWorkspace(defaultLocale());
-    await store.save(workspace);
+    try {
+      await store.save(workspace);
+    } catch {
+      // A read-only workspace directory must still open the demo in memory;
+      // the snapshot guard refuses destructive actions until a save succeeds.
+    }
     rememberFolders();
     return {
       workspace,
@@ -547,13 +574,33 @@ function registerIpcHandlers(): void {
     return loadWorkspace();
   });
 
-  ipcMain.handle("iploom:save", async (event, workspace: StudioWorkspace) => {
-    assertTrustedSender(event);
-    if (workspace && typeof workspace === "object")
-      recoveryWorkspace = workspace;
-    await requireStore().save(workspace);
-    return { savedAt: new Date().toISOString() };
-  });
+  ipcMain.handle(
+    "iploom:save",
+    async (event, workspace: StudioWorkspace, baseRevision?: unknown) => {
+      assertTrustedSender(event);
+      if (workspace && typeof workspace === "object")
+        recoveryWorkspace = workspace;
+      if (
+        baseRevision != null &&
+        (typeof baseRevision !== "number" || !Number.isFinite(baseRevision))
+      ) {
+        throw new Error("Base revision must be a finite number");
+      }
+      try {
+        await requireStore().save(
+          workspace,
+          baseRevision == null ? {} : { baseRevision },
+        );
+      } catch (error) {
+        // IPC keeps only the message, so the renderer's retry loop cannot see
+        // `retryable = false` unless the marker rides along in the message.
+        if (error instanceof StaleWorkspaceError)
+          throw new Error(markStaleWorkspaceMessage(error.message));
+        throw error;
+      }
+      return { savedAt: new Date().toISOString() };
+    },
+  );
 
   ipcMain.handle(
     "iploom:flush-complete",
@@ -562,6 +609,7 @@ function registerIpcHandlers(): void {
       requestId: string,
       error?: string,
       workspace?: StudioWorkspace,
+      stale?: boolean,
     ) => {
       assertTrustedSender(event);
       if (workspace && typeof workspace === "object") {
@@ -574,7 +622,12 @@ function registerIpcHandlers(): void {
       const waiter = flushWaiter;
       flushWaiter = undefined;
       clearTimeout(waiter.timer);
-      if (error) waiter.reject(new Error(error));
+      // The renderer sends the marker-free message; restore the marker in
+      // process memory so the reload handshake recognizes a stale save.
+      if (error)
+        waiter.reject(
+          new Error(stale === true ? markStaleWorkspaceMessage(error) : error),
+        );
       else waiter.resolve();
     },
   );
@@ -667,7 +720,8 @@ function registerIpcHandlers(): void {
     // renderer may save once more right after this handler returns.
     const snapshotPath = await store.createSnapshot("before-reset-demo");
     const workspace = createDemoWorkspace(locale);
-    await store.save(workspace);
+    // The demo starts at a lower revision than the user workspace it replaces.
+    await store.save(workspace, { allowRollback: true });
     rememberFolders();
     return {
       workspace,
