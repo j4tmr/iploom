@@ -29,6 +29,7 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 | `get_chapter`            | yes       | Read a chapter's full prose, outline, beats and scenes                                   |
 | `search_ip`              | yes       | Search the bilingual IP library                                                          |
 | `get_relationship_graph` | yes       | Return graph nodes, edges, degrees and warnings                                          |
+| `list_timeline_events`   | yes       | List story timeline events with world/novel/chapter/subject/status filters               |
 | `list_workflow_tasks`    | yes       | List AI authoring tasks with readiness, blockers and optional world/novel/status filters |
 | `get_workflow_brief`     | yes       | Generate a deterministic, task-scoped bilingual Markdown brief                           |
 | `list_standards`         | yes       | List foundation standards with kind, status, scope and pinned task count                 |
@@ -37,7 +38,7 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 | `update_standard`        | no        | Update a standard; content changes bump its version, status-only changes do not          |
 | `export_arcreel_bundle`  | no        | Write an ArcReel-style handoff package                                                   |
 
-Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The server registers 14 tools: eleven read-only, two standard writes (`create_standard`, `update_standard`) and one export (`export_arcreel_bundle`). Those three are the only tools that can change local state; writes are serialized and re-validated against the workspace schema. Tool names and access levels come from `apps/studio/src/core/mcp-tools.ts`, the single source the server, the settings copy and the verification script all share.
+Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The server registers 15 tools: twelve read-only, two standard writes (`create_standard`, `update_standard`) and one export (`export_arcreel_bundle`). Those three are the only tools that can change local state; writes are serialized and re-validated against the workspace schema. Tool names and access levels come from `apps/studio/src/core/mcp-tools.ts`, the single source the server, the settings copy and the verification script all share.
 
 ### Response shape and paging
 
@@ -68,6 +69,7 @@ Every collection response is a page rather than a bare array:
 Responses echo the fields a client needs for the next call, not every nested list:
 
 - Entity views cap repeated identifiers at 20 items and add the true size alongside: `character_ids`/`character_id_count`, `depends_on_ids`/`depends_on_id_count`, `pinned_by_task_ids`/`pinned_by_task_count`.
+- `list_timeline_events` orders events by chapter, in-world time, order and creation time; its default view clips long state, evidence and prompt fields and names them in `truncated_fields`, while `include_details` returns the full record.
 - `list_workflow_tasks` previews at most 10 unfinished prerequisites in `blockers` and reports the full number in `blocker_count`; the summary object counts all of them.
 - `create_standard` and `update_standard` acknowledge with the compact standard view. Bodies are reported as `body_chars` (`{ zh, en }` character counts) rather than echoed back, so a large write does not inflate the response. A language patch merges per language: sending only `title.zh` keeps the existing English title and both bodies.
 - `export_arcreel_bundle` reports the counts (`chapter_count`, `path_count`, `warning_count`, `totals`) and previews only the first 50 chapters and paths and the first 20 warnings. Read the returned `directory` and `manifest.json` for the complete list; `files_written` remains the authoritative file count.
