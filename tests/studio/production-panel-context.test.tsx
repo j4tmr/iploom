@@ -17,7 +17,15 @@ import type { WorkflowTask } from "../../apps/studio/src/core/types.ts";
 import { translator } from "../../apps/studio/src/i18n.ts";
 import { bridge } from "../../apps/studio/src/platform.ts";
 
-afterEach(cleanup);
+let restoreConfirm: (() => void) | null = null;
+
+afterEach(() => {
+  cleanup();
+  // window is shared by every test file in the bun test process; a leftover
+  // stub would change the dialogs of whatever file runs next.
+  restoreConfirm?.();
+  restoreConfirm = null;
+});
 
 const t = translator("en");
 const aiInfo: AiConfigInfo = {
@@ -27,6 +35,14 @@ const aiInfo: AiConfigInfo = {
 };
 
 function stubConfirm(answer: boolean) {
+  // Keep the value from before the first stub of this test: a second stub
+  // must not record the first fake as the thing to restore.
+  if (!restoreConfirm) {
+    const previous = window.confirm;
+    restoreConfirm = () => {
+      window.confirm = previous;
+    };
+  }
   const confirm = mock(() => answer);
   window.confirm = confirm as unknown as typeof window.confirm;
   return confirm;

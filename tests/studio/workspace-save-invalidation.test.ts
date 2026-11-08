@@ -150,6 +150,43 @@ test("replacing the workspace drops a retry left in backoff", async () => {
   expect(savedRevisions).toEqual([editedRevision]);
 });
 
+test("unmounting drops a retry left in backoff", async () => {
+  resetBridge();
+  failNextSave = true;
+  const firstSaveStarted = new Promise<void>((resolve) => {
+    resolveFirstSave = resolve;
+  });
+
+  const { result, unmount } = renderHook(() =>
+    useStudioWorkspace(mockPlatform),
+  );
+  await waitFor(() => expect(result.current.saveState).toBe("saved"));
+
+  act(() => {
+    result.current.mutate((draft) => {
+      draft.name = "edited before unmount";
+    });
+  });
+  const editedRevision = result.current.workspace!.revision;
+
+  // The first attempt fails and enters retrySave's 500 ms backoff.
+  let saveNowResult!: Promise<unknown>;
+  act(() => {
+    saveNowResult = result.current.saveNow().catch((error: unknown) => error);
+  });
+  await firstSaveStarted;
+  expect(savedRevisions).toEqual([editedRevision]);
+
+  // Tear the hook down while the retry sleeps. The teardown invalidates the
+  // pending save, so the wake-up must never reach the bridge again.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  unmount();
+  expect(await saveNowResult).toBeInstanceOf(Error);
+
+  await new Promise((resolve) => setTimeout(resolve, 650));
+  expect(savedRevisions).toEqual([editedRevision]);
+});
+
 test("invalidating before a restore dispatch drops a retry during the in-flight window", async () => {
   resetBridge();
   failNextSave = true;

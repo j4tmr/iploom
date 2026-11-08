@@ -34,6 +34,8 @@ jobs:
           node-version-file: .node-version
       - run: bun install --frozen-lockfile
       - run: bun run lint
+      - name: Verify test isolation
+        run: bun run studio:verify-test-isolation
       - run: bun run format:check
       - run: bun run typecheck
       - run: bun run test:coverage

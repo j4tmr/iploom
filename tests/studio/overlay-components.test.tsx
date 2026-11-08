@@ -21,6 +21,7 @@ import {
 import { translator } from "../../apps/studio/src/i18n.ts";
 
 let detachKeyboard: () => void;
+let restoreConfirm: (() => void) | null = null;
 
 beforeEach(() => {
   overlayStack.clear();
@@ -31,9 +32,22 @@ afterEach(() => {
   cleanup();
   detachKeyboard();
   overlayStack.clear();
+  // Restore whatever this file replaced: window is shared by every test file
+  // in the bun test process, so a leftover stub silently changes the next
+  // file's dialogs.
+  restoreConfirm?.();
+  restoreConfirm = null;
 });
 
 function stubConfirm(answer: boolean) {
+  // Keep the value from before the first stub of this test: a second stub
+  // must not record the first fake as the thing to restore.
+  if (!restoreConfirm) {
+    const previous = window.confirm;
+    restoreConfirm = () => {
+      window.confirm = previous;
+    };
+  }
   const confirm = mock(() => answer);
   window.confirm = confirm as unknown as typeof window.confirm;
   return confirm;
