@@ -70,6 +70,9 @@ export function ProductionPanel({
   const activeId = useRef("");
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
+  const latestContext = useRef(context);
+  latestContext.current = context;
+  const appliedContext = useRef(context);
   const [completedTask, setCompletedTask] = useState<WorkflowTask | null>(null);
   const work = workspace.works.find((item) => item.id === scope.workId);
   const universeId = work?.universeId ?? scope.universeId;
@@ -81,13 +84,15 @@ export function ProductionPanel({
         "done",
     ),
   );
+  const applyContext = (next: ProductionScope) => {
+    appliedContext.current = next;
+    setScope(next);
+    setPrompt("");
+    setTaskId("");
+  };
   // biome-ignore lint/correctness/useExhaustiveDependencies: the scope fields are the actual trigger; `context` is rebuilt every render and depending on its identity would reset the prompt in a loop
   useEffect(() => {
-    if (!activeId.current) {
-      setScope(context);
-      setPrompt("");
-      setTaskId("");
-    }
+    if (!activeId.current) applyContext(context);
   }, [
     context.universeId,
     context.workId,
@@ -452,6 +457,20 @@ export function ProductionPanel({
             } finally {
               activeId.current = "";
               setBusy(false);
+              // Every context change that arrived while this run held `activeId`
+              // was skipped by the effect above; replay the latest one now so the
+              // panel does not keep composing and creating tasks for the scope the
+              // user navigated away from.
+              const latest = latestContext.current;
+              const applied = appliedContext.current;
+              if (
+                latest.universeId !== applied.universeId ||
+                latest.workId !== applied.workId ||
+                latest.chapterId !== applied.chapterId ||
+                latest.characterId !== applied.characterId
+              ) {
+                applyContext(latest);
+              }
             }
           }}
         >
