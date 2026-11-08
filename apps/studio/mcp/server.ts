@@ -82,6 +82,11 @@ const BRIEF_CHARS = 8_000;
 const BRIEF_MAX_CHARS = 100_000;
 /** Rule text returned per language by `get_standard` unless asked for more. */
 const STANDARD_BODY_CHARS = 4_000;
+/**
+ * Result text returned per language by `get_workflow_result` when the caller
+ * asks for a window instead of the full stored text (the default).
+ */
+const WORKFLOW_RESULT_WINDOW_CHARS = 4_000;
 const SUMMARY_PREVIEW_CHARS = 1_000;
 const OUTLINE_PREVIEW_CHARS = 1_200;
 const NOTES_PREVIEW_CHARS = 1_000;
@@ -2077,11 +2082,48 @@ export function createStudioMcpServer(
     {
       title: "读取 AI 任务结果 / Workflow result",
       description:
-        "读取一个 AI 任务当前保存的中英文完整结果，以及首次改动前的快照（若有）；只读，不改变工作区。文本直接返回，便于在修订前核对待改内容；每种语言最多 200,000 字符。Return the full stored Chinese and English result of one workflow task and, when present, the first pre-change snapshot; read-only, with no workspace change. The text is returned directly so a client can inspect what it is about to revise; each language is capped at 200,000 characters.",
+        "读取一个 AI 任务当前保存的中英文完整结果，以及首次改动前的快照（若有）；只读，不改变工作区。文本直接返回，便于在修订前核对待改内容；每种语言最多 200,000 字符，也可用 offset 与 max_chars 按语言分窗续读，把每种语言自己的 next_offset 传回。Return the full stored Chinese and English result of one workflow task and, when present, the first pre-change snapshot; read-only, with no workspace change. The text is returned directly so a client can inspect what it is about to revise; each language is capped at 200,000 characters, and offset with max_chars windows it per language — continue each language from its own next_offset via result_offsets.",
       annotations: READ_ONLY_ANNOTATIONS,
     },
     z.object({
       task_id: workflowTaskIdSchema,
+      offset: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe(
+          "两种语言共享的窗口起点；省略时返回全文 / Shared window start for both languages; omit to return the full text.",
+        ),
+      result_offsets: z
+        .object({
+          zh: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("中文结果起点 / Chinese result offset."),
+          en: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("英文结果起点 / English result offset."),
+        })
+        .strict()
+        .optional()
+        .describe(
+          "按语言分别续读，把每种语言自己的 next_offset 传回；省略的语言从 offset 开始 / Per-language continuation; pass each language's own next_offset. Omitted languages start at offset.",
+        ),
+      max_chars: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_WORKFLOW_RESULT_LENGTH)
+        .optional()
+        .describe(
+          `按语言分窗时的单窗最多字符数，默认 ${WORKFLOW_RESULT_WINDOW_CHARS}；省略 offset 与 result_offsets 时返回全文 / Window size per language when windowing; default ${WORKFLOW_RESULT_WINDOW_CHARS}. Without offset or result_offsets the full text is returned.`,
+        ),
     }),
     async (args) => {
       const loaded = await store.load();
@@ -2094,13 +2136,32 @@ export function createStudioMcpServer(
           "not_found",
           `Unknown workflow task: ${args.task_id}`,
         );
+      const windowing =
+        args.offset !== undefined ||
+        args.result_offsets !== undefined ||
+        args.max_chars !== undefined;
+      const maxChars = args.max_chars ?? WORKFLOW_RESULT_WINDOW_CHARS;
+      const sharedOffset = args.offset ?? 0;
+      const window = (
+        value: string,
+        languageOffset: number | undefined,
+      ): string | ReturnType<typeof textWindow> =>
+        windowing
+          ? textWindow(value, languageOffset ?? sharedOffset, maxChars)
+          : value;
       return {
         schema: MCP_SCHEMA,
         revision: workspace.revision,
         task: workflowTaskSummaryView(workspace, task),
-        result: { zh: task.result.zh, en: task.result.en },
+        result: {
+          zh: window(task.result.zh, args.result_offsets?.zh),
+          en: window(task.result.en, args.result_offsets?.en),
+        },
         previous_result: task.previousResult
-          ? { zh: task.previousResult.zh, en: task.previousResult.en }
+          ? {
+              zh: task.previousResult.zh,
+              en: task.previousResult.en,
+            }
           : null,
       };
     },
