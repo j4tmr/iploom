@@ -232,7 +232,10 @@ function backupPath(path: string): string {
   return `${path}.bak`;
 }
 
-function safeBundlePath(value: string): string {
+function safeBundlePath(
+  value: string,
+  store: MainMessages["store"] = englishMainMessages.store,
+): string {
   const normalized = normalize(value).replaceAll("\\", "/");
   if (
     !normalized ||
@@ -241,7 +244,7 @@ function safeBundlePath(value: string): string {
     normalized.includes("/../") ||
     normalized.includes("\0")
   )
-    throw new Error(englishMainMessages.store.unsafeExportPath(value));
+    throw new Error(store.unsafeExportPath(value));
   return normalized;
 }
 
@@ -655,7 +658,7 @@ export class WorkspaceStore {
     try {
       await mkdir(staging, { recursive: true });
       for (const file of bundle.files) {
-        const relative = safeBundlePath(file.path);
+        const relative = safeBundlePath(file.path, this.messages);
         if (seen.has(relative))
           throw new Error(this.messages.duplicateExportFile(relative));
         seen.add(relative);

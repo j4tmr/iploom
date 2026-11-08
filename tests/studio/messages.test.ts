@@ -8,8 +8,19 @@ import {
   aiConfigSchema,
   createAiConfigSchema,
   isReportableAiError,
+  parseAiConfigInput,
+  parseAiRequestInput,
   runCompletion,
 } from "../../apps/studio/src/node/ai-client.ts";
+import {
+  closeFailureDialog,
+  noRecoveryCopyDialog,
+  recoveryFailedDialog,
+  recoverySavedDialog,
+  reloadCanceledDialog,
+  rendererCrashDialog,
+  type MainDialogOptions,
+} from "../../apps/studio/src/node/dialog-copy.ts";
 import {
   parseArcReelBundle,
   revealKnownPath,
@@ -77,6 +88,7 @@ function exerciseCatalog(preset: MainMessages): void {
     preset.store,
     preset.guards,
     preset.mcpConfig,
+    preset.dialogs,
   ]) {
     for (const [key, value] of Object.entries(group)) {
       const produced = typeof value === "function" ? value(1, "x") : value;
@@ -163,6 +175,33 @@ describe("localized workspace store", () => {
     ).rejects.toThrow("不是工作区快照");
   });
 
+  test("zh store localizes unsafe export paths; English default stays", async () => {
+    const workspace = createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z");
+    const bundle = await buildArcReelBundle(workspace, {
+      workId: "work_tide_clock",
+      generatedAt: "2026-11-06T03:00:00.000Z",
+    });
+    const tampered = {
+      ...bundle,
+      files: bundle.files.map((file, index) =>
+        index === 0 ? { ...file, path: "../escape.md" } : file,
+      ),
+    };
+    const root = mkdtempSync(join(tmpdir(), "iploom-messages-"));
+    await expect(
+      new WorkspaceStore(
+        join(root, "workspace.json"),
+        zhMainMessages,
+      ).exportArcReel(tampered, join(root, "exports")),
+    ).rejects.toThrow("不安全的导出路径");
+    await expect(
+      new WorkspaceStore(join(root, "workspace.json")).exportArcReel(
+        tampered,
+        join(root, "exports"),
+      ),
+    ).rejects.toThrow("Unsafe export path");
+  });
+
   test("zh guards localize ArcReel bundle rejections", async () => {
     const workspace = createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z");
     const bundle = await buildArcReelBundle(workspace, {
@@ -187,39 +226,88 @@ describe("localized ai-client", () => {
   };
   const request = { id: "req1", label: "l", prompt: "hi" };
 
-  test("zh first-byte timeout surfaces in Chinese", async () => {
+  test("zh first-byte timeout surfaces in Chinese and stays reportable", async () => {
     const fetcher: typeof fetch = Object.assign(
       () => new Promise<Response>(() => undefined), // never responds; timer fires
       { preconnect: () => undefined },
     );
-    await expect(
-      runCompletion(
-        config,
-        request,
-        new AbortController().signal,
-        () => undefined,
-        fetcher,
-        { firstByteTimeoutMs: 30 },
-        zhMainMessages,
-      ),
-    ).rejects.toThrow("秒内未返回数据");
+    const error = await runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => undefined,
+      fetcher,
+      { firstByteTimeoutMs: 30 },
+      zhMainMessages,
+    ).catch((value: unknown) => value);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("秒内未返回数据");
+    // The zh text has no English prefix; only the class keeps the gate open.
+    expect(isReportableAiError(error)).toBe(true);
   });
 
-  test("English default keeps the legacy abort text", async () => {
+  test("English default keeps the legacy abort text and stays reportable", async () => {
     const fetcher: typeof fetch = Object.assign(
       () => new Promise<Response>(() => undefined),
       { preconnect: () => undefined },
     );
-    await expect(
-      runCompletion(
-        config,
-        request,
-        new AbortController().signal,
-        () => undefined,
-        fetcher,
-        { firstByteTimeoutMs: 30 },
+    const error = await runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => undefined,
+      fetcher,
+      { firstByteTimeoutMs: 30 },
+    ).catch((value: unknown) => value);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("sent no data for 0 seconds");
+    expect(isReportableAiError(error)).toBe(true);
+  });
+
+  test("parseAiConfigInput surfaces localized refinements, not Zod JSON", () => {
+    expect(() =>
+      parseAiConfigInput(
+        { endpoint: "http://example.com/v1", model: "m", apiKey: "" },
+        zhMainMessages.ai,
       ),
-    ).rejects.toThrow("sent no data for 0 seconds");
+    ).toThrow("请使用 HTTPS 或本机回环 HTTP");
+    expect(() =>
+      parseAiConfigInput(
+        { endpoint: "nope", model: "m", apiKey: "" },
+        zhMainMessages.ai,
+      ),
+    ).toThrow("请输入有效的 URL");
+    // A built-in Zod constraint has only English text; use the catalog hint.
+    expect(() =>
+      parseAiConfigInput(
+        { endpoint: "https://api.example.com/v1", model: "", apiKey: "" },
+        zhMainMessages.ai,
+      ),
+    ).toThrow(zhMainMessages.ai.invalidConfig);
+    expect(
+      parseAiConfigInput(
+        { endpoint: "https://api.example.com/v1", model: "m", apiKey: "" },
+        zhMainMessages.ai,
+      ),
+    ).toEqual({
+      endpoint: "https://api.example.com/v1",
+      model: "m",
+      apiKey: "",
+    });
+  });
+
+  test("parseAiRequestInput replaces Zod details with one localized message", () => {
+    expect(() =>
+      parseAiRequestInput(
+        { id: "req1", label: "l", prompt: "" },
+        zhMainMessages.ai,
+      ),
+    ).toThrow("AI 请求无效");
+    const parsed = parseAiRequestInput(
+      { id: "req1", label: "l", prompt: "hi" },
+      zhMainMessages.ai,
+    );
+    expect(parsed).toEqual({ id: "req1", label: "l", prompt: "hi" });
   });
 
   test("localized messages still pass the reportable gate structurally", async () => {
@@ -302,6 +390,102 @@ describe("localized mcp-config", () => {
     expect(en.error).toBe(
       "Bundled MCP server is missing from this installation.",
     );
+  });
+});
+
+describe("localized native dialogs", () => {
+  const CJK = /[一-鿿]/;
+
+  test("every zh dialog builder localizes title, message, detail and buttons", () => {
+    const dialogs: Array<[string, MainDialogOptions]> = [
+      ["reloadCanceled", reloadCanceledDialog("磁盘错误", zhMainMessages)],
+      ["closeFailure", closeFailureDialog("保存失败", zhMainMessages)],
+      ["noRecoveryCopy", noRecoveryCopyDialog(zhMainMessages)],
+      ["recoverySaved", recoverySavedDialog("/tmp/r.json", zhMainMessages)],
+      ["recoveryFailed", recoveryFailedDialog("权限不足", zhMainMessages)],
+      ["rendererCrash", rendererCrashDialog("crashed", zhMainMessages)],
+    ];
+    for (const [name, dialog] of dialogs) {
+      expect(dialog.title, name).toMatch(CJK);
+      expect(dialog.message, name).toMatch(CJK);
+      if (dialog.detail) expect(dialog.detail, name).toMatch(CJK);
+      for (const button of dialog.buttons) expect(button, name).toMatch(CJK);
+      expect(dialog.noLink, name).toBe(true);
+    }
+  });
+
+  test("English dialogs keep the legacy copy and button ids", () => {
+    const close = closeFailureDialog("save failed", englishMainMessages);
+    expect(close.title).toBe("IPloom Studio could not finish saving");
+    expect(close.message).toBe("save failed");
+    expect(close.detail).toBe(englishMainMessages.dialogs.closeFailedDetail);
+    expect(close.buttons).toEqual([
+      "Retry",
+      "Save a Copy and Exit",
+      "Exit Without Saving",
+      "Keep Editing",
+    ]);
+    expect(close.defaultId).toBe(0);
+    expect(close.cancelId).toBe(3);
+
+    const noRecovery = noRecoveryCopyDialog(englishMainMessages);
+    expect(noRecovery.buttons).toEqual(["Retry", "Keep Editing"]);
+    expect(noRecovery.cancelId).toBe(1);
+
+    const saved = recoverySavedDialog("/w.json", englishMainMessages);
+    expect(saved.type).toBe("info");
+    expect(saved.message).toBe(
+      "Your in-memory workspace was saved to /w.json.",
+    );
+
+    const crash = rendererCrashDialog("crashed", englishMainMessages);
+    expect(crash.message).toBe(
+      "The editor process closed unexpectedly (crashed).",
+    );
+    expect(crash.buttons).toEqual(["Reload", "Quit"]);
+    expect(crash.cancelId).toBe(1);
+
+    const reload = reloadCanceledDialog("disk error", englishMainMessages);
+    expect(reload.buttons).toEqual(["OK"]);
+    expect(reload.detail).toBe("disk error");
+
+    const recoveryFailed = recoveryFailedDialog("denied", englishMainMessages);
+    expect(recoveryFailed.buttons).toEqual(["Retry", "Keep Editing"]);
+  });
+
+  test("zh and English dialogs keep identical structure and button counts", () => {
+    const pairs: Array<[MainDialogOptions, MainDialogOptions]> = [
+      [
+        reloadCanceledDialog("x", englishMainMessages),
+        reloadCanceledDialog("x", zhMainMessages),
+      ],
+      [
+        closeFailureDialog("x", englishMainMessages),
+        closeFailureDialog("x", zhMainMessages),
+      ],
+      [
+        noRecoveryCopyDialog(englishMainMessages),
+        noRecoveryCopyDialog(zhMainMessages),
+      ],
+      [
+        recoverySavedDialog("/w.json", englishMainMessages),
+        recoverySavedDialog("/w.json", zhMainMessages),
+      ],
+      [
+        recoveryFailedDialog("x", englishMainMessages),
+        recoveryFailedDialog("x", zhMainMessages),
+      ],
+      [
+        rendererCrashDialog("x", englishMainMessages),
+        rendererCrashDialog("x", zhMainMessages),
+      ],
+    ];
+    for (const [en, zh] of pairs) {
+      expect(zh.type).toBe(en.type);
+      expect(zh.defaultId).toBe(en.defaultId);
+      expect(zh.cancelId).toBe(en.cancelId);
+      expect(zh.buttons).toHaveLength(en.buttons.length);
+    }
   });
 });
 

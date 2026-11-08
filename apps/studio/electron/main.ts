@@ -56,11 +56,19 @@ import {
   type WindowCloseState,
 } from "../src/node/window-close-state.ts";
 import {
-  createAiConfigSchema,
-  aiRequestSchema,
   isReportableAiError,
+  parseAiConfigInput,
+  parseAiRequestInput,
   runCompletion,
 } from "../src/node/ai-client.ts";
+import {
+  closeFailureDialog,
+  noRecoveryCopyDialog,
+  recoveryFailedDialog,
+  recoverySavedDialog,
+  reloadCanceledDialog,
+  rendererCrashDialog,
+} from "../src/node/dialog-copy.ts";
 import {
   englishMainMessages,
   mainMessagesFor,
@@ -73,6 +81,8 @@ const APP_ID = "com.j4tmr.iploom.studio";
 const RENDERER_FILE = join(__dirname, "..", "renderer", "index.html");
 const RENDERER_ROOT = dirname(RENDERER_FILE);
 const UPDATE_CHECK_TIMEOUT_MS = 10_000;
+/** IPC payloads are untrusted even when typed, so the locale is checked at runtime. */
+const SUPPORTED_UI_LOCALES: ReadonlySet<string> = new Set(["zh-CN", "en"]);
 
 let mainWindow: BrowserWindow | null = null;
 let workspaceStore: WorkspaceStore | null = null;
@@ -276,16 +286,13 @@ async function reloadAfterFlush(window: BrowserWindow): Promise<void> {
       exitSmoke(1);
       return;
     }
-    await showMessage(window, {
-      type: "error",
-      title: "Reload canceled",
-      message:
-        "The editor could not confirm its save, so the reload was canceled.",
-      detail: error instanceof Error ? error.message : String(error),
-      buttons: ["OK"],
-      defaultId: 0,
-      noLink: true,
-    });
+    await showMessage(
+      window,
+      reloadCanceledDialog(
+        error instanceof Error ? error.message : String(error),
+        mainMessages,
+      ),
+    );
   } finally {
     reloadInFlight = false;
   }
@@ -304,23 +311,10 @@ async function chooseCloseFailureAction(
   window: BrowserWindow,
   message: string,
 ): Promise<"retry" | "copy" | "exit" | "edit"> {
-  const { response } = await showMessage(window, {
-    type: "error",
-    title: "IPloom Studio could not finish saving",
-    message,
-    detail:
-      "Retry the save, save a copy of the in-memory workspace, or exit without saving. " +
-      "Exiting without saving discards edits made since the last successful save.",
-    buttons: [
-      "Retry",
-      "Save a Copy and Exit",
-      "Exit Without Saving",
-      "Keep Editing",
-    ],
-    defaultId: 0,
-    cancelId: 3,
-    noLink: true,
-  });
+  const { response } = await showMessage(
+    window,
+    closeFailureDialog(message, mainMessages),
+  );
   if (response === 1) return "copy";
   if (response === 2) return "exit";
   if (response === 3) return "edit";
@@ -360,43 +354,23 @@ async function closeAfterFlush(
         if (choice === "edit") return;
         if (choice === "copy") {
           if (!recoveryWorkspace) {
-            await showMessage(window, {
-              type: "error",
-              title: "No workspace copy is available",
-              message:
-                "The editor has not handed the workspace to the main process yet. " +
-                "Choose Retry, or keep editing and try again.",
-              buttons: ["Retry", "Keep Editing"],
-              defaultId: 0,
-              cancelId: 1,
-              noLink: true,
-            });
+            await showMessage(window, noRecoveryCopyDialog(mainMessages));
             continue;
           }
           try {
             const path =
               await requireStore().saveRecoveryCopy(recoveryWorkspace);
-            await showMessage(window, {
-              type: "info",
-              title: "Recovery copy saved",
-              message: `Your in-memory workspace was saved to ${path}.`,
-              buttons: ["Exit"],
-              defaultId: 0,
-              noLink: true,
-            });
+            await showMessage(window, recoverySavedDialog(path, mainMessages));
           } catch (copyError) {
-            await showMessage(window, {
-              type: "error",
-              title: "Could not save a recovery copy",
-              message:
+            await showMessage(
+              window,
+              recoveryFailedDialog(
                 copyError instanceof Error
                   ? copyError.message
                   : String(copyError),
-              buttons: ["Retry", "Keep Editing"],
-              defaultId: 0,
-              cancelId: 1,
-              noLink: true,
-            });
+                mainMessages,
+              ),
+            );
             continue;
           }
         }
@@ -509,7 +483,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle("iploom:configure-ai", (event, config: unknown) => {
     assertTrustedSender(event);
     if (aiRuns.size) throw new Error(mainMessages.ai.configureBusy);
-    aiConfig = createAiConfigSchema(mainMessages.ai).parse(config);
+    aiConfig = parseAiConfigInput(config, mainMessages.ai);
     return aiInfo();
   });
   ipcMain.handle("iploom:cancel-ai", (event, id: string) => {
@@ -518,7 +492,7 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("iploom:run-ai", async (event, input: unknown) => {
     assertTrustedSender(event);
-    const request = aiRequestSchema.parse(input);
+    const request = parseAiRequestInput(input, mainMessages.ai);
     if (aiRuns.size) throw new Error(mainMessages.ai.runBusy);
     if (!aiInfo().configured) throw new Error(mainMessages.ai.notConfigured);
     const controller = new AbortController();
@@ -703,7 +677,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("iploom:reset-demo", async (event, locale: UiLocale) => {
     assertTrustedSender(event);
-    if (locale !== "zh-CN" && locale !== "en") {
+    if (!SUPPORTED_UI_LOCALES.has(locale)) {
       throw new Error(mainMessages.shell.unsupportedLocale);
     }
     const store = requireStore();
@@ -829,18 +803,10 @@ function createWindow(): BrowserWindow {
       return;
     }
     void (async () => {
-      const { response } = await showMessage(window, {
-        type: "error",
-        title: "IPloom Studio stopped responding",
-        message: `The editor process closed unexpectedly (${details.reason}).`,
-        detail:
-          "Reloading restores the last saved workspace. Edits made since the " +
-          "last successful save cannot be recovered.",
-        buttons: ["Reload", "Quit"],
-        defaultId: 0,
-        cancelId: 1,
-        noLink: true,
-      });
+      const { response } = await showMessage(
+        window,
+        rendererCrashDialog(details.reason, mainMessages),
+      );
       if (response === 0) {
         if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
           window.webContents.reload();

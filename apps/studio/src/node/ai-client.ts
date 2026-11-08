@@ -54,6 +54,34 @@ export const aiRequestSchema = z
   })
   .strict();
 
+/**
+ * Parses renderer-supplied AI configuration for the configure IPC handler.
+ * A raw ZodError would cross IPC as a JSON dump of Zod's English built-in
+ * messages, so the first localized refinement is surfaced as a single Error
+ * and every other failure collapses to the catalog's configuration hint.
+ */
+export function parseAiConfigInput(
+  input: unknown,
+  ai: MainMessages["ai"] = englishMainMessages.ai,
+): AiConfig {
+  const parsed = createAiConfigSchema(ai).safeParse(input);
+  if (parsed.success) return parsed.data;
+  const localized = parsed.error.issues.find(
+    (issue) => issue.code === "custom",
+  );
+  throw new Error(localized?.message ?? ai.invalidConfig);
+}
+
+/** Same contract for renderer-supplied run requests. */
+export function parseAiRequestInput(
+  input: unknown,
+  ai: MainMessages["ai"] = englishMainMessages.ai,
+): AiRequest {
+  const parsed = aiRequestSchema.safeParse(input);
+  if (!parsed.success) throw new Error(ai.invalidRequest);
+  return parsed.data;
+}
+
 /** The provider must start responding within this window, measured from the request start. */
 export const AI_FIRST_BYTE_TIMEOUT_MS = 120_000 as const;
 /** Every stream chunk resets this idle window, so a long but active generation is never cut off. */
@@ -169,8 +197,13 @@ export async function runCompletion(
       abort(kind);
     }, ms);
   };
+  // A local timeout/cancel is user-visible copy, not a transport failure, so
+  // it must survive main.ts's reportable gate; a plain Error would be
+  // downgraded to the generic failure hint.
   const abortedError = () =>
-    new Error(abortKind ? abortText() : messages.ai.canceledFallback);
+    new ReportableAiError(
+      abortKind ? abortText() : messages.ai.canceledFallback,
+    );
 
   // Racing the abort reason (instead of relying only on fetch's rejection) guarantees that a
   // stalled body ends the run even when a custom transport ignores the signal.
