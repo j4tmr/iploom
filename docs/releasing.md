@@ -128,9 +128,9 @@ Never commit certificates, passwords, API tokens or provisioning profiles.
 Use the GitHub API rather than the web UI for a reproducible receipt:
 
 ```sh
-gh release view studio-v0.4.0 --json tagName,isDraft,isPrerelease,assets,body
-gh release download studio-v0.4.0 --pattern SHA256SUMS.txt
-gh attestation verify IPloom-Studio-0.4.0-darwin-universal.dmg --repo j4tmr/iploom
+gh release view studio-v0.6.0 --json tagName,isDraft,isPrerelease,assets,body
+gh release download studio-v0.6.0 --pattern SHA256SUMS.txt
+gh attestation verify IPloom-Studio-0.6.0-darwin-universal.dmg --repo j4tmr/iploom
 ```
 
 Download at least one asset per platform, recompute its SHA-256, and compare it with the release checksum file. A tag, a green build or an uploaded artifact alone does not prove the downloaded file is intact.
