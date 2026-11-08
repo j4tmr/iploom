@@ -342,7 +342,7 @@ const TRUNCATED_RESULT_MARKER = "\n\n[…truncated]";
  * splits a surrogate pair, and a share too small to hold the marker becomes
  * empty so the brief prints its "—" placeholder instead of a bare marker.
  */
-function clipApprovedResult(result: string, limit: number): string {
+export function clipApprovedResult(result: string, limit: number): string {
   if (result.length <= limit) return result;
   if (limit <= TRUNCATED_RESULT_MARKER.length) return "";
   let cut = limit - TRUNCATED_RESULT_MARKER.length;

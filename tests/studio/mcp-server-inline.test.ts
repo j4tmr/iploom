@@ -634,3 +634,101 @@ test("save_workflow_result merges languages, keeps the first snapshot and protec
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("get_workflow_brief injects approved ancestor outputs only when opted in", async () => {
+  const root = mkdtempSync(join(tmpdir(), "iploom-studio-inline-brief-"));
+  const workspacePath = join(root, "workspace.json");
+  const store = new WorkspaceStore(workspacePath);
+  await store.save(createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z"));
+
+  // No demo task is done, so approve the direct dependency first: without a
+  // result there is nothing to inject even when the ancestor counts as done.
+  await store.update((workspace) => {
+    const rules = workspace.workflowTasks.find(
+      (task) => task.id === "task_world_rules",
+    );
+    if (!rules) throw new Error("demo workspace lost task_world_rules");
+    rules.status = "done";
+    rules.result = {
+      zh: "潮汐规则已定稿：潮水每日提前十一分钟，钟楼在满潮时鸣钟。",
+      en: "Tide rule finalized: the tide advances eleven minutes each day, and the clock tower tolls at high tide.",
+    };
+  });
+
+  const inline = await connectInline(workspacePath);
+  try {
+    // Default call stays untouched: no approved-outputs section appears.
+    const plain = await call(inline, "get_workflow_brief", {
+      task_id: "task_chapter_three",
+      locale: "en",
+    });
+    expect(plain.isError).toBe(false);
+    const plainText = (plain.body.markdown as { text: string }).text;
+    expect(plainText).not.toContain("APPROVED DEPENDENCY OUTPUTS");
+
+    // Opt-in injects the ancestor output with the production-prompt heading.
+    // The window must be wide enough to reach the section: the brief is
+    // windowed from the top, and the section sits after the dependency tree.
+    const enriched = await call(inline, "get_workflow_brief", {
+      task_id: "task_chapter_three",
+      locale: "en",
+      include_approved_outputs: true,
+      max_chars: 100_000,
+    });
+    expect(enriched.isError).toBe(false);
+    const enrichedText = (enriched.body.markdown as { text: string }).text;
+    expect(enrichedText).toContain("APPROVED DEPENDENCY OUTPUTS");
+    expect(enrichedText).toContain("Tide rule finalized");
+    expect(enrichedText).not.toContain("[…truncated]");
+
+    // A budget slightly above the bare brief clips the output to an equal
+    // share of the remaining window, so the assembled brief stays within
+    // max_chars and the cut carries the same […truncated] marker as the
+    // in-app production prompt. The bare length is derived from the full
+    // read: the item body is the result text, or "—" when emptied.
+    const bareLen =
+      enrichedText.length -
+      "Tide rule finalized: the tide advances eleven minutes each day, and the clock tower tolls at high tide."
+        .length +
+      1;
+    const clipped = await call(inline, "get_workflow_brief", {
+      task_id: "task_chapter_three",
+      locale: "en",
+      include_approved_outputs: true,
+      max_chars: bareLen + 60,
+    });
+    expect(clipped.isError).toBe(false);
+    const clippedText = (clipped.body.markdown as { text: string }).text;
+    expect(clippedText.length).toBeLessThanOrEqual(bareLen + 60);
+    expect(clippedText).toContain("[…truncated]");
+    expect(clippedText).toContain("APPROVED DEPENDENCY OUTPUTS");
+
+    // A window smaller than the bare brief leaves no share at all: the
+    // output collapses to the "—" placeholder instead of a bare marker,
+    // and the response still respects the requested window size.
+    const tiny = await call(inline, "get_workflow_brief", {
+      task_id: "task_chapter_three",
+      locale: "en",
+      include_approved_outputs: true,
+      max_chars: 900,
+    });
+    expect(tiny.isError).toBe(false);
+    expect(
+      (tiny.body.markdown as { text: string }).text.length,
+    ).toBeLessThanOrEqual(900);
+
+    // A task with no approved ancestors never gets an empty section.
+    const noDeps = await call(inline, "get_workflow_brief", {
+      task_id: "task_world_rules",
+      locale: "en",
+      include_approved_outputs: true,
+    });
+    expect(noDeps.isError).toBe(false);
+    expect((noDeps.body.markdown as { text: string }).text).not.toContain(
+      "APPROVED DEPENDENCY OUTPUTS",
+    );
+  } finally {
+    await inline.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

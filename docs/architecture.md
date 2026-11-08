@@ -89,7 +89,7 @@ See [ArcReel handoff](arcreel-handoff.md) for the exact boundary.
 
 Workflow tasks form a separate tree from the story hierarchy. A task can point at a universe, work, chapter and reusable cast, while `parentId` expresses decomposition and `dependsOnIds` expresses readiness. Dependencies are validated against cycles and missing tasks.
 
-Each task can produce a deterministic Markdown brief. The brief includes only the selected task's scope: objective, deliverable, parent/children, dependency state, the referenced world, novel, chapter, cast, lore, places, factions and relationships. It also carries the project's stylized 3D animation boundary when adaptation work is in scope. The same generator powers the copy action in the app and the `get_workflow_brief` MCP tool.
+Each task can produce a deterministic Markdown brief. The brief includes only the selected task's scope: objective, deliverable, parent/children, dependency state, the referenced world, novel, chapter, cast, lore, places, factions and relationships. It also carries the project's stylized 3D animation boundary when adaptation work is in scope, and optionally the clipped outputs of every approved ancestor task (an opt-in for MCP clients via `include_approved_outputs`, mirroring the in-app production prompt). The same generator powers the copy action in the app and the `get_workflow_brief` MCP tool.
 
 ## Model API
 
