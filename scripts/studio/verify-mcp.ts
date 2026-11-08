@@ -14,6 +14,9 @@ import { packagedPaths } from "./packaged-paths.ts";
 
 const binaryIndex = process.argv.indexOf("--binary");
 const archIndex = process.argv.indexOf("--arch");
+if (archIndex >= 0 && !process.argv[archIndex + 1]) {
+  throw new Error("--arch requires a value");
+}
 const arch = archIndex >= 0 ? process.argv[archIndex + 1] : undefined;
 const packaged = process.argv.includes("--packaged") ? packagedPaths() : null;
 if (arch !== undefined) {
