@@ -46,6 +46,16 @@ import {
 } from "../src/node/desktop-guards.ts";
 import { mcpClientConfigState } from "../src/node/mcp-config.ts";
 import {
+  approveClose,
+  beginCloseHandshake,
+  createWindowCloseState,
+  finishCloseHandshake,
+  shouldOfferCrashRecovery,
+  shouldRunCloseHandshake,
+  type QuitState,
+  type WindowCloseState,
+} from "../src/node/window-close-state.ts";
+import {
   AI_CANCELED_MESSAGE,
   aiConfigSchema,
   aiRequestSchema,
@@ -93,10 +103,10 @@ function exitSmoke(code: number): void {
   app.exit(smokeExitCode);
 }
 
-let closeApproved = false;
-let closeInFlight = false;
-let quitApproved = false;
-let quitInFlight = false;
+// Close approval is window-scoped: the handler of a window created later (for
+// example when macOS re-activates the app) must run its own flush handshake.
+const windowCloseStates = new WeakMap<BrowserWindow, WindowCloseState>();
+const quitState: QuitState = { approved: false, inFlight: false };
 let reloadInFlight = false;
 let flushWaiter:
   | {
@@ -195,6 +205,16 @@ function requireStore(): WorkspaceStore {
   return workspaceStore;
 }
 
+/** The close handshake state that belongs to exactly one BrowserWindow. */
+function closeStateFor(window: BrowserWindow): WindowCloseState {
+  let state = windowCloseStates.get(window);
+  if (!state) {
+    state = createWindowCloseState();
+    windowCloseStates.set(window, state);
+  }
+  return state;
+}
+
 function requestRendererFlush(window: BrowserWindow): Promise<void> {
   if (window.webContents.isDestroyed()) {
     return Promise.resolve();
@@ -227,7 +247,9 @@ function requestRendererFlush(window: BrowserWindow): Promise<void> {
  * drops the last edit. Flush first, reload only once the disk confirms it.
  */
 async function reloadAfterFlush(window: BrowserWindow): Promise<void> {
-  if (reloadInFlight || closeInFlight || quitInFlight) return;
+  if (reloadInFlight || closeStateFor(window).inFlight || quitState.inFlight) {
+    return;
+  }
   if (window.isDestroyed() || window.webContents.isDestroyed()) return;
   reloadInFlight = true;
   try {
@@ -307,16 +329,14 @@ async function closeAfterFlush(
   window: BrowserWindow,
   quit: boolean,
 ): Promise<void> {
-  if (quit ? quitInFlight : closeInFlight) return;
-  if (quit) quitInFlight = true;
-  else closeInFlight = true;
+  const state = closeStateFor(window);
+  if (!beginCloseHandshake(state, quitState, quit)) return;
   try {
     for (;;) {
       try {
         await requestRendererFlush(window);
-        closeApproved = true;
+        approveClose(state, quitState, quit);
         if (quit) {
-          quitApproved = true;
           app.quit();
         } else {
           window.close();
@@ -378,9 +398,8 @@ async function closeAfterFlush(
             continue;
           }
         }
-        closeApproved = true;
+        approveClose(state, quitState, quit);
         if (quit) {
-          quitApproved = true;
           app.quit();
         } else {
           window.close();
@@ -389,8 +408,7 @@ async function closeAfterFlush(
       }
     }
   } finally {
-    if (quit) quitInFlight = false;
-    else closeInFlight = false;
+    finishCloseHandshake(state, quitState, quit);
   }
 }
 
@@ -801,7 +819,7 @@ function createWindow(): BrowserWindow {
     console.error("[IPloom Studio] renderer process gone", details);
     if (details.reason === "clean-exit") return;
     if (window.isDestroyed()) return;
-    if (closeApproved || closeInFlight || quitApproved || quitInFlight) return;
+    if (!shouldOfferCrashRecovery(closeStateFor(window), quitState)) return;
     if (smokeMode) {
       exitSmoke(1);
       return;
@@ -825,13 +843,19 @@ function createWindow(): BrowserWindow {
         }
         return;
       }
-      closeApproved = true;
-      quitApproved = true;
+      approveClose(closeStateFor(window), quitState, true);
       app.quit();
     })();
   });
   window.on("close", (event) => {
-    if (closeApproved || window.webContents.isDestroyed()) return;
+    if (
+      !shouldRunCloseHandshake(
+        closeStateFor(window),
+        window.webContents.isDestroyed(),
+      )
+    ) {
+      return;
+    }
     event.preventDefault();
     closeAfterFlush(window, false);
   });
@@ -1092,7 +1116,7 @@ if (!app.requestSingleInstanceLock()) {
     else focusMainWindow();
   });
   app.on("before-quit", (event) => {
-    if (quitApproved || !mainWindow) return;
+    if (quitState.approved || !mainWindow) return;
     event.preventDefault();
     closeAfterFlush(mainWindow, true);
   });
