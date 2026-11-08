@@ -478,6 +478,141 @@ test("get_workflow_result returns full text and the first snapshot without writi
     expect(win3Body.result.zh.next_offset).toBeNull();
     expect(win3Body.result.en.text).toBe("");
     expect(win3Body.result.en.next_offset).toBeNull();
+
+    // The pre-change snapshot pages with the same offsets: the shared window
+    // cuts both texts at the same positions, each carrying its own length.
+    const snap1 = await call(inline, "get_workflow_result", {
+      task_id: "task_world_rules",
+      offset: 0,
+      max_chars: 4,
+    });
+    expect(snap1.isError).toBe(false);
+    const snap1Body = snap1.body as {
+      previous_result: Record<
+        "zh" | "en",
+        {
+          text: string;
+          total_chars: number;
+          next_offset: number | null;
+          truncated: boolean;
+        }
+      >;
+    };
+    expect(snap1Body.previous_result.zh.text).toBe(zhFirst.slice(0, 4));
+    expect(snap1Body.previous_result.zh.total_chars).toBe(zhFirst.length);
+    expect(snap1Body.previous_result.zh.truncated).toBe(true);
+    expect(snap1Body.previous_result.en.text).toBe(enFirst.slice(0, 4));
+    expect(snap1Body.previous_result.en.total_chars).toBe(enFirst.length);
+    expect(snap1Body.previous_result.en.next_offset).toBe(4);
+
+    const snap2 = await call(inline, "get_workflow_result", {
+      task_id: "task_world_rules",
+      result_offsets: { zh: 4, en: 4 },
+      max_chars: 4,
+    });
+    expect(snap2.isError).toBe(false);
+    const snap2Body = snap2.body as {
+      previous_result: Record<
+        "zh" | "en",
+        {
+          text: string;
+          next_offset: number | null;
+          truncated: boolean;
+        }
+      >;
+    };
+    expect(snap2Body.previous_result.zh.text).toBe(zhFirst.slice(4, 8));
+    // zh is exactly 18 chars, so zh finishes one page before en does.
+    expect(snap2Body.previous_result.zh.next_offset).toBe(
+      zhFirst.length === 8 ? 8 : zhFirst.length > 8 ? 8 : null,
+    );
+    expect(snap2Body.previous_result.en.next_offset).toBe(8);
+
+    // The snapshot reassembles exactly, language by language.
+    const snapLast = await call(inline, "get_workflow_result", {
+      task_id: "task_world_rules",
+      result_offsets: {
+        zh: zhFirst.length,
+        en: enFirst.length,
+      },
+      max_chars: 4,
+    });
+    expect(snapLast.isError).toBe(false);
+    const snapLastBody = snapLast.body as {
+      previous_result: Record<
+        "zh" | "en",
+        { text: string; next_offset: number | null }
+      >;
+    };
+    expect(snapLastBody.previous_result.zh.text).toBe("");
+    expect(snapLastBody.previous_result.zh.next_offset).toBeNull();
+    expect(snapLastBody.previous_result.en.text).toBe("");
+    expect(snapLastBody.previous_result.en.next_offset).toBeNull();
+
+    // A full snapshot read in lockstep windows rebuilds both texts: zh pages
+    // by half its length; en is longer, so its windows chain by next_offset.
+    const snapHalf = Math.ceil(zhFirst.length / 2);
+    const snapA = await call(inline, "get_workflow_result", {
+      task_id: "task_world_rules",
+      offset: 0,
+      max_chars: snapHalf,
+    });
+    expect(snapA.isError).toBe(false);
+    const snapABody = snapA.body as {
+      previous_result: Record<
+        "zh" | "en",
+        { text: string; next_offset: number | null }
+      >;
+    };
+    const enMid = snapABody.previous_result.en.next_offset;
+    expect(enMid).not.toBeNull();
+    const snapB = await call(inline, "get_workflow_result", {
+      task_id: "task_world_rules",
+      result_offsets: {
+        zh: snapHalf,
+        en: enMid as number,
+      },
+      max_chars: snapHalf,
+    });
+    expect(snapB.isError).toBe(false);
+    const snapBBody = snapB.body as {
+      previous_result: Record<
+        "zh" | "en",
+        { text: string; next_offset: number | null }
+      >;
+    };
+    expect(
+      snapABody.previous_result.zh.text + snapBBody.previous_result.zh.text,
+    ).toBe(zhFirst);
+    // zh is done after page B; en keeps chaining from its own next_offset
+    // until its own end, reassembling the whole snapshot.
+    expect(snapBBody.previous_result.zh.next_offset).toBeNull();
+    let enText = snapABody.previous_result.en.text;
+    let enOffset: number | null = snapABody.previous_result.en.next_offset;
+    let guard = 0;
+    while (enOffset !== null && guard < 20) {
+      const page = await call(inline, "get_workflow_result", {
+        task_id: "task_world_rules",
+        result_offsets: {
+          zh: zhFirst.length,
+          en: enOffset,
+        },
+        max_chars: snapHalf,
+      });
+      expect(page.isError).toBe(false);
+      const pageBody = page.body as {
+        previous_result: Record<
+          "zh" | "en",
+          { text: string; next_offset: number | null }
+        >;
+      };
+      expect(pageBody.previous_result.zh.text).toBe("");
+      enText += pageBody.previous_result.en.text;
+      enOffset = pageBody.previous_result.en.next_offset;
+      guard += 1;
+    }
+    expect(enText).toBe(enFirst);
+    expect(enOffset).toBeNull();
   } finally {
     await inline.close();
     rmSync(root, { recursive: true, force: true });
