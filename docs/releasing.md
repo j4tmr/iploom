@@ -14,7 +14,7 @@ Before a release:
 6. Commit and merge through a pull request.
 7. Create `studio-v<version>` on the merged commit.
 
-The release workflow rejects a tag that does not exactly match `studio-v${package.version}`. `scripts/studio/verify-release-inputs.ts docs` fails when any download reference or headline version in the three documents disagrees with `package.json`, and runs both locally through `bun run check` and in CI.
+The release workflow rejects a tag that does not exactly match `studio-v${package.version}`. `scripts/studio/verify-release-inputs.ts docs` requires `docs/release-notes/<version>.md` for the current `package.json` version to exist with at least 200 bytes, and fails when any download reference or headline version in the three documents disagrees with it. Both run locally through `bun run check` and in CI.
 
 ## Version semantics
 
@@ -79,7 +79,7 @@ The Intel-slice commands require Rosetta 2 on Apple silicon. They launch the uni
 
 Every `uses:` reference is pinned to a full commit SHA with a version comment; Dependabot updates the pins. All checkouts disable credential persistence.
 
-`.github/workflows/studio-ci.yml` runs on pull requests and main:
+`.github/workflows/studio-ci.yml` runs on pull requests, pushes to main and manual dispatch:
 
 - lint and format verification;
 - type checking;
@@ -90,7 +90,7 @@ Every `uses:` reference is pinned to a full commit SHA with a version comment; D
 - macOS and Windows packaging;
 - packaged application smoke;
 - Intel-slice smoke and MCP verification through Rosetta;
-- exact artifact-name and installer checks.
+- unpacked-bundle checks for the exact macOS and Windows artifact layout.
 
 `.github/workflows/studio-release.yml` runs on `studio-v*` tags and on manual dispatch:
 
@@ -128,9 +128,9 @@ Never commit certificates, passwords, API tokens or provisioning profiles.
 Use the GitHub API rather than the web UI for a reproducible receipt:
 
 ```sh
-gh release view studio-v0.3.0 --json tagName,isDraft,isPrerelease,assets,body
-gh release download studio-v0.3.0 --pattern SHA256SUMS.txt
-gh attestation verify IPloom-Studio-0.3.0-darwin-universal.dmg --repo j4tmr/iploom
+gh release view studio-v0.4.0 --json tagName,isDraft,isPrerelease,assets,body
+gh release download studio-v0.4.0 --pattern SHA256SUMS.txt
+gh attestation verify IPloom-Studio-0.4.0-darwin-universal.dmg --repo j4tmr/iploom
 ```
 
 Download at least one asset per platform, recompute its SHA-256, and compare it with the release checksum file. A tag, a green build or an uploaded artifact alone does not prove the downloaded file is intact.

@@ -103,6 +103,11 @@ function verifyInputs(): void {
 }
 
 function verifyDocs(): void {
+  // A bumped version must ship user-facing notes. The release workflow also
+  // asserts this, but checking here makes `bun run check` fail on the pull
+  // request that bumps the version instead of at tag time.
+  requireFile(`docs/release-notes/${packageVersion}.md`, 200);
+
   const versionReferences = [
     /studio-v(\d+\.\d+\.\d+)/g,
     /IPloom-Studio-(\d+\.\d+\.\d+)/g,

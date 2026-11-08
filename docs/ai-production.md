@@ -1,6 +1,6 @@
 # AI production desk / AI 制作台
 
-These features are on the development branch after 0.3.0, not in the already-published 0.3.0 installer. / 以下能力晚于 0.3.0，已发布的 0.3.0 安装包不包含。
+These features ship in the 0.4.0 installers. / 以下能力已包含在 0.4.0 安装包中。
 
 ## Import an existing novel / 导入已有小说
 
@@ -26,7 +26,7 @@ The shared production desk is available above each view. Select world, novel, ch
 
 各视图顶部的制作台可选择对象和模板。提示词包含相关设定、章节、人物与风格约束；可编辑、复制或执行。超过 10 万字符会要求缩小范围，绝不静默截断。
 
-While running, the UI displays the task label and streamed authored output. Cancel stops the request and reports a cancellation, distinct from a timeout. A request is stopped when the provider sends no data for 120 seconds, or when an active stream stalls for 60 seconds; every received chunk resets the idle timer, so long generations that keep producing output can finish. Incomplete, filtered or truncated responses are not marked successful. When the provider rejects a request, the error shows its sanitized explanation, a status-specific hint and, for rate limits, `Retry-After`; key-like text is redacted. The display is generated work, not a model's private reasoning. Output is saved as a workflow draft for review, never automatically replacing a chapter or approved asset.
+While running, the UI displays the task label and streamed authored output. Cancel stops the request and reports a cancellation, distinct from a timeout. A request is stopped when the provider sends no first byte within 120 seconds, or when an active stream produces no chunk for 60 seconds; every received chunk resets the idle timer, so long generations that keep producing output can finish. Incomplete, filtered or truncated responses are not marked successful. When the provider rejects a request, the error shows its sanitized explanation, a status-specific hint and, for rate limits, `Retry-After`; key-like text is redacted. The display is generated work, not a model's private reasoning. Output is saved as a workflow draft for review, never automatically replacing a chapter or approved asset.
 
 执行时显示任务名称和实时产出，可取消；取消与超时分别报告。首个数据 120 秒未到达，或流式输出中途 60 秒没有新数据时会停止；每收到一块数据都会重置空闲计时，因此持续输出的长生成可以正常完成。不完整结果不会算成功，也不会自动覆盖原稿。服务商拒绝请求时显示清洗后的说明与针对性提示，429 还会附带 `Retry-After`；疑似密钥的内容会被隐去。没有真实提供商凭据时可使用本地模拟服务验证执行链路，不代表某个远程模型已实测兼容。
 
@@ -44,4 +44,4 @@ ArcReel exports include `production/approved-designs.json`, containing only comp
 
 服装、布景等已完成设计作为文字规格随包导出；图片、视频与最终渲染仍由下游工具完成。未审阅设计不进入该文件。
 
-Schema v6 is current. Workflow brief/deliverable/result text limits are 100k/100k/200k characters per language. Migration to v6 strips composed model prompts that older builds had written back into task briefs and deliverables (briefs return to their template description; deliverables return to the standard review instructions), so the composed prompt is no longer nested into itself on every run and a cancelled run no longer loses the author's brief. Model runs record metadata (`lastRun`: model, prompt hash, source revision, timestamp), keep the pre-run result in `previousResult`, and flag done tasks that consume a replaced output with `resultSuperseded` until they are re-reviewed. Existing v1–v5 data remain readable through the migration chain. Older 0.3.0 builds reject results longer than their original 500-character limit; keep a workspace backup before downgrading. No database or production migration is involved.
+Schema v7 is current. Workflow brief/deliverable/result text limits are 100k/100k/200k characters per language. Migration to v6 strips composed model prompts that older builds had written back into task briefs and deliverables (briefs return to their template description; deliverables return to the standard review instructions), so the composed prompt is no longer nested into itself on every run and a cancelled run no longer loses the author's brief. Migration to v7 pins an explicit prompt template on every workflow task, inferred from its title, brief and kind, so a later title edit cannot silently switch the instructions; invalid stored templates are dropped. Model runs record metadata (`lastRun`: model, prompt hash, source revision, timestamp), keep the pre-run result in `previousResult`, and flag done tasks that consume a replaced output with `resultSuperseded` until they are re-reviewed. Existing v1–v6 data remain readable through the migration chain. Older 0.3.0 builds reject the v7 workspace and results longer than their original 500-character limit; keep a workspace backup before downgrading. No database or production migration is involved.

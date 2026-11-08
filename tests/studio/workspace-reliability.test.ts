@@ -172,10 +172,15 @@ test.skipIf(process.platform !== "win32")(
   "saving replaces the workspace while another reader keeps it open",
   async () => {
     const store = await storeInTemp();
-    await store.save(named("before"));
+    const before = named("before");
+    await store.save(before);
+    // The second save must look like a newer edit: the stale-save guard
+    // rejects a same-revision write whose content differs.
+    const after = named("after");
+    after.revision = before.revision + 1;
     const reader = await open(store.filePath, "r");
     try {
-      await store.save(named("after"));
+      await store.save(after);
     } finally {
       await reader.close();
     }

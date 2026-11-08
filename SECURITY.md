@@ -65,7 +65,7 @@ The initial release is unsigned. The project publishes SHA-256 checksums, but un
 Release workflows attach Sigstore build provenance to every `.dmg`, `.zip` and `.exe`. Verify a downloaded file with the GitHub CLI:
 
 ```sh
-gh attestation verify IPloom-Studio-0.3.0-darwin-universal.dmg --repo j4tmr/iploom
+gh attestation verify IPloom-Studio-0.4.0-darwin-universal.dmg --repo j4tmr/iploom
 ```
 
 An attestation binds the file to the workflow run, repository and source commit that produced it. It does not authenticate the publisher the way platform code signing does, and it cannot help if the repository or a maintainer account is compromised.
