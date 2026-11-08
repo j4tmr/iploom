@@ -337,13 +337,17 @@ export function buildWorkflowBrief(
     ...section(zh ? "目标" : "Objective", [
       paragraph(
         displayText(task.brief, locale),
-        zh ? "按任务标题完成可验收的创作工作。" : "Complete the task with a reviewable result.",
+        zh
+          ? "按任务标题完成可验收的创作工作。"
+          : "Complete the task with a reviewable result.",
       ),
     ]),
     ...section(zh ? "交付物" : "Deliverable", [
       paragraph(
         displayText(task.deliverable, locale),
-        zh ? "一份可直接进入下一道审校的成果。" : "A result ready for the next review step.",
+        zh
+          ? "一份可直接进入下一道审校的成果。"
+          : "A result ready for the next review step.",
       ),
     ]),
     ...standardsPromptSection(workspace, task.universeId, locale),
@@ -513,8 +517,12 @@ export function buildWorkflowBrief(
     lines.push(
       ...section(zh ? "时间线与状态约束" : "Timeline and state constraints", [
         ...(zh
-          ? ["以下按章节或故事内时间排序。标为“提出”的内容只是制作提案，不能改写已定稿正文。"]
-          : ["Events are ordered by chapter or in-world time. Items marked proposed are production hypotheses and cannot rewrite approved prose."]),
+          ? [
+              "以下按章节或故事内时间排序。标为“提出”的内容只是制作提案，不能改写已定稿正文。",
+            ]
+          : [
+              "Events are ordered by chapter or in-world time. Items marked proposed are production hypotheses and cannot rewrite approved prose.",
+            ]),
         ...timeline.canon.map((event) => {
           return `- **${timelineAnchorLabel(workspace, event, locale)} · ${displayText(event.title, locale)}** (${timelineSubjectReference(event)}): ${event.stateBefore || "—"} → ${event.stateAfter || "—"}${event.productionPrompt ? `\n  - ${zh ? "制作约束" : "Production constraint"}: ${event.productionPrompt}` : ""}${event.evidence ? `\n  - ${zh ? "证据" : "Evidence"}: ${event.evidence}` : ""}`;
         }),
@@ -582,4 +590,3 @@ export function buildWorkflowBrief(
 
   return `${lines.join("\n").trim()}\n`;
 }
-

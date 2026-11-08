@@ -56,7 +56,7 @@ function developmentOptions(
     bundle: true,
     platform: "node",
     format: "cjs",
-    target: "node22",
+    target: "node24",
     external: ["electron"],
     absWorkingDir: repositoryRoot,
     sourcemap: true,

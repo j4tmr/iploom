@@ -137,11 +137,7 @@ test("attachOverlayKeyboard listens in capture phase and detaches cleanly", () =
   type Listener = (event: unknown) => void;
   const listeners = new Map<string, { listener: Listener; capture: unknown }>();
   const target = {
-    addEventListener: (
-      type: string,
-      listener: Listener,
-      capture?: unknown,
-    ) => {
+    addEventListener: (type: string, listener: Listener, capture?: unknown) => {
       listeners.set(type, { listener, capture });
     },
     removeEventListener: (type: string, listener: Listener) => {
@@ -152,7 +148,10 @@ test("attachOverlayKeyboard listens in capture phase and detaches cleanly", () =
 
   const detach = attachOverlayKeyboard(
     stack,
-    target as unknown as Pick<Window, "addEventListener" | "removeEventListener">,
+    target as unknown as Pick<
+      Window,
+      "addEventListener" | "removeEventListener"
+    >,
   );
   const registered = listeners.get("keydown");
   expect(registered?.capture).toBe(true);

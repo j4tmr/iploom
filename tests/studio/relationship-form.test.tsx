@@ -3,7 +3,10 @@ import { afterEach, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { RelationshipModal } from "../../apps/studio/src/components/forms.tsx";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
-import type { Relationship, StudioWorkspace } from "../../apps/studio/src/core/types.ts";
+import type {
+  Relationship,
+  StudioWorkspace,
+} from "../../apps/studio/src/core/types.ts";
 import { translator } from "../../apps/studio/src/i18n.ts";
 
 afterEach(cleanup);

@@ -20,22 +20,22 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 
 ## Tools
 
-| Tool | Read-only | Purpose |
-| --- | --- | --- |
-| `list_story_worlds` | yes | List universes and compact counts |
-| `get_story_world` | yes | Read world rules, cast, places, factions, lore and relationships |
-| `list_novels` | yes | List novels, optionally filtered by universe |
-| `get_novel` | yes | Read novel metadata, chapter plans and statistics |
-| `get_chapter` | yes | Read a chapter's full prose, outline, beats and scenes |
-| `search_ip` | yes | Search the bilingual IP library |
-| `get_relationship_graph` | yes | Return graph nodes, edges, degrees and warnings |
-| `list_workflow_tasks` | yes | List AI authoring tasks with readiness, blockers and optional world/novel/status filters |
-| `get_workflow_brief` | yes | Generate a deterministic, task-scoped bilingual Markdown brief |
-| `list_standards` | yes | List foundation standards with kind, status, scope and pinned task count |
-| `get_standard` | yes | Read one standard, its applied scope and the tasks that pin its version |
-| `create_standard` | no | Register a foundation standard as a draft (or active) with schema validation |
-| `update_standard` | no | Update a standard; content changes bump its version, status-only changes do not |
-| `export_arcreel_bundle` | no | Write an ArcReel-style handoff package |
+| Tool                     | Read-only | Purpose                                                                                  |
+| ------------------------ | --------- | ---------------------------------------------------------------------------------------- |
+| `list_story_worlds`      | yes       | List universes and compact counts                                                        |
+| `get_story_world`        | yes       | Read world rules, cast, places, factions, lore and relationships                         |
+| `list_novels`            | yes       | List novels, optionally filtered by universe                                             |
+| `get_novel`              | yes       | Read novel metadata, chapter plans and statistics                                        |
+| `get_chapter`            | yes       | Read a chapter's full prose, outline, beats and scenes                                   |
+| `search_ip`              | yes       | Search the bilingual IP library                                                          |
+| `get_relationship_graph` | yes       | Return graph nodes, edges, degrees and warnings                                          |
+| `list_workflow_tasks`    | yes       | List AI authoring tasks with readiness, blockers and optional world/novel/status filters |
+| `get_workflow_brief`     | yes       | Generate a deterministic, task-scoped bilingual Markdown brief                           |
+| `list_standards`         | yes       | List foundation standards with kind, status, scope and pinned task count                 |
+| `get_standard`           | yes       | Read one standard, its applied scope and the tasks that pin its version                  |
+| `create_standard`        | no        | Register a foundation standard as a draft (or active) with schema validation             |
+| `update_standard`        | no        | Update a standard; content changes bump its version, status-only changes do not          |
+| `export_arcreel_bundle`  | no        | Write an ArcReel-style handoff package                                                   |
 
 Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The server registers 14 tools: eleven read-only, two standard writes (`create_standard`, `update_standard`) and one export (`export_arcreel_bundle`). Those three are the only tools that can change local state; writes are serialized and re-validated against the workspace schema. Tool names and access levels come from `apps/studio/src/core/mcp-tools.ts`, the single source the server, the settings copy and the verification script all share.
 

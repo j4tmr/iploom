@@ -11,7 +11,13 @@ import {
   saveBrowserSnapshot,
   saveBrowserWorkspace,
 } from "./browser-workspace.ts";
-import type { AiCompletion, AiConfig, AiConfigInfo, AiProgress, AiRequest } from "./core/ai.ts";
+import type {
+  AiCompletion,
+  AiConfig,
+  AiConfigInfo,
+  AiProgress,
+  AiRequest,
+} from "./core/ai.ts";
 
 export interface LoadedWorkspace {
   workspace: StudioWorkspace;
@@ -99,11 +105,23 @@ function browserLoad(): LoadedWorkspace {
 }
 
 export const browserFallback: StudioBridge = {
-  async aiConfig() { return { endpoint: "", model: "", configured: false }; },
-  async configureAi() { throw new Error("模型 API 请在桌面版配置 / Configure model APIs in the desktop app."); },
-  async runAi() { throw new Error("模型 API 请使用桌面版 / Model APIs require the desktop app."); },
+  async aiConfig() {
+    return { endpoint: "", model: "", configured: false };
+  },
+  async configureAi() {
+    throw new Error(
+      "模型 API 请在桌面版配置 / Configure model APIs in the desktop app.",
+    );
+  },
+  async runAi() {
+    throw new Error(
+      "模型 API 请使用桌面版 / Model APIs require the desktop app.",
+    );
+  },
   async cancelAi() {},
-  onAiProgress() { return () => undefined; },
+  onAiProgress() {
+    return () => undefined;
+  },
   async load() {
     return browserLoad();
   },
@@ -121,7 +139,9 @@ export const browserFallback: StudioBridge = {
     const snapshot = loadBrowserSnapshot(localStorage);
     if (!snapshot) throw new Error("No browser snapshot is available.");
     const snapshotPath = saveBrowserSnapshot(localStorage);
-    saveBrowserWorkspace(localStorage, snapshot.workspace, { allowRollback: true });
+    saveBrowserWorkspace(localStorage, snapshot.workspace, {
+      allowRollback: true,
+    });
     return { ...snapshot, snapshotPath };
   },
   onFlushRequest() {

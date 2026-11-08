@@ -27,12 +27,15 @@
   "packageManager": "bun@1.4.2",
   "engines": {
     "bun": ">=1.4.2",
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
     "dev": "bun run studio:dev",
     "build": "bun run studio:build:release",
-    "check": "bun run typecheck && bun run test:coverage && bun run studio:build:release && bun run studio:verify-mcp",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "check": "bun run lint && bun run format:check && bun run typecheck && bun run test:coverage && bun run studio:build:release && bun scripts/studio/verify-release-inputs.ts inputs && bun scripts/studio/verify-release-inputs.ts docs && bun run studio:verify-mcp",
     "test": "bun test tests/studio",
     "test:studio": "bun test tests/studio",
     "test:coverage": "bun test tests/studio --coverage",
@@ -55,6 +58,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.6",
     "@happy-dom/global-registrator": "21.0.4",
     "@modelcontextprotocol/client": "2.3.1",
     "@testing-library/dom": "10.4.2",

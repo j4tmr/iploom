@@ -97,9 +97,13 @@ test("snapshot pruning keeps the newest twenty", async () => {
 test("restoring only accepts files inside the snapshot directory", async () => {
   const store = await storeInTemp();
   await store.save(workspaceTitled("safe"));
-  await expect(store.restoreSnapshot(store.filePath)).rejects.toThrow(/snapshot/);
+  await expect(store.restoreSnapshot(store.filePath)).rejects.toThrow(
+    /snapshot/,
+  );
   await expect(
-    store.restoreSnapshot(join(store.snapshotDirectory, "..", "workspace.json")),
+    store.restoreSnapshot(
+      join(store.snapshotDirectory, "..", "workspace.json"),
+    ),
   ).rejects.toThrow(/snapshot/);
 });
 

@@ -15,13 +15,13 @@
 <body>
   <a class="skip" href="#main">跳转至正文</a>
   <header class="header">
-    <a class="brand" href="#"><span class="brand-icon">界</span><span>IPloom <small>STUDIO</small></span></a>
+    <a class="brand" href="#main"><span class="brand-icon">界</span><span>IPloom <small>STUDIO</small></span></a>
     <nav aria-label="主导航"><a href="#features">功能</a><a href="#workflow">制作流程</a><a href="#guide">使用指南</a><a href="#download">下载</a><a class="github" href="https://github.com/j4tmr/iploom">GitHub ↗</a></nav>
   </header>
   <main id="main">
     <section class="hero wrap">
       <div class="hero-copy"><p class="eyebrow">YOUR STORIES. ONE CONNECTED WORLD.</p><h1>把故事，<br>织成一个<span>世界。</span></h1><p class="lead">从一段小说，到有记忆的人物、有逻辑的关系、有连续性的场景。<br>让每一份创作，都成为下一部漫剧的制作资产。</p><div class="actions"><a class="button primary" href="#download">下载桌面版 <span>↓</span></a><a class="button" href="#workflow">了解制作流程 <span>↗</span></a></div><div class="meta"><span>本地优先</span><span>中文 / English</span><span>macOS / Windows</span><span>MIT 开源</span></div></div>
-      <div class="world-art" aria-label="故事世界由小说、人物、场景与分镜相互连接的示意图"><div class="orb orb-one"></div><div class="orb orb-two"></div><div class="world-center"><span>界</span><strong>一个 IP 世界</strong><small>CANON · CONTINUITY · CREATION</small></div><div class="world-node node-book">01 <b>小说与章节</b><small>故事从这里生长</small></div><div class="world-node node-cast">02 <b>人物与关系</b><small>每个选择都有来处</small></div><div class="world-node node-scene">03 <b>服装与场景</b><small>让设定变得可制作</small></div><div class="world-node node-shot">04 <b>分镜与交付</b><small>走向下一种表达</small></div><span class="art-note">FROM STORY BIBLE TO COMIC DRAMA</span></div>
+      <div class="world-art" role="img" aria-label="故事世界由小说、人物、场景与分镜相互连接的示意图"><div class="orb orb-one"></div><div class="orb orb-two"></div><div class="world-center"><span>界</span><strong>一个 IP 世界</strong><small>CANON · CONTINUITY · CREATION</small></div><div class="world-node node-book">01 <b>小说与章节</b><small>故事从这里生长</small></div><div class="world-node node-cast">02 <b>人物与关系</b><small>每个选择都有来处</small></div><div class="world-node node-scene">03 <b>服装与场景</b><small>让设定变得可制作</small></div><div class="world-node node-shot">04 <b>分镜与交付</b><small>走向下一种表达</small></div><span class="art-note">FROM STORY BIBLE TO COMIC DRAMA</span></div>
     </section>
 
     <div class="version-note wrap"><span class="pill">版本说明</span><p><strong>可下载版本：0.3.0。</strong>本页同时介绍新的制作流程。标注“新版源码”的小说导入、模型执行、服装提示词等能力不包含在 0.3.0 安装包中；新安装包发布前，请从源码运行。<a href="https://github.com/j4tmr/iploom/pull/10">查看开发变更 ↗</a></p></div>
@@ -58,6 +58,6 @@
 
     <section id="faq" class="wrap section faq"><p class="eyebrow">GOOD TO KNOW</p><h2>开始之前，你可能想知道。</h2><details><summary>这是写小说的软件，还是漫剧生成器？</summary><p>它是连接两者的 IP 制作工作台：维护故事事实来源，把小说、人物、服装、场景、分镜与提示词组织成可追溯的资料。当前不内置图片、视频或最终成片渲染引擎。</p></details><details><summary>AI 会自动改掉我的小说吗？</summary><p>不会。导入分析要经过审阅；制作任务结果保存到工作流待审区。作者确认后再更新正文或结构化资产。</p></details><details><summary>我可以使用本地模型吗？</summary><p>可以配置兼容 Chat Completions 的回环 HTTP 服务。远程服务必须使用 HTTPS；具体模型需要支持所需上下文与输出格式。不同提供商的兼容性需要实际验证。</p></details><details><summary>为什么导入时需要核对人物名字与关系？</summary><p>模型可能把别名当成新人、把同名人物合并，或误判关系。系统检查精确原文引用与引用完整性，但无法代替作者判断。审阅阶段可编辑提取结果。</p></details><details><summary>MCP 能做什么？</summary><p>本地 MCP 客户端可列出世界和小说、读取章节、搜索设定、读取关系图和工作流简报，并按明确工具调用导出 ArcReel 包。查询工具保持只读；导出工具会写文件。</p></details><details><summary>如何运行新版源码？</summary><p>克隆仓库，按 <a href="https://github.com/j4tmr/iploom/blob/main/CONTRIBUTING.md">开发说明</a> 安装仓库指定的 Bun / Node，执行 <code>bun install --frozen-lockfile</code> 和 <code>bun run dev</code>。源码已合并不意味着新桌面安装包已经发布。</p></details><details><summary>可以把工作区交回旧版本吗？</summary><p>新版兼容读取原有工作区。工作流长文本上限已经放宽；旧版 0.3.0 无法读取超过旧 500 字符限制的任务内容。降级前保留独立备份。</p></details></section>
   </main>
-  <footer class="wrap"><a class="brand" href="#"><span class="brand-icon">界</span><span>IPloom <small>STUDIO</small></span></a><p>让每个故事，都拥有继续生长的结构。</p><div><a href="https://github.com/j4tmr/iploom">源代码</a><a href="https://github.com/j4tmr/iploom/issues">反馈问题</a><a href="https://github.com/j4tmr/iploom/blob/main/README.md">English docs</a><a href="https://github.com/j4tmr/iploom/blob/main/LICENSE">MIT License</a></div></footer>
+  <footer class="wrap"><a class="brand" href="#main"><span class="brand-icon">界</span><span>IPloom <small>STUDIO</small></span></a><p>让每个故事，都拥有继续生长的结构。</p><div><a href="https://github.com/j4tmr/iploom">源代码</a><a href="https://github.com/j4tmr/iploom/issues">反馈问题</a><a href="https://github.com/j4tmr/iploom/blob/main/README.md">English docs</a><a href="https://github.com/j4tmr/iploom/blob/main/LICENSE">MIT License</a></div></footer>
 </body>
 </html>

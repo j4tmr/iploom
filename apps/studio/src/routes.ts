@@ -1,7 +1,11 @@
 export type StudioRoute =
   | { name: "dashboard" }
   | { name: "library" }
-  | { name: "universe"; id: string; tab?: "overview" | "cast" | "atlas" | "graph" | "stories" }
+  | {
+      name: "universe";
+      id: string;
+      tab?: "overview" | "cast" | "atlas" | "graph" | "stories";
+    }
   | { name: "work"; workId: string }
   | { name: "cast"; universeId?: string }
   | { name: "graph"; universeId?: string }

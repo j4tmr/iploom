@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { AiConfigInfo } from "../core/ai.ts";
 import { MCP_TOOL_NAMES, mcpToolsNote } from "../core/mcp-tools.ts";
 import type {
@@ -55,29 +55,38 @@ export function SettingsView({
   const [snapshotBusy, setSnapshotBusy] = useState(false);
 
   useEffect(() => {
-    bridge.appInfo().then(setInfo).catch(() => setInfo(null));
+    bridge
+      .appInfo()
+      .then(setInfo)
+      .catch(() => setInfo(null));
   }, []);
 
-  const refreshSnapshots = async () => {
+  const refreshSnapshots = useCallback(async () => {
     try {
       setSnapshots(await bridge.listSnapshots());
     } catch {
       setSnapshots([]);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void refreshSnapshots();
-  }, []);
+  }, [refreshSnapshots]);
 
   const snapshotReason = (reason: string) =>
-    reason === "before-reset-demo" ? t("snapshotReasonResetDemo")
-    : reason === "before-delete-world" ? t("snapshotReasonDeleteWorld")
-    : reason === "before-delete-novel" ? t("snapshotReasonDeleteNovel")
-    : reason === "before-delete-chapter" ? t("snapshotReasonDeleteChapter")
-    : reason === "before-import-novel" ? t("snapshotReasonImport")
-    : reason === "before-restore" ? t("snapshotReasonRestore")
-    : reason;
+    reason === "before-reset-demo"
+      ? t("snapshotReasonResetDemo")
+      : reason === "before-delete-world"
+        ? t("snapshotReasonDeleteWorld")
+        : reason === "before-delete-novel"
+          ? t("snapshotReasonDeleteNovel")
+          : reason === "before-delete-chapter"
+            ? t("snapshotReasonDeleteChapter")
+            : reason === "before-import-novel"
+              ? t("snapshotReasonImport")
+              : reason === "before-restore"
+                ? t("snapshotReasonRestore")
+                : reason;
 
   const restoreSnapshot = async (snapshot: WorkspaceSnapshotInfo) => {
     if (!window.confirm(t("snapshotRestoreConfirm"))) return;
@@ -87,7 +96,10 @@ export function SettingsView({
       notify(t("snapshotRestored"));
       await refreshSnapshots();
     } catch (reason) {
-      notify(reason instanceof Error ? reason.message : String(reason), "error");
+      notify(
+        reason instanceof Error ? reason.message : String(reason),
+        "error",
+      );
     } finally {
       setSnapshotBusy(false);
     }
@@ -108,12 +120,14 @@ export function SettingsView({
           <SectionTitle title={t("interfaceLanguage")} />
           <div className="segmented large">
             <button
+              type="button"
               className={workspace.settings.locale === "zh-CN" ? "active" : ""}
               onClick={() => onUpdateSettings({ locale: "zh-CN" })}
             >
               中文
             </button>
             <button
+              type="button"
               className={workspace.settings.locale === "en" ? "active" : ""}
               onClick={() => onUpdateSettings({ locale: "en" })}
             >
@@ -123,20 +137,28 @@ export function SettingsView({
 
           <SectionTitle title={t("theme")} />
           <div className="theme-options">
-            {([
-              ["system", t("themeSystem"), "grid"],
-              ["light", t("themeLight"), "sun"],
-              ["dark", t("themeDark"), "moon"],
-            ] as const).map(([value, label, icon]) => (
+            {(
+              [
+                ["system", t("themeSystem"), "grid"],
+                ["light", t("themeLight"), "sun"],
+                ["dark", t("themeDark"), "moon"],
+              ] as const
+            ).map(([value, label, icon]) => (
               <button
+                type="button"
                 key={value}
                 className={`theme-option ${workspace.settings.theme === value ? "active" : ""}`}
                 onClick={() => onUpdateSettings({ theme: value as ThemeMode })}
               >
                 <span className={`theme-preview theme-preview-${value}`}>
-                  <i /><i /><i />
+                  <i />
+                  <i />
+                  <i />
                 </span>
-                <span><Icon name={icon} size={15} />{label}</span>
+                <span>
+                  <Icon name={icon} size={15} />
+                  {label}
+                </span>
               </button>
             ))}
           </div>
@@ -147,7 +169,8 @@ export function SettingsView({
                 value={workspace.settings.defaultAspectRatio}
                 onChange={(event) =>
                   onUpdateSettings({
-                    defaultAspectRatio: event.target.value as WorkspaceSettings["defaultAspectRatio"],
+                    defaultAspectRatio: event.target
+                      .value as WorkspaceSettings["defaultAspectRatio"],
                   })
                 }
               >
@@ -174,7 +197,9 @@ export function SettingsView({
 
         <section className="settings-panel mcp-settings-card">
           <div className="mcp-header">
-            <span className="mcp-orb"><Icon name="terminal" size={22} /></span>
+            <span className="mcp-orb">
+              <Icon name="terminal" size={22} />
+            </span>
             <div>
               <span className="eyebrow">MODEL CONTEXT PROTOCOL</span>
               <h2>{t("mcpTitle")}</h2>
@@ -182,7 +207,9 @@ export function SettingsView({
           </div>
           <p>{t("mcpLead")}</p>
           <div className="tool-pills">
-            {MCP_TOOL_NAMES.map((tool) => <code key={tool}>{tool}</code>)}
+            {MCP_TOOL_NAMES.map((tool) => (
+              <code key={tool}>{tool}</code>
+            ))}
           </div>
           {info && !info.desktop ? (
             <p className="muted small">{t("browserPreview")}</p>
@@ -220,7 +247,11 @@ export function SettingsView({
           <div className="data-path">
             <Icon name="folder" size={19} />
             <code>{path || info?.workspacePath || "—"}</code>
-            <Button variant="ghost" icon="external" onClick={() => void bridge.openFolder(path)}>
+            <Button
+              variant="ghost"
+              icon="external"
+              onClick={() => void bridge.openFolder(path)}
+            >
               {t("openFolder")}
             </Button>
           </div>
@@ -298,13 +329,19 @@ export function SettingsView({
             <h2>IPloom Studio</h2>
             <p>{t("aboutBody")}</p>
             <div className="about-meta">
-              <span>{t("appVersion")} <b>{info?.version ?? APP_VERSION}</b></span>
-              <span>{t("platform")} <b>{info?.platform ?? navigator.platform}</b></span>
+              <span>
+                {t("appVersion")} <b>{info?.version ?? APP_VERSION}</b>
+              </span>
+              <span>
+                {t("platform")} <b>{info?.platform ?? navigator.platform}</b>
+              </span>
               <span>{workspace.settings.locale}</span>
             </div>
             <Button
               icon="external"
-              onClick={() => void bridge.openExternal("https://github.com/j4tmr/iploom")}
+              onClick={() =>
+                void bridge.openExternal("https://github.com/j4tmr/iploom")
+              }
             >
               {t("projectHome")}
             </Button>

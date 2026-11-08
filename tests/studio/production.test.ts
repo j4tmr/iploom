@@ -1,26 +1,91 @@
 import { expect, jest, test } from "bun:test";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
-import { analyzeManuscriptChunks, buildManuscriptImport, manuscriptChunks, mergeManuscriptImport, parseAnalysis, planManuscriptAnalysis, splitManuscript, type ManuscriptAnalysis } from "../../apps/studio/src/core/manuscript.ts";
-import { CHAPTER_LIMITS, MAX_AI_PROMPT_LENGTH } from "../../apps/studio/src/core/types.ts";
-import { buildProductionPrompt, createProductionTasks, effectiveProductionTemplate, productionTemplates, resolveProductionScope, taskProductionPrompt } from "../../apps/studio/src/core/production.ts";
-import { buildWorkflowBrief, setWorkflowTaskResult } from "../../apps/studio/src/core/workflow.ts";
-import { AI_CANCELED_MESSAGE, aiConfigSchema, isReportableAiError, runCompletion } from "../../apps/studio/src/node/ai-client.ts";
+import {
+  analyzeManuscriptChunks,
+  buildManuscriptImport,
+  manuscriptChunks,
+  mergeManuscriptImport,
+  parseAnalysis,
+  planManuscriptAnalysis,
+  splitManuscript,
+  type ManuscriptAnalysis,
+} from "../../apps/studio/src/core/manuscript.ts";
+import {
+  CHAPTER_LIMITS,
+  MAX_AI_PROMPT_LENGTH,
+} from "../../apps/studio/src/core/types.ts";
+import {
+  buildProductionPrompt,
+  createProductionTasks,
+  effectiveProductionTemplate,
+  productionTemplates,
+  resolveProductionScope,
+  taskProductionPrompt,
+} from "../../apps/studio/src/core/production.ts";
+import {
+  buildWorkflowBrief,
+  setWorkflowTaskResult,
+} from "../../apps/studio/src/core/workflow.ts";
+import {
+  AI_CANCELED_MESSAGE,
+  aiConfigSchema,
+  isReportableAiError,
+  runCompletion,
+} from "../../apps/studio/src/node/ai-client.ts";
 import { buildArcReelBundle } from "../../apps/studio/src/core/arcreel.ts";
 
-const source = "前言\r\n第1章 灯塔\r\n阿青在灯塔遇到导师白舟。\r\n第2章 归途\r\n阿青离开灯塔。\r\n";
-const analysis: ManuscriptAnalysis = { world: null, characters: [
-  { name: "阿青", summary: "旅人", appearance: "", evidence: "阿青" },
-  { name: "白舟", summary: "导师", appearance: "", evidence: "导师白舟" },
-], locations: [{ name: "灯塔", summary: "会面地点", evidence: "灯塔" }], factions: [], lore: [], relationships: [{ source: "白舟", target: "阿青", type: "mentor", mutual: false, summary: "导师", evidence: "阿青在灯塔遇到导师白舟" }], scenes: [{ title: "灯塔会面", summary: "师徒见面", location: "灯塔", characters: ["阿青", "白舟"], evidence: "阿青在灯塔遇到导师白舟" }] };
+const source =
+  "前言\r\n第1章 灯塔\r\n阿青在灯塔遇到导师白舟。\r\n第2章 归途\r\n阿青离开灯塔。\r\n";
+const analysis: ManuscriptAnalysis = {
+  world: null,
+  characters: [
+    { name: "阿青", summary: "旅人", appearance: "", evidence: "阿青" },
+    { name: "白舟", summary: "导师", appearance: "", evidence: "导师白舟" },
+  ],
+  locations: [{ name: "灯塔", summary: "会面地点", evidence: "灯塔" }],
+  factions: [],
+  lore: [],
+  relationships: [
+    {
+      source: "白舟",
+      target: "阿青",
+      type: "mentor",
+      mutual: false,
+      summary: "导师",
+      evidence: "阿青在灯塔遇到导师白舟",
+    },
+  ],
+  scenes: [
+    {
+      title: "灯塔会面",
+      summary: "师徒见面",
+      location: "灯塔",
+      characters: ["阿青", "白舟"],
+      evidence: "阿青在灯塔遇到导师白舟",
+    },
+  ],
+};
 
-const minimalAnalysis: ManuscriptAnalysis = { world: null, characters: [{ name: "阿青", summary: "", appearance: "", evidence: "阿青" }], locations: [], factions: [], lore: [], relationships: [], scenes: [] };
+const minimalAnalysis: ManuscriptAnalysis = {
+  world: null,
+  characters: [{ name: "阿青", summary: "", appearance: "", evidence: "阿青" }],
+  locations: [],
+  factions: [],
+  lore: [],
+  relationships: [],
+  scenes: [],
+};
 
 test("chapter splitting preserves every source character including headings, preface and CRLF", () => {
   const chapters = splitManuscript(source);
   expect(chapters).toHaveLength(3);
   expect(chapters.map((item) => item.content).join("")).toBe(source);
-  expect(manuscriptChunks(chapters, 7).map((item) => item.text).join("")).toBe(source);
+  expect(
+    manuscriptChunks(chapters, 7)
+      .map((item) => item.text)
+      .join(""),
+  ).toBe(source);
   expect(splitManuscript("# Start\nOne\n## Scene two\nTwo")).toHaveLength(2);
   expect(splitManuscript("Chapter I\nOne\nChapter 2\nTwo")).toHaveLength(2);
   expect(() => splitManuscript("\0binary")).toThrow();
@@ -37,22 +102,38 @@ test("heading recognition normalizes markdown, full-width digits and spaces with
     ["第1章\n正文\n第二节课我们去了灯塔。", ["第1章"]],
     ["第一章 他走了。\n正文", ["正文 / Manuscript"]],
     ["序章 雪夜\n...\n楔子\n...\n尾声\n...", ["序章 雪夜", "楔子", "尾声"]],
-    ["Prologue\n...\nChapter One\n...\nEpilogue\n...", ["Prologue", "Chapter One", "Epilogue"]],
+    [
+      "Prologue\n...\nChapter One\n...\nEpilogue\n...",
+      ["Prologue", "Chapter One", "Epilogue"],
+    ],
     ["Chapter I\nOne\nChapter 2\nTwo", ["Chapter I", "Chapter 2"]],
   ];
-  for (const [text, titles] of cases) expect(splitManuscript(text).map((chapter) => chapter.title)).toEqual(titles);
+  for (const [text, titles] of cases)
+    expect(splitManuscript(text).map((chapter) => chapter.title)).toEqual(
+      titles,
+    );
 });
 
 test("titled roman-numeral chapters split while invalid numerals stay prose", () => {
   const cases: Array<[string, string[]]> = [
-    ["Chapter IV: The Storm\nOne\nChapter 2: The Flood\nTwo", ["Chapter IV The Storm", "Chapter 2 The Flood"]],
+    [
+      "Chapter IV: The Storm\nOne\nChapter 2: The Flood\nTwo",
+      ["Chapter IV The Storm", "Chapter 2 The Flood"],
+    ],
     ["Chapter XII Return Home\nOne", ["Chapter XII Return Home"]],
     ["Chapter MIX\nOne", ["Chapter MIX"]],
     ["Chapter Vv\nOne", ["正文 / Manuscript"]],
   ];
-  for (const [text, titles] of cases) expect(splitManuscript(text).map((chapter) => chapter.title)).toEqual(titles);
+  for (const [text, titles] of cases)
+    expect(splitManuscript(text).map((chapter) => chapter.title)).toEqual(
+      titles,
+    );
   const text = "Chapter IV: The Storm\nOne\nChapter XII Return Home\nTwo";
-  expect(splitManuscript(text).map((chapter) => chapter.content).join("")).toBe(text);
+  expect(
+    splitManuscript(text)
+      .map((chapter) => chapter.content)
+      .join(""),
+  ).toBe(text);
 });
 
 test("chunks never split surrogate pairs or start or end with a lone surrogate", () => {
@@ -91,12 +172,18 @@ test("a 300k-character manuscript imports within schema limits", () => {
   const plan = planManuscriptAnalysis(chapters);
   expect(plan.block).toBe("");
   expect(plan.requestCount).toBeLessThanOrEqual(40);
-  const analyzed = plan.chunks.map((chunk) => ({ chapter: chunk.chapter, part: chunk.part, analysis: minimalAnalysis }));
+  const analyzed = plan.chunks.map((chunk) => ({
+    chapter: chunk.chapter,
+    part: chunk.part,
+    analysis: minimalAnalysis,
+  }));
   const workspace = buildManuscriptImport("长夜", chapters, analyzed, "zh-CN");
   expect(() => validateWorkspace(workspace)).not.toThrow();
   const chapter = workspace.works[0]!.chapters[0]!;
   expect(chapter.content).toBe(text);
-  expect(chapter.adaptationNotes.length).toBeLessThanOrEqual(CHAPTER_LIMITS.adaptationNotes);
+  expect(chapter.adaptationNotes.length).toBeLessThanOrEqual(
+    CHAPTER_LIMITS.adaptationNotes,
+  );
   expect(chapter.characterIds.length).toBeLessThanOrEqual(100);
   expect(chapter.scenes.length).toBeLessThanOrEqual(100);
 });
@@ -107,15 +194,40 @@ test("import caps cast links and scenes with review notices instead of failing v
   expect(parts).toHaveLength(2);
   const analysisFor = (prefix: string): ManuscriptAnalysis => ({
     world: null,
-    characters: Array.from({ length: 80 }, (_, index) => ({ name: `${prefix}${index}`, summary: "", appearance: "", evidence: "阿青" })),
-    locations: [], factions: [], lore: [], relationships: [],
-    scenes: Array.from({ length: 60 }, (_, index) => ({ title: `${prefix}场景${index}`, summary: "", location: "", characters: [], evidence: "阿青" })),
+    characters: Array.from({ length: 80 }, (_, index) => ({
+      name: `${prefix}${index}`,
+      summary: "",
+      appearance: "",
+      evidence: "阿青",
+    })),
+    locations: [],
+    factions: [],
+    lore: [],
+    relationships: [],
+    scenes: Array.from({ length: 60 }, (_, index) => ({
+      title: `${prefix}场景${index}`,
+      summary: "",
+      location: "",
+      characters: [],
+      evidence: "阿青",
+    })),
   });
-  const workspace = buildManuscriptImport("长章", [chapter], parts.map((part) => ({ chapter: 1, part: part.part, analysis: analysisFor(`P${part.part}_`) })), "zh-CN");
+  const workspace = buildManuscriptImport(
+    "长章",
+    [chapter],
+    parts.map((part) => ({
+      chapter: 1,
+      part: part.part,
+      analysis: analysisFor(`P${part.part}_`),
+    })),
+    "zh-CN",
+  );
   const imported = workspace.works[0]!.chapters[0]!;
   expect(imported.characterIds).toHaveLength(100);
   expect(imported.scenes).toHaveLength(100);
-  expect(imported.adaptationNotes.length).toBeLessThanOrEqual(CHAPTER_LIMITS.adaptationNotes);
+  expect(imported.adaptationNotes.length).toBeLessThanOrEqual(
+    CHAPTER_LIMITS.adaptationNotes,
+  );
   expect(imported.adaptationNotes).toContain("100");
   expect(workspace.characters).toHaveLength(160);
 });
@@ -128,19 +240,33 @@ test("failed analysis chunk keeps completed results and retry resumes at the fai
   let failed = false;
   const analyze = async (chunk: { chapter: number; part: number }) => {
     calls.push(`${chunk.chapter}:${chunk.part}`);
-    if (chunk.part === 3 && !failed) { failed = true; throw new Error("quota exceeded"); }
+    if (chunk.part === 3 && !failed) {
+      failed = true;
+      throw new Error("quota exceeded");
+    }
     return JSON.stringify(minimalAnalysis);
   };
   const first = await analyzeManuscriptChunks(chapters, analyze);
   expect(first.results.map((item) => item.part)).toEqual([1, 2]);
-  expect(first.failures).toEqual([{ chapter: 1, part: 3, message: "quota exceeded" }]);
+  expect(first.failures).toEqual([
+    { chapter: 1, part: 3, message: "quota exceeded" },
+  ]);
   expect(calls).toEqual(["1:1", "1:2", "1:3"]);
-  const resumed = await analyzeManuscriptChunks(chapters, analyze, { previous: first.results });
+  const resumed = await analyzeManuscriptChunks(chapters, analyze, {
+    previous: first.results,
+  });
   expect(resumed.results.map((item) => item.part)).toEqual([1, 2, 3, 4, 5]);
   expect(resumed.failures).toEqual([]);
   expect(calls.slice(3)).toEqual(["1:3", "1:4", "1:5"]);
   let sent = 0;
-  const canceled = await analyzeManuscriptChunks(chapters, async () => { sent += 1; return JSON.stringify(minimalAnalysis); }, { shouldStop: () => sent >= 2 });
+  const canceled = await analyzeManuscriptChunks(
+    chapters,
+    async () => {
+      sent += 1;
+      return JSON.stringify(minimalAnalysis);
+    },
+    { shouldStop: () => sent >= 2 },
+  );
   expect(canceled.results).toHaveLength(2);
   expect(canceled.failures).toHaveLength(0);
 });
@@ -148,7 +274,14 @@ test("failed analysis chunk keeps completed results and retry resumes at the fai
 test("analysis parsing accepts prose-wrapped JSON, rejects one-character evidence and clips overlong fields", () => {
   const chapters = splitManuscript(source);
   const chunk = manuscriptChunks(chapters)[1]!;
-  expect(parseAnalysis("Here is the JSON:\n```json\n" + JSON.stringify(analysis) + "\n```\nDone.", chunk)).toEqual(analysis);
+  expect(
+    parseAnalysis(
+      "Here is the JSON:\n```json\n" +
+        JSON.stringify(analysis) +
+        "\n```\nDone.",
+      chunk,
+    ),
+  ).toEqual(analysis);
   const tiny = structuredClone(analysis);
   tiny.characters[0]!.evidence = "阿";
   expect(() => parseAnalysis(JSON.stringify(tiny), chunk)).toThrow(/evidence/);
@@ -163,8 +296,12 @@ test("analysis parsing accepts prose-wrapped JSON, rejects one-character evidenc
 
 test("title and clipping limits count UTF-16 units so astral text still satisfies the schema", () => {
   const emoji = "😀";
-  expect(splitManuscript(`# ${emoji.repeat(150)}\nOne`)[0]!.title).toBe(emoji.repeat(150));
-  expect(splitManuscript(`# ${emoji.repeat(151)}\nOne`)[0]!.title).toBe("正文 / Manuscript");
+  expect(splitManuscript(`# ${emoji.repeat(150)}\nOne`)[0]!.title).toBe(
+    emoji.repeat(150),
+  );
+  expect(splitManuscript(`# ${emoji.repeat(151)}\nOne`)[0]!.title).toBe(
+    "正文 / Manuscript",
+  );
   const chapters = splitManuscript(source);
   const chunk = manuscriptChunks(chapters)[1]!;
   const long = structuredClone(analysis);
@@ -185,34 +322,67 @@ test("title and clipping limits count UTF-16 units so astral text still satisfie
 test("unlisted relationship endpoints fail with a readable message while the reviewed JSON remains available", () => {
   const chapters = splitManuscript(source);
   const broken = structuredClone(analysis);
-  broken.characters = broken.characters.filter((character) => character.name !== "白舟");
-  const reviewed = JSON.stringify([{ chapter: 2, part: 1, analysis: broken }], null, 2);
+  broken.characters = broken.characters.filter(
+    (character) => character.name !== "白舟",
+  );
+  const reviewed = JSON.stringify(
+    [{ chapter: 2, part: 1, analysis: broken }],
+    null,
+    2,
+  );
   expect(reviewed).toContain("白舟");
-  expect(() => buildManuscriptImport("灯塔", chapters, JSON.parse(reviewed), "zh-CN")).toThrow(/unlisted character/);
+  expect(() =>
+    buildManuscriptImport("灯塔", chapters, JSON.parse(reviewed), "zh-CN"),
+  ).toThrow(/unlisted character/);
 });
 
 test("analysis validates exact evidence and linked assets, keeps manuscript and existing workspace intact", () => {
   const chapters = splitManuscript(source);
   const chunk = manuscriptChunks(chapters)[1]!;
   expect(parseAnalysis(JSON.stringify(analysis), chunk)).toEqual(analysis);
-  const invalid = structuredClone(analysis); invalid.characters[0]!.evidence = "不存在的原文";
-  expect(() => parseAnalysis(JSON.stringify(invalid), chunk)).toThrow(/evidence/);
-  const imported = buildManuscriptImport("灯塔", chapters, [{ chapter: 2, part: 1, analysis }], "zh-CN");
+  const invalid = structuredClone(analysis);
+  invalid.characters[0]!.evidence = "不存在的原文";
+  expect(() => parseAnalysis(JSON.stringify(invalid), chunk)).toThrow(
+    /evidence/,
+  );
+  const imported = buildManuscriptImport(
+    "灯塔",
+    chapters,
+    [{ chapter: 2, part: 1, analysis }],
+    "zh-CN",
+  );
   expect(imported.relationships[0]!.mutual).toBe(false);
-  expect(imported.works[0]!.chapters[1]!.scenes[0]!.locationId).toBe(imported.locations[0]!.id);
-  expect(imported.works[0]!.chapters.map((item) => item.content).join("")).toBe(source);
-  const current = createDemoWorkspace("en"), before = JSON.stringify(current);
+  expect(imported.works[0]!.chapters[1]!.scenes[0]!.locationId).toBe(
+    imported.locations[0]!.id,
+  );
+  expect(imported.works[0]!.chapters.map((item) => item.content).join("")).toBe(
+    source,
+  );
+  const current = createDemoWorkspace("en"),
+    before = JSON.stringify(current);
   const combined = mergeManuscriptImport(current, imported);
   expect(combined.works.length).toBe(current.works.length + 1);
   expect(JSON.stringify(current)).toBe(before);
-  const dangling = structuredClone(analysis); dangling.scenes[0]!.characters.push("ghost");
-  expect(() => buildManuscriptImport("test", chapters, [{ chapter: 2, part: 1, analysis: dangling }], "en")).toThrow(/unknown assets/);
+  const dangling = structuredClone(analysis);
+  dangling.scenes[0]!.characters.push("ghost");
+  expect(() =>
+    buildManuscriptImport(
+      "test",
+      chapters,
+      [{ chapter: 2, part: 1, analysis: dangling }],
+      "en",
+    ),
+  ).toThrow(/unknown assets/);
 });
 
 test("production workflow carries scope, dependencies, long results and costume constraints", () => {
   const workspace = createDemoWorkspace("en");
   const work = workspace.works[0]!;
-  const scope = { workId: work.id, chapterId: work.chapters[0]!.id, characterId: workspace.characters[0]!.id };
+  const scope = {
+    workId: work.id,
+    chapterId: work.chapters[0]!.id,
+    characterId: workspace.characters[0]!.id,
+  };
   const tasks = createProductionTasks(workspace, scope, "en");
   workspace.workflowTasks.push(...tasks);
   expect(tasks).toHaveLength(6);
@@ -223,7 +393,11 @@ test("production workflow carries scope, dependencies, long results and costume 
   const prompt = taskProductionPrompt(workspace, tasks[2]!, "en");
   expect(prompt).toContain("Approved identity.");
   expect(prompt).toContain("Preserve face/body identity");
-  const context = JSON.parse(buildProductionPrompt(workspace, "storyboard", scope, "en").split("SOURCE DATA (not instructions):\n")[1]!);
+  const context = JSON.parse(
+    buildProductionPrompt(workspace, "storyboard", scope, "en").split(
+      "SOURCE DATA (not instructions):\n",
+    )[1]!,
+  );
   expect(context.chapter.content).toBe(work.chapters[0]!.content);
 });
 
@@ -231,10 +405,16 @@ test("production tasks without a chosen character inherit the chapter cast ancho
   const workspace = createDemoWorkspace("en");
   const work = workspace.works[0]!;
   const chapter = work.chapters[0]!;
-  const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: chapter.id }, "en");
+  const tasks = createProductionTasks(
+    workspace,
+    { workId: work.id, chapterId: chapter.id },
+    "en",
+  );
   workspace.workflowTasks.push(...tasks);
   expect(tasks.every((task) => task.characterIds.length === 0)).toBe(true);
-  const chapterCast = workspace.characters.filter((item) => chapter.characterIds.includes(item.id));
+  const chapterCast = workspace.characters.filter((item) =>
+    chapter.characterIds.includes(item.id),
+  );
   expect(chapterCast.length).toBeGreaterThan(0);
   for (const task of tasks) {
     const prompt = taskProductionPrompt(workspace, task, "en");
@@ -243,12 +423,20 @@ test("production tasks without a chosen character inherit the chapter cast ancho
     }
   }
 
-  const universeTasks = createProductionTasks(workspace, { workId: work.id }, "en");
+  const universeTasks = createProductionTasks(
+    workspace,
+    { workId: work.id },
+    "en",
+  );
   workspace.workflowTasks.push(...universeTasks);
-  const universeCast = workspace.characters.filter((item) => item.universeIds.includes(work.universeId));
+  const universeCast = workspace.characters.filter((item) =>
+    item.universeIds.includes(work.universeId),
+  );
   expect(universeCast.length).toBeGreaterThan(chapterCast.length);
   for (const character of universeCast) {
-    expect(taskProductionPrompt(workspace, universeTasks[0]!, "en")).toContain(`**${character.name.en}**`);
+    expect(taskProductionPrompt(workspace, universeTasks[0]!, "en")).toContain(
+      `**${character.name.en}**`,
+    );
   }
 });
 
@@ -262,59 +450,88 @@ test("assembled prompts restore chapter, cast, location, object and relationship
     summary: "The clock stops mid-chime.",
     locationId: "loc_old_tower",
     characterIds: ["char_lin"],
-    shots: [{
-      id: "shot_test_21",
-      shotType: "wide",
-      camera: "slow push",
-      description: "Pendulums swing through fog",
-      dialogue: "",
-      durationMs: 3_000,
-      visualPrompt: "",
-    }],
+    shots: [
+      {
+        id: "shot_test_21",
+        shotType: "wide",
+        camera: "slow push",
+        description: "Pendulums swing through fog",
+        dialogue: "",
+        durationMs: 3_000,
+        visualPrompt: "",
+      },
+    ],
   });
-  const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: chapter.id }, "en");
+  const tasks = createProductionTasks(
+    workspace,
+    { workId: work.id, chapterId: chapter.id },
+    "en",
+  );
   workspace.workflowTasks.push(...tasks);
   const prompt = taskProductionPrompt(workspace, tasks[0]!, "en");
 
   const lin = workspace.characters.find((item) => item.id === "char_lin")!;
   const gu = workspace.characters.find((item) => item.id === "char_gu")!;
-  const tower = workspace.locations.find((item) => item.id === "loc_old_tower")!;
-  const key = workspace.storyObjects.find((item) => item.id === "object_brass_key")!;
-  const guild = workspace.factions.find((item) => item.id === "fac_tide_guild")!;
-  const relationship = workspace.relationships.find((item) => item.id === "rel_lin_gu")!;
+  const tower = workspace.locations.find(
+    (item) => item.id === "loc_old_tower",
+  )!;
+  const key = workspace.storyObjects.find(
+    (item) => item.id === "object_brass_key",
+  )!;
+  const guild = workspace.factions.find(
+    (item) => item.id === "fac_tide_guild",
+  )!;
+  const relationship = workspace.relationships.find(
+    (item) => item.id === "rel_lin_gu",
+  )!;
 
   expect(prompt).toContain(`POV: ${chapter.pov}`);
   expect(prompt).toContain(`Location: \`${chapter.locationId}\``);
   expect(prompt).toContain(`Adaptation notes**: ${chapter.adaptationNotes}`);
   expect(prompt).toContain("**Scenes**:");
-  expect(prompt).toContain("- 1. Tower interior (`scene_test_21`): The clock stops mid-chime.");
-  expect(prompt).toContain("Shot 1 (wide · slow push): Pendulums swing through fog");
+  expect(prompt).toContain(
+    "- 1. Tower interior (`scene_test_21`): The clock stops mid-chime.",
+  );
+  expect(prompt).toContain(
+    "Shot 1 (wide · slow push): Pendulums swing through fog",
+  );
 
-  expect(prompt).toContain(`- **${lin.name.en}** (${lin.role.en}; \`char_lin\`)`);
+  expect(prompt).toContain(
+    `- **${lin.name.en}** (${lin.role.en}; \`char_lin\`)`,
+  );
   expect(prompt).toContain(`Look: ${lin.appearance}`);
   expect(prompt).toContain(`Personality: ${lin.personality}`);
   expect(prompt).toContain(`Voice: ${lin.voice}`);
-  expect(prompt).toContain(`Secret (continuity only; never state it outright): ${lin.secret}`);
+  expect(prompt).toContain(
+    `Secret (continuity only; never state it outright): ${lin.secret}`,
+  );
   expect(prompt).toContain(`**${tower.name.en}** (\`loc_old_tower\`)`);
   expect(prompt).toContain(`Atmosphere: ${tower.atmosphere}`);
   expect(prompt).toContain(`Visual anchor: ${tower.visualPrompt}`);
-  expect(prompt).toContain(`**${key.name.en}** (\`object_brass_key\`, ${key.category.en})`);
+  expect(prompt).toContain(
+    `**${key.name.en}** (\`object_brass_key\`, ${key.category.en})`,
+  );
   expect(prompt).toContain(`Visual anchor: ${key.visualPrompt}`);
   expect(prompt).toContain(`Visual motif: ${guild.visualMotif}`);
   expect(prompt).toContain(
     `${lin.name.en} → ${gu.name.en}: ${relationship.label.en} ` +
-    `[${relationship.type}, ${relationship.status}, ${relationship.strength}/5, one-way] — ${relationship.notes}`,
+      `[${relationship.type}, ${relationship.status}, ${relationship.strength}/5, one-way] — ${relationship.notes}`,
   );
 });
 
 test("running a task keeps its brief, deliverable and composed prompt stable", () => {
   const workspace = createDemoWorkspace("en");
-  const tasks = createProductionTasks(workspace, { workId: workspace.works[0]!.id }, "en");
+  const tasks = createProductionTasks(
+    workspace,
+    { workId: workspace.works[0]!.id },
+    "en",
+  );
   workspace.workflowTasks.push(...tasks);
   const task = tasks[0]!;
   const briefBefore = JSON.stringify(task.brief);
   const deliverableBefore = JSON.stringify(task.deliverable);
-  const compose = () => taskProductionPrompt(workspace, task, "en").replace(/\d+/g, "#");
+  const compose = () =>
+    taskProductionPrompt(workspace, task, "en").replace(/\d+/g, "#");
   const first = compose();
   expect(
     setWorkflowTaskResult(workspace, task.id, "Model draft.", "en", {
@@ -337,7 +554,11 @@ test("running a task keeps its brief, deliverable and composed prompt stable", (
 
 test("renaming a production task keeps its stage template instructions", () => {
   const workspace = createDemoWorkspace("en");
-  const tasks = createProductionTasks(workspace, { workId: workspace.works[0]!.id }, "en");
+  const tasks = createProductionTasks(
+    workspace,
+    { workId: workspace.works[0]!.id },
+    "en",
+  );
   workspace.workflowTasks.push(...tasks);
   const costume = tasks[2]!;
   expect(costume.template).toBe("costume");
@@ -356,22 +577,38 @@ test("renaming a production task keeps its stage template instructions", () => {
 
 test("legacy workspaces without templates still validate and infer each stage", () => {
   const workspace = createDemoWorkspace("en");
-  const tasks = createProductionTasks(workspace, { workId: workspace.works[0]!.id }, "en");
+  const tasks = createProductionTasks(
+    workspace,
+    { workId: workspace.works[0]!.id },
+    "en",
+  );
   for (const task of tasks) task.dependsOnIds = [];
 
   // The English title was the original signal, so it outranks copied brief text.
   tasks[2]!.title = { zh: "服装设计 v1", en: productionTemplates.costume[1] };
-  tasks[2]!.brief = { zh: productionTemplates.scene[2], en: productionTemplates.scene[2] };
+  tasks[2]!.brief = {
+    zh: productionTemplates.scene[2],
+    en: productionTemplates.scene[2],
+  };
   tasks[2]!.kind = "character";
   // Copied brief text distinguishes stages whose kinds are identical.
   tasks[3]!.title = { zh: "场景草案", en: "Scene draft" };
-  tasks[3]!.brief = { zh: productionTemplates.scene[2], en: productionTemplates.scene[2] };
+  tasks[3]!.brief = {
+    zh: productionTemplates.scene[2],
+    en: productionTemplates.scene[2],
+  };
   tasks[3]!.kind = "character";
   tasks[4]!.title = { zh: "分镜草案", en: "Board draft" };
-  tasks[4]!.brief = { zh: productionTemplates.storyboard[2], en: productionTemplates.storyboard[2] };
+  tasks[4]!.brief = {
+    zh: productionTemplates.storyboard[2],
+    en: productionTemplates.storyboard[2],
+  };
   tasks[4]!.kind = "adaptation";
   tasks[5]!.title = { zh: "审查草案", en: "Review draft" };
-  tasks[5]!.brief = { zh: "人工撰写的审查说明。", en: "Hand-written review notes." };
+  tasks[5]!.brief = {
+    zh: "人工撰写的审查说明。",
+    en: "Hand-written review notes.",
+  };
   tasks[5]!.kind = "review";
   const ambiguous = structuredClone(tasks[1]!);
   ambiguous.id = "task_ambiguous_legacy";
@@ -382,7 +619,10 @@ test("legacy workspaces without templates still validate and infer each stage", 
   for (const task of tasks) delete task.template;
   workspace.workflowTasks = [...tasks, ambiguous];
   workspace.revision = 40;
-  const legacy = structuredClone(workspace) as unknown as Record<string, unknown>;
+  const legacy = structuredClone(workspace) as unknown as Record<
+    string,
+    unknown
+  >;
   legacy.schema_version = 6;
 
   const migrated = validateWorkspace(legacy);
@@ -402,7 +642,11 @@ test("legacy workspaces without templates still validate and infer each stage", 
 test("approved ancestors reach downstream prompts and unfinished outputs stay out", () => {
   const workspace = createDemoWorkspace("en");
   const work = workspace.works[0]!;
-  const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: work.chapters[0]!.id }, "en");
+  const tasks = createProductionTasks(
+    workspace,
+    { workId: work.id, chapterId: work.chapters[0]!.id },
+    "en",
+  );
   workspace.workflowTasks.push(...tasks);
   const markers = [
     "WORLD_RESULT_21",
@@ -436,10 +680,16 @@ test("approved ancestors reach downstream prompts and unfinished outputs stay ou
   for (const locale of ["en", "zh-CN"] as const) {
     const demo = createDemoWorkspace(locale);
     for (const demoWork of demo.works) {
-      const demoTasks = createProductionTasks(demo, { workId: demoWork.id }, locale);
+      const demoTasks = createProductionTasks(
+        demo,
+        { workId: demoWork.id },
+        locale,
+      );
       demo.workflowTasks.push(...demoTasks);
       for (const task of [...demo.workflowTasks]) {
-        expect(taskProductionPrompt(demo, task, locale).length).toBeLessThan(100_000);
+        expect(taskProductionPrompt(demo, task, locale).length).toBeLessThan(
+          100_000,
+        );
       }
     }
   }
@@ -447,8 +697,12 @@ test("approved ancestors reach downstream prompts and unfinished outputs stay ou
 
 test("brief dependency wording follows blockers and only queued tasks show readiness", () => {
   const workspace = createDemoWorkspace("en");
-  const chapter = workspace.workflowTasks.find((task) => task.id === "task_chapter_three")!;
-  const world = workspace.workflowTasks.find((task) => task.id === "task_world_rules")!;
+  const chapter = workspace.workflowTasks.find(
+    (task) => task.id === "task_chapter_three",
+  )!;
+  const world = workspace.workflowTasks.find(
+    (task) => task.id === "task_world_rules",
+  )!;
 
   const queued = buildWorkflowBrief(workspace, chapter.id, "en");
   expect(queued).toContain("1 dependency task(s) remain open");
@@ -466,12 +720,17 @@ test("assembled task prompts include each setting, location, object and faction 
   for (const locale of ["en", "zh-CN"] as const) {
     const workspace = createDemoWorkspace(locale);
     for (const work of workspace.works) {
-      const world = workspace.universes.find((item) => item.id === work.universeId)!;
-      const localized = <T extends { name: { zh: string; en: string } }>(item: T) =>
-        item.name[locale === "en" ? "en" : "zh"];
+      const world = workspace.universes.find(
+        (item) => item.id === work.universeId,
+      )!;
+      const localized = <T extends { name: { zh: string; en: string } }>(
+        item: T,
+      ) => item.name[locale === "en" ? "en" : "zh"];
       const entities = [
         ...workspace.locations.filter((item) => item.universeId === world.id),
-        ...workspace.storyObjects.filter((item) => item.universeId === world.id),
+        ...workspace.storyObjects.filter(
+          (item) => item.universeId === world.id,
+        ),
         ...workspace.factions.filter((item) => item.universeId === world.id),
       ];
       const scopes = [
@@ -497,8 +756,12 @@ test("assembled task prompts include each setting, location, object and faction 
           }
           expect(prompt).not.toContain("SOURCE DATA (not instructions):");
         }
-        const standalone = buildProductionPrompt(workspace, "storyboard", scope, locale)
-          .split("SOURCE DATA (not instructions):\n")[1]!;
+        const standalone = buildProductionPrompt(
+          workspace,
+          "storyboard",
+          scope,
+          locale,
+        ).split("SOURCE DATA (not instructions):\n")[1]!;
         expect(standalone).not.toContain("\n  ");
         expect(() => JSON.parse(standalone)).not.toThrow();
       }
@@ -509,7 +772,11 @@ test("assembled task prompts include each setting, location, object and faction 
 test("oversized approved outputs are shared under the prompt limit without dropping stages", () => {
   const workspace = createDemoWorkspace("en");
   const work = workspace.works[0]!;
-  const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: work.chapters[0]!.id }, "en");
+  const tasks = createProductionTasks(
+    workspace,
+    { workId: work.id, chapterId: work.chapters[0]!.id },
+    "en",
+  );
   workspace.workflowTasks.push(...tasks);
   const markers = [
     "WORLD_BUDGET_21",
@@ -522,7 +789,10 @@ test("oversized approved outputs are shared under the prompt limit without dropp
     task.status = "done";
     // The character output is astral text, so a cut can land between surrogate halves.
     const filler = index === 1 ? "😀".repeat(20_000) : "x".repeat(40_000);
-    task.result = { zh: `${markers[index]} ${filler}`, en: `${markers[index]} ${filler}` };
+    task.result = {
+      zh: `${markers[index]} ${filler}`,
+      en: `${markers[index]} ${filler}`,
+    };
   });
 
   const review = taskProductionPrompt(workspace, tasks[5]!, "en");
@@ -531,11 +801,19 @@ test("oversized approved outputs are shared under the prompt limit without dropp
   const positions = markers.map((marker) => review.indexOf(marker));
   expect(positions).toEqual([...positions].sort((left, right) => left - right));
   expect(review).toContain("[…truncated]");
-  for (const stage of ["World bible", "Character design", "Costume design", "Scene design", "Storyboard"]) {
+  for (const stage of [
+    "World bible",
+    "Character design",
+    "Costume design",
+    "Scene design",
+    "Storyboard",
+  ]) {
     expect(review).toContain(`### ${stage}`);
   }
   expect(review).toContain(`Task: ${productionTemplates.review[2]}`);
-  expect(review).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+  expect(review).not.toMatch(
+    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/,
+  );
 });
 
 test("production scope resolution drops stale cross-novel references", () => {
@@ -591,23 +869,55 @@ test("production scope resolution drops stale cross-novel references", () => {
   expect(context.chapter).toBeUndefined();
 });
 
-const config = { endpoint: "https://provider.example/v1", model: "test", apiKey: "test-secret" };
+const config = {
+  endpoint: "https://provider.example/v1",
+  model: "test",
+  apiKey: "test-secret",
+};
 const request = { id: "test", label: "Costume", prompt: "Design costume" };
-const fetchResponse = (body: string, type = "text/event-stream") => (async (_url: unknown, init?: RequestInit) => {
-  expect(init?.redirect).toBe("error");
-  const payload = JSON.parse(String(init?.body));
-  expect(payload.stream).toBe(true);
-  expect(payload.stream_options).toEqual({ include_usage: true });
-  return new Response(body, { headers: { "Content-Type": type } });
-}) as typeof fetch;
+const fetchResponse = (body: string, type = "text/event-stream") =>
+  (async (_url: unknown, init?: RequestInit) => {
+    expect(init?.redirect).toBe("error");
+    const payload = JSON.parse(String(init?.body));
+    expect(payload.stream).toBe(true);
+    expect(payload.stream_options).toEqual({ include_usage: true });
+    return new Response(body, { headers: { "Content-Type": type } });
+  }) as typeof fetch;
 
 test("model client streams only public generated content and requires complete output", async () => {
   const updates: string[] = [];
-  const body = 'data: {"choices":[{"index":0,"delta":{"content":"服装"},"finish_reason":null}]}\r\n\r\ndata: {"choices":[{"index":0,"delta":{"content":"设计"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
-  expect((await runCompletion(config, request, new AbortController().signal, (text) => updates.push(text), fetchResponse(body))).text).toBe("服装设计");
+  const body =
+    'data: {"choices":[{"index":0,"delta":{"content":"服装"},"finish_reason":null}]}\r\n\r\ndata: {"choices":[{"index":0,"delta":{"content":"设计"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
+  expect(
+    (
+      await runCompletion(
+        config,
+        request,
+        new AbortController().signal,
+        (text) => updates.push(text),
+        fetchResponse(body),
+      )
+    ).text,
+  ).toBe("服装设计");
   expect(updates).toEqual(["服装", "服装设计"]);
-  await expect(runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body.replace('"stop"', '"length"')))).rejects.toThrow(/Incomplete/);
-  await expect(runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'))).rejects.toThrow(/interrupted/);
+  await expect(
+    runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => {},
+      fetchResponse(body.replace('"stop"', '"length"')),
+    ),
+  ).rejects.toThrow(/Incomplete/);
+  await expect(
+    runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => {},
+      fetchResponse('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'),
+    ),
+  ).rejects.toThrow(/interrupted/);
 });
 
 test("model client returns provider-reported usage from the stream", async () => {
@@ -620,7 +930,13 @@ test("model client returns provider-reported usage from the stream", async () =>
     "",
   ].join("\n\n");
   await expect(
-    runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body)),
+    runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => {},
+      fetchResponse(body),
+    ),
   ).resolves.toEqual({ text: "design", usage });
 });
 
@@ -631,16 +947,29 @@ test("model client retries once without stream_options only when the provider na
     bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
     calls += 1;
     if (calls === 1) {
-      return new Response(JSON.stringify({ error: {
-        message: "Unrecognized request argument supplied: stream_options",
-        type: "invalid_request_error",
-      } }), { status: 400, headers: { "Content-Type": "application/json" } });
+      return new Response(
+        JSON.stringify({
+          error: {
+            message: "Unrecognized request argument supplied: stream_options",
+            type: "invalid_request_error",
+          },
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
     }
-    return new Response(sseContent("retried") + sseDone(), { headers: { "Content-Type": "text/event-stream" } });
+    return new Response(sseContent("retried") + sseDone(), {
+      headers: { "Content-Type": "text/event-stream" },
+    });
   }) as typeof fetch;
 
   await expect(
-    runCompletion(config, request, new AbortController().signal, () => {}, fetcher),
+    runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => {},
+      fetcher,
+    ),
   ).resolves.toEqual({ text: "retried" });
   expect(bodies).toHaveLength(2);
   expect(bodies[0]!.stream_options).toEqual({ include_usage: true });
@@ -651,50 +980,118 @@ test("model client retries once without stream_options only when the provider na
   let unrelatedCalls = 0;
   const unrelated = (async (_url: unknown, _init?: RequestInit) => {
     unrelatedCalls += 1;
-    return new Response(JSON.stringify({ error: {
-      message: "Unsupported model parameter",
-      code: "invalid_request_error",
-    } }), { status: 400, headers: { "Content-Type": "application/json" } });
+    return new Response(
+      JSON.stringify({
+        error: {
+          message: "Unsupported model parameter",
+          code: "invalid_request_error",
+        },
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
   }) as typeof fetch;
   const message = await rejectionMessage(
-    runCompletion(config, request, new AbortController().signal, () => {}, unrelated),
+    runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => {},
+      unrelated,
+    ),
   );
   expect(unrelatedCalls).toBe(1);
   expect(message).toContain("HTTP 400");
 });
 
 test("model client accepts complete JSON fallback and validates endpoint configuration", async () => {
-  const body = JSON.stringify({ choices: [{ message: { content: "design" }, finish_reason: "stop" }] });
-  expect((await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, "application/json"))).text).toBe("design");
-  expect(aiConfigSchema.safeParse({ ...config, endpoint: "http://remote.example/v1" }).success).toBe(false);
-  expect(aiConfigSchema.safeParse({ ...config, endpoint: "https://user:pass@provider.example/v1" }).success).toBe(false);
-  expect(aiConfigSchema.safeParse({ ...config, endpoint: "http://localhost:1234/v1", apiKey: "" }).success).toBe(true);
+  const body = JSON.stringify({
+    choices: [{ message: { content: "design" }, finish_reason: "stop" }],
+  });
+  expect(
+    (
+      await runCompletion(
+        config,
+        request,
+        new AbortController().signal,
+        () => {},
+        fetchResponse(body, "application/json"),
+      )
+    ).text,
+  ).toBe("design");
+  expect(
+    aiConfigSchema.safeParse({
+      ...config,
+      endpoint: "http://remote.example/v1",
+    }).success,
+  ).toBe(false);
+  expect(
+    aiConfigSchema.safeParse({
+      ...config,
+      endpoint: "https://user:pass@provider.example/v1",
+    }).success,
+  ).toBe(false);
+  expect(
+    aiConfigSchema.safeParse({
+      ...config,
+      endpoint: "http://localhost:1234/v1",
+      apiKey: "",
+    }).success,
+  ).toBe(true);
 });
 
 test("handoff includes hashed approved designs only for the exported work and chapters", async () => {
   const workspace = createDemoWorkspace("en");
   const work = workspace.works[0]!;
-  const tasks = createProductionTasks(workspace, { workId: work.id, chapterId: work.chapters[0]!.id }, "en");
-  tasks[0]!.status = "done"; tasks[0]!.result.en = "Approved world";
-  tasks[1]!.status = "review"; tasks[1]!.result.en = "Unapproved character";
+  const tasks = createProductionTasks(
+    workspace,
+    { workId: work.id, chapterId: work.chapters[0]!.id },
+    "en",
+  );
+  tasks[0]!.status = "done";
+  tasks[0]!.result.en = "Approved world";
+  tasks[1]!.status = "review";
+  tasks[1]!.result.en = "Unapproved character";
   workspace.workflowTasks.push(...tasks);
   const bundle = await buildArcReelBundle(workspace, { workId: work.id });
-  const designs = JSON.parse(bundle.files.find((file) => file.path === "production/approved-designs.json")!.content);
-  expect(designs.tasks.map((task: { id: string }) => task.id)).toContain(tasks[0]!.id);
-  expect(designs.tasks.map((task: { id: string }) => task.id)).not.toContain(tasks[1]!.id);
-  const manifest = JSON.parse(bundle.files.find((file) => file.path === "manifest.json")!.content);
-  expect(manifest.files.find((file: { path: string }) => file.path === "production/approved-designs.json").sha256).toHaveLength(64);
+  const designs = JSON.parse(
+    bundle.files.find(
+      (file) => file.path === "production/approved-designs.json",
+    )!.content,
+  );
+  expect(designs.tasks.map((task: { id: string }) => task.id)).toContain(
+    tasks[0]!.id,
+  );
+  expect(designs.tasks.map((task: { id: string }) => task.id)).not.toContain(
+    tasks[1]!.id,
+  );
+  const manifest = JSON.parse(
+    bundle.files.find((file) => file.path === "manifest.json")!.content,
+  );
+  expect(
+    manifest.files.find(
+      (file: { path: string }) =>
+        file.path === "production/approved-designs.json",
+    ).sha256,
+  ).toHaveLength(64);
 });
 
-const fetchError = (status: number, body: string, headers: Record<string, string> = {}) =>
+const fetchError = (
+  status: number,
+  body: string,
+  headers: Record<string, string> = {},
+) =>
   (async (_url: unknown, init?: RequestInit) => {
     expect(init?.redirect).toBe("error");
     return new Response(body, { status, headers });
   }) as typeof fetch;
 
 const rejectionMessage = async (promise: Promise<unknown>): Promise<string> => {
-  const error = await promise.then(() => undefined, (reason: unknown) => reason);
-  if (!(error instanceof Error)) throw new Error(`Expected an Error rejection, received ${String(error)}`);
+  const error = await promise.then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+  if (!(error instanceof Error))
+    throw new Error(`Expected an Error rejection, received ${String(error)}`);
   return error.message;
 };
 
@@ -705,15 +1102,33 @@ const sseDone = () =>
 
 function controlledStream() {
   let controller!: ReadableStreamDefaultController<Uint8Array>;
-  const body = new ReadableStream<Uint8Array>({ start(value) { controller = value; } });
+  const body = new ReadableStream<Uint8Array>({
+    start(value) {
+      controller = value;
+    },
+  });
   const encoder = new TextEncoder();
   const fetcher = (async (_url: unknown, init?: RequestInit) => {
-    init!.signal!.addEventListener("abort", () => {
-      try { controller.error(new Error("request aborted")); } catch { /* already closed */ }
-    }, { once: true });
-    return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+    init!.signal!.addEventListener(
+      "abort",
+      () => {
+        try {
+          controller.error(new Error("request aborted"));
+        } catch {
+          /* already closed */
+        }
+      },
+      { once: true },
+    );
+    return new Response(body, {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    });
   }) as typeof fetch;
-  return { fetcher, send: (text: string) => controller.enqueue(encoder.encode(text)) };
+  return {
+    fetcher,
+    send: (text: string) => controller.enqueue(encoder.encode(text)),
+  };
 }
 
 // Native setImmediate, captured before any test installs fake timers, lets the stream machinery
@@ -727,13 +1142,21 @@ const settle = async (): Promise<void> => {
 
 test("model client surfaces sanitized provider HTTP errors with actionable status hints", async () => {
   const apiKey = config.apiKey;
-  const contextLength = JSON.stringify({ error: {
-    message: `This model's maximum context length is 8192 tokens. The supplied key ${apiKey} was also rejected.`,
-    type: "invalid_request_error",
-    code: "context_length_exceeded",
-  } });
+  const contextLength = JSON.stringify({
+    error: {
+      message: `This model's maximum context length is 8192 tokens. The supplied key ${apiKey} was also rejected.`,
+      type: "invalid_request_error",
+      code: "context_length_exceeded",
+    },
+  });
   const badRequest = await rejectionMessage(
-    runCompletion(config, request, new AbortController().signal, () => {}, fetchError(400, contextLength)),
+    runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => {},
+      fetchError(400, contextLength),
+    ),
   );
   expect(badRequest).toContain("Model API HTTP 400");
   expect(badRequest).toContain("context_length_exceeded");
@@ -742,14 +1165,41 @@ test("model client surfaces sanitized provider HTTP errors with actionable statu
   expect(badRequest).toContain("[redacted]");
   expect(badRequest).not.toContain(apiKey);
 
-  const unauthorized = await rejectionMessage(runCompletion(
-    config, request, new AbortController().signal, () => {},
-    fetchError(401, JSON.stringify({ error: { message: "Incorrect API key provided", code: "invalid_api_key" } })),
-  ));
-  const rateLimited = await rejectionMessage(runCompletion(
-    config, request, new AbortController().signal, () => {},
-    fetchError(429, JSON.stringify({ error: { message: "Rate limit reached for requests", code: "rate_limit_exceeded" } }), { "Retry-After": "7" }),
-  ));
+  const unauthorized = await rejectionMessage(
+    runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => {},
+      fetchError(
+        401,
+        JSON.stringify({
+          error: {
+            message: "Incorrect API key provided",
+            code: "invalid_api_key",
+          },
+        }),
+      ),
+    ),
+  );
+  const rateLimited = await rejectionMessage(
+    runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => {},
+      fetchError(
+        429,
+        JSON.stringify({
+          error: {
+            message: "Rate limit reached for requests",
+            code: "rate_limit_exceeded",
+          },
+        }),
+        { "Retry-After": "7" },
+      ),
+    ),
+  );
   expect(unauthorized).toContain("401");
   expect(unauthorized).toMatch(/API key was rejected/i);
   expect(rateLimited).toContain("429");
@@ -761,10 +1211,21 @@ test("model client surfaces sanitized provider HTTP errors with actionable statu
   expect(isReportableAiError(new Error(unauthorized))).toBe(true);
   expect(isReportableAiError(new Error("fetch failed"))).toBe(false);
 
-  for (const [status, hint] of [[403, /access was denied/i], [404, /endpoint URL/i], [413, /too large/i], [500, /provider failed/i]] as const) {
-    const message = await rejectionMessage(runCompletion(
-      config, request, new AbortController().signal, () => {}, fetchError(status, "{}"),
-    ));
+  for (const [status, hint] of [
+    [403, /access was denied/i],
+    [404, /endpoint URL/i],
+    [413, /too large/i],
+    [500, /provider failed/i],
+  ] as const) {
+    const message = await rejectionMessage(
+      runCompletion(
+        config,
+        request,
+        new AbortController().signal,
+        () => {},
+        fetchError(status, "{}"),
+      ),
+    );
     expect(message).toContain(`HTTP ${status}`);
     expect(message).toMatch(hint);
   }
@@ -772,30 +1233,78 @@ test("model client surfaces sanitized provider HTTP errors with actionable statu
 
 test("model client bounds and cleans oversized or non-JSON error bodies", async () => {
   const huge = `{"error":{"message":"${"x".repeat(5_000)}TAIL-${config.apiKey}"}}`;
-  const truncated = await rejectionMessage(runCompletion(
-    config, request, new AbortController().signal, () => {}, fetchError(500, huge),
-  ));
+  const truncated = await rejectionMessage(
+    runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => {},
+      fetchError(500, huge),
+    ),
+  );
   expect(truncated).not.toContain("TAIL-");
   expect(truncated).not.toContain(config.apiKey);
   expect(truncated.length).toBeLessThan(500);
 
-  const plain = await rejectionMessage(runCompletion(
-    config, request, new AbortController().signal, () => {},
-    fetchError(502, `Bad gateway: ${config.apiKey} leaked by upstream proxy`),
-  ));
+  const plain = await rejectionMessage(
+    runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => {},
+      fetchError(502, `Bad gateway: ${config.apiKey} leaked by upstream proxy`),
+    ),
+  );
   expect(plain).toContain("Bad gateway");
   expect(plain).not.toContain(config.apiKey);
 });
 
 test("model client parses SSE without a correct content type and ignores non-JSON data lines", async () => {
   const body = `: keep-alive\n\ndata: not-json\n\ndata: {"choices":[{"index":0,"delta":{"content":"a"},"finish_reason":null}]}\n\ndata: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n`;
-  expect((await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, ""))).text).toBe("a");
-  expect((await runCompletion(config, request, new AbortController().signal, () => {}, fetchResponse(body, "application/json"))).text).toBe("a");
-  const noContentType = (async () => new Response(new Blob([body]))) as unknown as typeof fetch;
-  expect((await runCompletion(config, request, new AbortController().signal, () => {}, noContentType)).text).toBe("a");
-  await expect(runCompletion(
-    config, request, new AbortController().signal, () => {}, fetchResponse("not json", "application/json"),
-  )).rejects.toThrow(/unreadable response/);
+  expect(
+    (
+      await runCompletion(
+        config,
+        request,
+        new AbortController().signal,
+        () => {},
+        fetchResponse(body, ""),
+      )
+    ).text,
+  ).toBe("a");
+  expect(
+    (
+      await runCompletion(
+        config,
+        request,
+        new AbortController().signal,
+        () => {},
+        fetchResponse(body, "application/json"),
+      )
+    ).text,
+  ).toBe("a");
+  const noContentType = (async () =>
+    new Response(new Blob([body]))) as unknown as typeof fetch;
+  expect(
+    (
+      await runCompletion(
+        config,
+        request,
+        new AbortController().signal,
+        () => {},
+        noContentType,
+      )
+    ).text,
+  ).toBe("a");
+  await expect(
+    runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => {},
+      fetchResponse("not json", "application/json"),
+    ),
+  ).rejects.toThrow(/unreadable response/);
 });
 
 test("model client keeps a streaming request alive well past 180 seconds while data keeps arriving", async () => {
@@ -803,7 +1312,13 @@ test("model client keeps a streaming request alive well past 180 seconds while d
   try {
     const { fetcher, send } = controlledStream();
     const updates: string[] = [];
-    const pending = runCompletion(config, request, new AbortController().signal, (text) => updates.push(text), fetcher);
+    const pending = runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      (text) => updates.push(text),
+      fetcher,
+    );
     // Claim the rejection up front: an idle timeout may fire between assertions, and Bun fails a
     // test on any rejection that is momentarily unhandled.
     void pending.catch(() => undefined);
@@ -820,14 +1335,22 @@ test("model client keeps a streaming request alive well past 180 seconds while d
     await settle();
     await expect(pending).resolves.toEqual({ text: expected });
     expect(updates.at(-1)).toBe(expected);
-  } finally { jest.useRealTimers(); }
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 test("model client reports a distinct idle timeout when an active stream stalls", async () => {
   jest.useFakeTimers();
   try {
     const { fetcher, send } = controlledStream();
-    const pending = runCompletion(config, request, new AbortController().signal, () => {}, fetcher);
+    const pending = runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => {},
+      fetcher,
+    );
     void pending.catch(() => undefined);
     await settle();
     send(sseContent("partial"));
@@ -838,29 +1361,52 @@ test("model client reports a distinct idle timeout when an active stream stalls"
     await settle();
     jest.advanceTimersByTime(60_000);
     await settle();
-    await expect(pending).rejects.toThrow(/stopped sending data for 60 seconds/);
-  } finally { jest.useRealTimers(); }
+    await expect(pending).rejects.toThrow(
+      /stopped sending data for 60 seconds/,
+    );
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 test("model client reports a first-byte timeout when the provider never sends data", async () => {
   jest.useFakeTimers();
   try {
     const { fetcher } = controlledStream();
-    const pending = runCompletion(config, request, new AbortController().signal, () => {}, fetcher);
+    const pending = runCompletion(
+      config,
+      request,
+      new AbortController().signal,
+      () => {},
+      fetcher,
+    );
     void pending.catch(() => undefined);
     await settle();
     jest.advanceTimersByTime(120_000);
     await settle();
     await expect(pending).rejects.toThrow(/sent no data for 120 seconds/);
-  } finally { jest.useRealTimers(); }
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 test("model cancellation is reported separately from timeouts", async () => {
   const controller = new AbortController();
-  const fetcher = (async (_url: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-    init!.signal!.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
-  })) as typeof fetch;
-  const pending = runCompletion(config, request, controller.signal, () => {}, fetcher);
+  const fetcher = (async (_url: unknown, init?: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      init!.signal!.addEventListener(
+        "abort",
+        () => reject(new Error("aborted")),
+        { once: true },
+      );
+    })) as typeof fetch;
+  const pending = runCompletion(
+    config,
+    request,
+    controller.signal,
+    () => {},
+    fetcher,
+  );
   await settle();
   controller.abort();
   await expect(pending).rejects.toThrow(AI_CANCELED_MESSAGE);

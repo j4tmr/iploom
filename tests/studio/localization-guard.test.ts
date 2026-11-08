@@ -57,9 +57,9 @@ describe("localization guard", () => {
     expect(
       findInlineLocaleCopy("function local(locale: UiLocale, zh: string) {}"),
     ).toHaveLength(1);
-    expect(findInlineLocaleCopy('{local(locale, "关闭", "Close")}')).toHaveLength(
-      1,
-    );
+    expect(
+      findInlineLocaleCopy('{local(locale, "关闭", "Close")}'),
+    ).toHaveLength(1);
     // Localizing data and reading a stored preference are not copy branches.
     expect(findInlineLocaleCopy("displayText(item.name, locale)")).toEqual([]);
     expect(findInlineLocaleCopy('nameEn === ".en" || nameEn === "en"')).toEqual(

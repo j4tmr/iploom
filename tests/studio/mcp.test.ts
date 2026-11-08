@@ -28,7 +28,10 @@ interface PageBody<T> {
 }
 
 /** Reads a paged collection out of a tool body without trusting its keys. */
-function pageOf<T = Record<string, unknown>>(body: Record<string, unknown>, key: string): PageBody<T> {
+function pageOf<T = Record<string, unknown>>(
+  body: Record<string, unknown>,
+  key: string,
+): PageBody<T> {
   const page = body[key] as PageBody<T> | undefined;
   if (!page || !Array.isArray(page.items)) {
     throw new Error(`Expected a page at body.${key}`);
@@ -98,9 +101,7 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     expect(listed.tools).toHaveLength(MCP_TOOL_COUNTS.total);
     // Exact order, not a set: the registry order is what `tools/list` shows and
     // what the settings views render, so a reordering is a visible change.
-    expect(listed.tools.map((tool) => tool.name)).toEqual([
-      ...MCP_TOOL_NAMES,
-    ]);
+    expect(listed.tools.map((tool) => tool.name)).toEqual([...MCP_TOOL_NAMES]);
     for (const tool of listed.tools) {
       expect(tool.description ?? "").toMatch(/[\u3400-\u9fff]/);
       expect(tool.description ?? "").toMatch(/[A-Za-z]{3}/);
@@ -178,7 +179,11 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     });
     expect(chapter.isError).toBe(false);
     const chapterData = chapter.body.chapter as {
-      content: { text: string; total_chars: number; next_offset: number | null };
+      content: {
+        text: string;
+        total_chars: number;
+        next_offset: number | null;
+      };
       word_count: number;
       character_ids: string[];
     };
@@ -230,12 +235,12 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     );
     expect(taskPage.total).toBe(3);
     expect((tasks.body.summary as { ready: number }).ready).toBe(1);
-    expect(taskPage.items.find((task) => task.id === "task_review_first")?.ready).toBe(
-      true,
-    );
-    expect(taskPage.items.find((task) => task.id === "task_chapter_three")?.ready).toBe(
-      false,
-    );
+    expect(
+      taskPage.items.find((task) => task.id === "task_review_first")?.ready,
+    ).toBe(true);
+    expect(
+      taskPage.items.find((task) => task.id === "task_chapter_three")?.ready,
+    ).toBe(false);
 
     const taskBrief = await call(client, "get_workflow_brief", {
       task_id: "task_chapter_three",
@@ -293,9 +298,9 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
       ),
     ).toBe(true);
     // The list view stays small: rule bodies move only when asked for.
-    expect(
-      standardItems.every((standard) => standard.body === undefined),
-    ).toBe(true);
+    expect(standardItems.every((standard) => standard.body === undefined)).toBe(
+      true,
+    );
 
     const continuity = await call(client, "list_standards", {
       kind: "continuity",
@@ -669,9 +674,9 @@ test("MCP export stays inside allowed roots and honours --export-root", async ()
       output_dir: outside,
     });
     expect(absolute.isError).toBe(true);
-    expect(
-      (absolute.body.error as { message: string }).message,
-    ).toContain("allowed export directories");
+    expect((absolute.body.error as { message: string }).message).toContain(
+      "allowed export directories",
+    );
     expect(readdirSync(outside)).toEqual([]);
 
     const traversal = await call(client, "export_arcreel_bundle", {
@@ -679,9 +684,9 @@ test("MCP export stays inside allowed roots and honours --export-root", async ()
       output_dir: `../${basename(root)}-escape`,
     });
     expect(traversal.isError).toBe(true);
-    expect(
-      (traversal.body.error as { message: string }).message,
-    ).toContain("allowed export directories");
+    expect((traversal.body.error as { message: string }).message).toContain(
+      "allowed export directories",
+    );
     expect(existsSync(escaped)).toBe(false);
 
     const nested = await call(client, "export_arcreel_bundle", {
@@ -734,9 +739,7 @@ test("WorkspaceStore.update serializes concurrent mutations and recovers from fa
   const workspacePath = join(root, "workspace.json");
   const store = new WorkspaceStore(workspacePath);
   try {
-    await store.save(
-      createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"),
-    );
+    await store.save(createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"));
     const now = "2026-11-06T00:00:01.000Z";
     const results = await Promise.all(
       Array.from({ length: 5 }, (_, index) =>
@@ -754,9 +757,9 @@ test("WorkspaceStore.update serializes concurrent mutations and recovers from fa
         }),
       ),
     );
-    expect(results.map((result) => result.revision).sort((a, b) => a - b)).toEqual(
-      [8, 9, 10, 11, 12],
-    );
+    expect(
+      results.map((result) => result.revision).sort((a, b) => a - b),
+    ).toEqual([8, 9, 10, 11, 12]);
     let current = (await store.load()).workspace;
     expect(current.standards).toHaveLength(11);
     expect(current.revision).toBe(12);

@@ -60,11 +60,7 @@ export type WorkflowTaskKind =
   | "character"
   | "review"
   | "adaptation";
-export type WorkflowTaskStatus =
-  | "queued"
-  | "active"
-  | "review"
-  | "done";
+export type WorkflowTaskStatus = "queued" | "active" | "review" | "done";
 /**
  * Stage templates a workflow task can be assembled from. Stored explicitly on
  * the task so renaming its title never silently changes its instructions.
@@ -93,11 +89,7 @@ export type StandardKind =
   | "entity-prompt"
   | "continuity";
 export type StandardStatus = "draft" | "active" | "disabled";
-export type TimelineSubjectKind =
-  | "character"
-  | "scene"
-  | "location"
-  | "object";
+export type TimelineSubjectKind = "character" | "scene" | "location" | "object";
 export type TimelineEventKind =
   | "introduction"
   | "state-change"

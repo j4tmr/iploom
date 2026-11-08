@@ -1,10 +1,6 @@
 import { displayText, workWords } from "../core/factory.ts";
 import type { AiConfigInfo } from "../core/ai.ts";
-import type {
-  StudioWorkspace,
-  ThemeMode,
-  UiLocale,
-} from "../core/types.ts";
+import type { StudioWorkspace, ThemeMode, UiLocale } from "../core/types.ts";
 import {
   formatNumber,
   localeShortLabels,
@@ -58,7 +54,9 @@ export function Sidebar({
           menu. It used to be a button with no handler, which promised a
           switcher that does not exist. */}
       <div className="workspace-switcher" title={workspace.name}>
-        <span className="workspace-avatar"><Icon name="layers" size={16} /></span>
+        <span className="workspace-avatar">
+          <Icon name="layers" size={16} />
+        </span>
         <span>
           <small>{t("workspace")}</small>
           <strong>{workspace.name}</strong>
@@ -67,6 +65,7 @@ export function Sidebar({
       <nav className="sidebar-nav" aria-label={t("workspace")}>
         {nav.map((item) => (
           <button
+            type="button"
             key={item.route}
             data-route={item.route}
             className={route.name === item.route ? "active" : ""}
@@ -90,8 +89,13 @@ export function Sidebar({
           ).length;
           return (
             <button
+              type="button"
               key={universe.id}
-              className={route.name === "universe" && route.id === universe.id ? "active" : ""}
+              className={
+                route.name === "universe" && route.id === universe.id
+                  ? "active"
+                  : ""
+              }
               aria-current={
                 route.name === "universe" && route.id === universe.id
                   ? "page"
@@ -104,7 +108,9 @@ export function Sidebar({
               </span>
               <span>
                 <strong>{displayText(universe.name, locale)}</strong>
-                <small>{count} {t("novels")}</small>
+                <small>
+                  {count} {t("novels")}
+                </small>
               </span>
             </button>
           );
@@ -112,14 +118,23 @@ export function Sidebar({
       </div>
       <div className="sidebar-spacer" />
       <button
+        type="button"
         className="sidebar-novel-count"
         onClick={() => onNavigate({ name: "library" })}
       >
         <span className="eyebrow">LIBRARY / 书架</span>
         <strong>{workspace.works.length}</strong>
-        <small>{t("novels")} · {formatNumber(workspace.works.reduce((sum, work) => sum + workWords(work), 0), locale)} {t("words")}</small>
+        <small>
+          {t("novels")} ·{" "}
+          {formatNumber(
+            workspace.works.reduce((sum, work) => sum + workWords(work), 0),
+            locale,
+          )}{" "}
+          {t("words")}
+        </small>
       </button>
       <button
+        type="button"
         className={`sidebar-settings ${route.name === "settings" ? "active" : ""}`}
         aria-current={route.name === "settings" ? "page" : undefined}
         onClick={() => onNavigate({ name: "settings" })}
@@ -169,7 +184,7 @@ export function Topbar({
         <h2>{title}</h2>
       </div>
       <div className="topbar-actions">
-        <button className="search-trigger" onClick={onSearch}>
+        <button type="button" className="search-trigger" onClick={onSearch}>
           <Icon name="search" size={17} />
           <span>{t("searchShort")}</span>
           <kbd>{navigator.platform.includes("Mac") ? "⌘K" : "Ctrl K"}</kbd>
@@ -202,18 +217,25 @@ export function Topbar({
           onClick={onToggleTheme}
         />
         <button
+          type="button"
           className={`model-button ${aiInfo?.configured ? "configured" : "unconfigured"}`}
           aria-label={t("modelSettings")}
-          title={aiInfo?.configured
-            ? `${t("modelIdentifier")}: ${aiInfo.model} · ${t("modelEndpoint")}: ${aiInfo.endpoint}`
-            : t("modelSetupBody")}
+          title={
+            aiInfo?.configured
+              ? `${t("modelIdentifier")}: ${aiInfo.model} · ${t("modelEndpoint")}: ${aiInfo.endpoint}`
+              : t("modelSetupBody")
+          }
           onClick={onModelSettings}
         >
           <Icon name="sparkles" size={16} />
-          <span>{aiInfo?.configured ? aiInfo.model : t("modelNotConfigured")}</span>
-          <span className={`online-dot ${aiInfo?.configured ? "" : "offline"}`} />
+          <span>
+            {aiInfo?.configured ? aiInfo.model : t("modelNotConfigured")}
+          </span>
+          <span
+            className={`online-dot ${aiInfo?.configured ? "" : "offline"}`}
+          />
         </button>
-        <button className="mcp-button" onClick={onMcp}>
+        <button type="button" className="mcp-button" onClick={onMcp}>
           <Icon name="terminal" size={16} />
           MCP
           <span className="online-dot" />

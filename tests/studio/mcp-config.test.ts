@@ -191,8 +191,7 @@ describe("resolveBunBinary", () => {
 
 describe("mcpClientConfigState", () => {
   const base = {
-    executable:
-      "/Applications/IPloom Studio.app/Contents/MacOS/IPloom Studio",
+    executable: "/Applications/IPloom Studio.app/Contents/MacOS/IPloom Studio",
     workspacePath:
       "/Users/me/Library/Application Support/IPloom Studio/workspace.json",
     resourcesRoot,
@@ -213,11 +212,7 @@ describe("mcpClientConfigState", () => {
     expect(state.binary).toBe(bundled);
     const server = state.config!.mcpServers["iploom-studio"];
     expect(server.command).toBe(base.executable);
-    expect(server.args).toEqual([
-      bundled,
-      "--workspace",
-      base.workspacePath,
-    ]);
+    expect(server.args).toEqual([bundled, "--workspace", base.workspacePath]);
     expect(server.env).toEqual({ ELECTRON_RUN_AS_NODE: "1" });
   });
 

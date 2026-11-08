@@ -46,7 +46,9 @@ export function buildRelationshipGraph(
     const source = nodesById.get(edge.source);
     const target = nodesById.get(edge.target);
     if (!source || !target) {
-      warnings.push(`Relation ${edge.id} references a character outside ${universeId}`);
+      warnings.push(
+        `Relation ${edge.id} references a character outside ${universeId}`,
+      );
       continue;
     }
     source.degree += 1;

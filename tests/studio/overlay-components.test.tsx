@@ -178,7 +178,9 @@ test("the import dialog asks before discarding pasted manuscript text", () => {
   );
 
   const text = view.getByTestId("import-text");
-  fireEvent.change(text, { target: { value: "Chapter One\n\nThe bell rang." } });
+  fireEvent.change(text, {
+    target: { value: "Chapter One\n\nThe bell rang." },
+  });
   fireEvent.keyDown(window, { key: "Escape" });
 
   expect(confirm).toHaveBeenCalledTimes(1);
@@ -267,6 +269,7 @@ function AutoFocusModalHarness({ onClose }: { onClose: () => void }) {
           onClose();
         }}
       >
+        {/* biome-ignore lint/a11y/noAutofocus: this test deliberately checks that Modal preserves autoFocus */}
         <input aria-label="name" autoFocus />
         <button type="button">save</button>
       </Modal>
@@ -368,7 +371,8 @@ test("closing the palette returns focus to the control that opened it", () => {
 test("the palette exposes its results and keeps the active one in view", () => {
   const scrollIntoView = mock(() => {});
   const previous = Element.prototype.scrollIntoView;
-  Element.prototype.scrollIntoView = scrollIntoView as typeof Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView =
+    scrollIntoView as typeof Element.prototype.scrollIntoView;
 
   try {
     const onClose = mock(() => {});
@@ -416,7 +420,8 @@ test("the palette exposes its results and keeps the active one in view", () => {
 test("a new query scrolls the highlighted result back into view", () => {
   const scrollIntoView = mock(() => {});
   const previous = Element.prototype.scrollIntoView;
-  Element.prototype.scrollIntoView = scrollIntoView as typeof Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView =
+    scrollIntoView as typeof Element.prototype.scrollIntoView;
 
   try {
     const view = render(

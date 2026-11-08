@@ -55,8 +55,18 @@ describe("validation messages", () => {
     const text = describeWorkspaceProblem(
       [
         detail({ path, code: "too_small", origin: "string", minimum: 1 }),
-        detail({ path: "works.0.title.zh", code: "too_small", origin: "string", minimum: 1 }),
-        detail({ path: "works.0.genre", code: "too_big", origin: "string", maximum: 200 }),
+        detail({
+          path: "works.0.title.zh",
+          code: "too_small",
+          origin: "string",
+          minimum: 1,
+        }),
+        detail({
+          path: "works.0.genre",
+          code: "too_big",
+          origin: "string",
+          maximum: 200,
+        }),
       ],
       workspace,
       "zh-CN",

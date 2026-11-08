@@ -140,10 +140,7 @@ function pageOf<T>(
   options: { offset?: number; limit?: number; budget?: number } = {},
 ): Page<T> {
   const total = items.length;
-  const offset = Math.min(
-    total,
-    Math.max(0, Math.trunc(options.offset ?? 0)),
-  );
+  const offset = Math.min(total, Math.max(0, Math.trunc(options.offset ?? 0)));
   const limit = Math.min(
     MAX_PAGE_LIMIT,
     Math.max(1, Math.trunc(options.limit ?? DEFAULT_PAGE_LIMIT)),
@@ -330,14 +327,7 @@ const standardIdSchema = z
   .min(1)
   .describe("基础规则 ID / Foundation standard ID.");
 const standardKindSchema = z
-  .enum([
-    "style",
-    "format",
-    "naming",
-    "numeric",
-    "entity-prompt",
-    "continuity",
-  ])
+  .enum(["style", "format", "naming", "numeric", "entity-prompt", "continuity"])
   .describe("规则类型 / Foundation standard kind.");
 const standardStatusSchema = z
   .enum(["draft", "active", "disabled"])
@@ -365,8 +355,16 @@ const standardTitleSchema = z
   .describe("双语标题 / Localized standard title.");
 const standardBodySchema = z
   .object({
-    zh: z.string().max(20_000).default("").describe("中文规则正文 / Chinese body."),
-    en: z.string().max(20_000).default("").describe("英文规则正文 / English body."),
+    zh: z
+      .string()
+      .max(20_000)
+      .default("")
+      .describe("中文规则正文 / Chinese body."),
+    en: z
+      .string()
+      .max(20_000)
+      .default("")
+      .describe("英文规则正文 / English body."),
   })
   .strict()
   .describe("双语规则正文 / Localized standard body.");
@@ -386,8 +384,16 @@ const standardTitlePatchSchema = z
   );
 const standardBodyPatchSchema = z
   .object({
-    zh: z.string().max(20_000).optional().describe("中文规则正文 / Chinese body."),
-    en: z.string().max(20_000).optional().describe("英文规则正文 / English body."),
+    zh: z
+      .string()
+      .max(20_000)
+      .optional()
+      .describe("中文规则正文 / Chinese body."),
+    en: z
+      .string()
+      .max(20_000)
+      .optional()
+      .describe("英文规则正文 / English body."),
   })
   .strict()
   .describe(
@@ -494,7 +500,8 @@ export function workspaceMeta(loaded: LoadedWorkspace) {
 
 function findWorld(workspace: StudioWorkspace, worldId: string): StoryUniverse {
   const world = workspace.universes.find((item) => item.id === worldId);
-  if (!world) throw new ToolError("not_found", `Unknown story world: ${worldId}`);
+  if (!world)
+    throw new ToolError("not_found", `Unknown story world: ${worldId}`);
   return world;
 }
 
@@ -715,10 +722,7 @@ function workflowBlockerView(task: WorkflowTask) {
   };
 }
 
-function workflowTaskView(
-  workspace: StudioWorkspace,
-  task: WorkflowTask,
-) {
+function workflowTaskView(workspace: StudioWorkspace, task: WorkflowTask) {
   const readiness = workflowTaskReadiness(workspace, task);
   return {
     id: task.id,
@@ -897,7 +901,9 @@ function invalidStandard(error: unknown): ToolError {
   if (error instanceof z.ZodError) {
     const issues = error.issues
       .slice(0, 5)
-      .map((issue) => `${issue.path.join(".") || "standard"}: ${issue.message}`);
+      .map(
+        (issue) => `${issue.path.join(".") || "standard"}: ${issue.message}`,
+      );
     return new ToolError(
       "invalid_arguments",
       `Invalid foundation standard: ${issues.join("; ") || "validation failed"}`,
@@ -1024,9 +1030,7 @@ export function createStudioMcpServer(
     const realCandidate = await realPathWithExistingAncestor(candidate);
     for (const root of exportRoots) {
       try {
-        if (
-          isWithin(await realPathWithExistingAncestor(root), realCandidate)
-        ) {
+        if (isWithin(await realPathWithExistingAncestor(root), realCandidate)) {
           return;
         }
       } catch {
@@ -1145,14 +1149,17 @@ export function createStudioMcpServer(
         offset: number,
         collectionsLeft: number,
       ): Page<Record<string, unknown>> => {
-        const page = pageOf(items.map((item) => compact(view(item))), {
-          offset,
-          limit: args.limit,
-          budget: Math.max(
-            1_000,
-            Math.floor(remaining / Math.max(1, collectionsLeft)),
-          ),
-        });
+        const page = pageOf(
+          items.map((item) => compact(view(item))),
+          {
+            offset,
+            limit: args.limit,
+            budget: Math.max(
+              1_000,
+              Math.floor(remaining / Math.max(1, collectionsLeft)),
+            ),
+          },
+        );
         remaining = Math.max(0, remaining - byteSize(page.items));
         return page;
       };
@@ -1234,11 +1241,14 @@ export function createStudioMcpServer(
         schema: MCP_SCHEMA,
         workspace: meta,
         world_id: args.world_id ?? null,
-        novels: pageOf(novels.map((novel) => novelView(novel)), {
-          offset: args.offset,
-          limit: args.limit,
-          budget: remainingBudget(meta, filters),
-        }),
+        novels: pageOf(
+          novels.map((novel) => novelView(novel)),
+          {
+            offset: args.offset,
+            limit: args.limit,
+            budget: remainingBudget(meta, filters),
+          },
+        ),
       };
     },
   );
@@ -1501,11 +1511,14 @@ export function createStudioMcpServer(
         schema: MCP_SCHEMA,
         workspace: meta,
         ...echo,
-        hits: pageOf(results.hits.map((hit) => hitView(hit)), {
-          offset: args.offset,
-          limit: args.limit,
-          budget: remainingBudget(meta, echo),
-        }),
+        hits: pageOf(
+          results.hits.map((hit) => hitView(hit)),
+          {
+            offset: args.offset,
+            limit: args.limit,
+            budget: remainingBudget(meta, echo),
+          },
+        ),
       };
     },
   );
@@ -1781,7 +1794,9 @@ export function createStudioMcpServer(
       const { workspace } = loaded;
       const standard = findStandard(workspace, args.standard_id);
       const pinnedBy = workspace.workflowTasks
-        .filter((task) => task.standardRefs.some((ref) => ref.id === standard.id))
+        .filter((task) =>
+          task.standardRefs.some((ref) => ref.id === standard.id),
+        )
         .map((task) => task.id);
       return {
         schema: MCP_SCHEMA,

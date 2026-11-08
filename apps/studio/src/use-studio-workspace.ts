@@ -167,7 +167,7 @@ export function useStudioWorkspace(): StudioWorkspaceState {
       await persist(current);
     }
     if (pendingSave.current) await pendingSave.current;
-  }, [persist, workspace]);
+  }, [persist]);
 
   useEffect(() => {
     return bridge.onFlushRequest(async (requestId) => {
@@ -198,7 +198,8 @@ export function useStudioWorkspace(): StudioWorkspaceState {
   // A revision the disk has not confirmed yet is "pending", not "saved":
   // during a fast typing burst the indicator must never claim the workspace
   // is safe while the 450 ms debounce is still counting down.
-  const dirty = workspace !== null && workspace.revision !== savedRevision.current;
+  const dirty =
+    workspace !== null && workspace.revision !== savedRevision.current;
   const effectiveSaveState: SaveState =
     saveState === "saved" && dirty ? "pending" : saveState;
 

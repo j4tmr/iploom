@@ -268,7 +268,8 @@ async function connectInline(workspacePath: string): Promise<InlineServer> {
     version: "0.3.0",
   });
   const server = createStudioMcpServer(workspacePath);
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
   await Promise.all([
     server.connect(serverTransport),
     client.connect(clientTransport),
@@ -424,9 +425,7 @@ describe("MCP paging, scoping and bounded responses", () => {
     // entirely these higher-scoring hits.
     expect(firstPage.items).toHaveLength(20);
     expect(
-      firstPage.items.every(
-        (hit) => hit.kind === "lore" && hit.score >= 96,
-      ),
+      firstPage.items.every((hit) => hit.kind === "lore" && hit.score >= 96),
     ).toBe(true);
 
     const scoped = await call(inline, "search_ip", {
@@ -493,9 +492,9 @@ describe("MCP paging, scoping and bounded responses", () => {
     expect(worldIds.size).toBe(worlds.length);
     expect(worldIds.has("uni_mist_harbor")).toBe(true);
     expect(worldIds.has("uni_bulk_00")).toBe(true);
-    expect(worldIds.has(`uni_bulk_${String(BULK_WORLDS - 1).padStart(2, "0")}`)).toBe(
-      true,
-    );
+    expect(
+      worldIds.has(`uni_bulk_${String(BULK_WORLDS - 1).padStart(2, "0")}`),
+    ).toBe(true);
 
     const first = await call(inline, "get_novel", {
       novel_id: "work_tide_clock",
@@ -513,9 +512,11 @@ describe("MCP paging, scoping and bounded responses", () => {
     const chapterIds = new Set(chapters.map((chapter) => chapter.id));
     expect(chapterIds.size).toBe(chapters.length);
     expect(chapterIds.has("chapter_tide_001")).toBe(true);
-    expect(chapterIds.has(`chapter_bulk_${String(BULK_CHAPTERS - 1).padStart(3, "0")}`)).toBe(
-      true,
-    );
+    expect(
+      chapterIds.has(
+        `chapter_bulk_${String(BULK_CHAPTERS - 1).padStart(3, "0")}`,
+      ),
+    ).toBe(true);
     const numbers = chapters.map((chapter) => chapter.number);
     expect(new Set(numbers).size).toBe(numbers.length);
   });
@@ -581,9 +582,8 @@ describe("MCP paging, scoping and bounded responses", () => {
         body_offset: offset,
         body_max_chars: 3_000,
       });
-      const window = (
-        result.body.standard as { body: { zh: TextWindowBody } }
-      ).body.zh;
+      const window = (result.body.standard as { body: { zh: TextWindowBody } })
+        .body.zh;
       expect(window.offset).toBe(offset);
       pieces.push(window.text);
       if (window.next_offset === null) {
@@ -603,7 +603,9 @@ describe("MCP paging, scoping and bounded responses", () => {
     });
     expect(first.isError).toBe(false);
     const firstBody = (
-      first.body.standard as { body: { zh: TextWindowBody; en: TextWindowBody } }
+      first.body.standard as {
+        body: { zh: TextWindowBody; en: TextWindowBody };
+      }
     ).body;
     // The English window takes the whole surrogate pair and is one code unit
     // longer, so a shared offset would skip or repeat text on the next call.
@@ -621,7 +623,9 @@ describe("MCP paging, scoping and bounded responses", () => {
     });
     expect(mixed.isError).toBe(false);
     const mixedBody = (
-      mixed.body.standard as { body: { zh: TextWindowBody; en: TextWindowBody } }
+      mixed.body.standard as {
+        body: { zh: TextWindowBody; en: TextWindowBody };
+      }
     ).body;
     expect(mixedBody.zh.offset).toBe(5);
     expect(mixedBody.en.offset).toBe(6);
@@ -681,7 +685,8 @@ describe("MCP paging, scoping and bounded responses", () => {
     const bulk = standards.items.find(
       (standard) => standard.id === BULK_STANDARD_ID,
     );
-    expect((bulk?.body_chars as { zh?: number }).zh).toBe(
+    if (!bulk) throw new Error("bulk standard missing");
+    expect((bulk.body_chars as { zh?: number }).zh).toBe(
       BULK_STANDARD_BODY.length,
     );
   });
@@ -741,10 +746,7 @@ describe("MCP paging, scoping and bounded responses", () => {
       limit: 1,
     });
     expect(first.isError).toBe(false);
-    const firstCharacters = readPage<{ id: string }>(
-      first.body,
-      "characters",
-    );
+    const firstCharacters = readPage<{ id: string }>(first.body, "characters");
     const firstNovels = readPage<{ id: string }>(first.body, "novels");
     expect(firstCharacters.total).toBeGreaterThan(1);
     expect(firstCharacters.offset).toBe(0);
@@ -802,7 +804,9 @@ describe("MCP paging, scoping and bounded responses", () => {
     });
     expect(clipped.isError).toBe(false);
     const clippedBody = (
-      clipped.body.standard as { body: { zh: TextWindowBody; en: TextWindowBody } }
+      clipped.body.standard as {
+        body: { zh: TextWindowBody; en: TextWindowBody };
+      }
     ).body;
     expect(clippedBody.zh.text).toBe("😀");
     expect(clippedBody.zh.offset).toBe(0);
@@ -845,12 +849,13 @@ describe("MCP paging, scoping and bounded responses", () => {
     const tasks = readPage<Record<string, unknown>>(list.body, "tasks");
     const blocked = tasks.items.find((task) => task.id === "task_blocked");
     expect(blocked).toBeDefined();
-    expect(blocked?.blocker_count).toBe(BLOCKER_TASKS);
-    expect((blocked?.blockers as unknown[]).length).toBe(10);
-    expect((blocked?.depends_on_ids as unknown[]).length).toBe(20);
-    expect(blocked?.depends_on_id_count).toBe(BLOCKER_TASKS);
-    expect((blocked?.character_ids as unknown[]).length).toBe(20);
-    expect(blocked?.character_id_count).toBe(CHAPTER_CHARACTER_IDS);
+    if (!blocked) throw new Error("blocked task missing");
+    expect(blocked.blocker_count).toBe(BLOCKER_TASKS);
+    expect((blocked.blockers as unknown[]).length).toBe(10);
+    expect((blocked.depends_on_ids as unknown[]).length).toBe(20);
+    expect(blocked.depends_on_id_count).toBe(BLOCKER_TASKS);
+    expect((blocked.character_ids as unknown[]).length).toBe(20);
+    expect(blocked.character_id_count).toBe(CHAPTER_CHARACTER_IDS);
 
     const chapter = await call(inline, "get_chapter", {
       chapter_id: LONG_CHAPTER_ID,

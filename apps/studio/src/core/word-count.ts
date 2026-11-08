@@ -15,7 +15,7 @@ const PER_CHARACTER = String.raw`\p{Script=Han}\p{Script=Hiragana}\p{Script=Kata
 const WORD_START = String.raw`(?:(?![${PER_CHARACTER}])[\p{L}\p{N}])`;
 const WORD_REST = String.raw`(?:(?![${PER_CHARACTER}])[\p{L}\p{N}\p{M}])*`;
 const TOKEN = new RegExp(
-  String.raw`[${PER_CHARACTER}]|${WORD_START}${WORD_REST}(?:['’-]${WORD_START}${WORD_REST})*`,
+  `[${PER_CHARACTER}]|${WORD_START}${WORD_REST}(?:['’-]${WORD_START}${WORD_REST})*`,
   "gu",
 );
 

@@ -6,7 +6,6 @@ import {
   isComposingEvent,
   overlayStack,
 } from "./core/overlay-stack.ts";
-import { buildRelationshipGraph } from "./core/graph.ts";
 import { setWorkflowTaskResult, taskDescendantIds } from "./core/workflow.ts";
 import { removeSceneReferences } from "./core/timeline.ts";
 import {
@@ -57,10 +56,7 @@ import {
 } from "./i18n.ts";
 import { MAX_WORKFLOW_RESULT_LENGTH } from "./core/types.ts";
 import { bridge, type AppInfo } from "./platform.ts";
-import {
-  applyTheme,
-  useStudioWorkspace,
-} from "./use-studio-workspace.ts";
+import { applyTheme, useStudioWorkspace } from "./use-studio-workspace.ts";
 import type { StudioRoute } from "./routes.ts";
 import { describeWorkspaceProblem } from "./validation-message.ts";
 import { Sidebar, Topbar } from "./components/app-shell.tsx";
@@ -77,11 +73,7 @@ import {
 import { Icon } from "./components/icon.tsx";
 import { SearchOverlay } from "./components/search-overlay.tsx";
 import { useToast } from "./components/use-toast.ts";
-import {
-  Button,
-  Modal,
-  Toast,
-} from "./components/ui.tsx";
+import { Button, Modal, Toast } from "./components/ui.tsx";
 import { CastLibrary } from "./views/cast-library.tsx";
 import { Dashboard } from "./views/dashboard.tsx";
 import { ExportsView } from "./views/exports-view.tsx";
@@ -95,7 +87,10 @@ import { WorkflowView } from "./views/workflow-view.tsx";
 import { ProductionPanel } from "./components/production-panel.tsx";
 import { ManuscriptImport } from "./components/manuscript-import.tsx";
 import { mergeManuscriptImport } from "./core/manuscript.ts";
-import { StoryObjectModal, TimelineEventModal } from "./components/timeline-forms.tsx";
+import {
+  StoryObjectModal,
+  TimelineEventModal,
+} from "./components/timeline-forms.tsx";
 import { TimelineView } from "./views/timeline-view.tsx";
 import type { StandardCandidate } from "./core/standards.ts";
 
@@ -136,7 +131,7 @@ export function App() {
   const locale: UiLocale = workspace?.settings.locale ?? "zh-CN";
   const t = useMemo(() => translator(locale), [locale]);
   const [route, setRoute] = useState<StudioRoute>({ name: "dashboard" });
-  const [history, setHistory] = useState<StudioRoute[]>([]);
+  const [, setHistory] = useState<StudioRoute[]>([]);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const { toast, notify } = useToast();
@@ -184,7 +179,10 @@ export function App() {
   }, [theme]);
 
   useEffect(() => {
-    void bridge.aiConfig().then(setAiInfo).catch(() => setAiInfo(null));
+    void bridge
+      .aiConfig()
+      .then(setAiInfo)
+      .catch(() => setAiInfo(null));
   }, []);
 
   // One capture-phase Escape listener for every overlay. Overlays register in
@@ -195,11 +193,17 @@ export function App() {
     const onKey = (event: KeyboardEvent) => {
       // Never steal shortcuts from an open IME composition.
       if (isComposingEvent(event)) return;
-      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLocaleLowerCase() === "k"
+      ) {
         event.preventDefault();
         setSearchOpen(true);
       }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "s") {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLocaleLowerCase() === "s"
+      ) {
         event.preventDefault();
         void state.saveNow();
       }
@@ -208,6 +212,7 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [state.saveNow]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the route is the trigger — a new page should start at the top even though the effect does not read it
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [route]);
@@ -220,7 +225,9 @@ export function App() {
         {state.error ? (
           <>
             <pre>{state.error}</pre>
-            <Button icon="arrowLeft" onClick={() => window.location.reload()}>{t("retry")}</Button>
+            <Button icon="arrowLeft" onClick={() => window.location.reload()}>
+              {t("retry")}
+            </Button>
           </>
         ) : (
           <span className="boot-loader" />
@@ -339,13 +346,11 @@ export function App() {
     });
   };
 
-  const removeCharacterFromUniverse = (character: Character, universeId: string) => {
-    if (
-      !window.confirm(
-        t("confirmRemoveCharacterFromWorld"),
-      )
-    )
-      return;
+  const removeCharacterFromUniverse = (
+    character: Character,
+    universeId: string,
+  ) => {
+    if (!window.confirm(t("confirmRemoveCharacterFromWorld"))) return;
     if (
       !mutateChecked((draft) =>
         unlinkCharacterFromUniverse(draft, character.id, universeId),
@@ -355,7 +360,7 @@ export function App() {
     notify(t("saved"));
   };
 
-  const deleteCharacter = (character: Character, universeId?: string) => {
+  const deleteCharacter = (character: Character, _universeId?: string) => {
     if (character.universeIds.length > 1) {
       const message = t("confirmDeleteCharacterEverywhere", {
         worlds: character.universeIds.length,
@@ -367,7 +372,9 @@ export function App() {
 
   const saveRelationship = (relationship: Relationship): boolean => {
     return mutateChecked((draft) => {
-      const index = draft.relationships.findIndex((item) => item.id === relationship.id);
+      const index = draft.relationships.findIndex(
+        (item) => item.id === relationship.id,
+      );
       if (index < 0) draft.relationships.push(relationship);
       else draft.relationships[index] = relationship;
     });
@@ -375,7 +382,9 @@ export function App() {
 
   const saveTimelineEvent = (event: TimelineEvent): boolean => {
     const applied = mutateChecked((draft) => {
-      const index = draft.timelineEvents.findIndex((item) => item.id === event.id);
+      const index = draft.timelineEvents.findIndex(
+        (item) => item.id === event.id,
+      );
       if (index >= 0) draft.timelineEvents[index] = event;
       else draft.timelineEvents.push(event);
     });
@@ -394,7 +403,9 @@ export function App() {
 
   const saveObject = (object: StoryObject): boolean => {
     const applied = mutateChecked((draft) => {
-      const index = draft.storyObjects.findIndex((item) => item.id === object.id);
+      const index = draft.storyObjects.findIndex(
+        (item) => item.id === object.id,
+      );
       if (index >= 0) draft.storyObjects[index] = object;
       else draft.storyObjects.push(object);
     });
@@ -455,7 +466,9 @@ export function App() {
 
   const saveWorkflowTask = (next: WorkflowTask): boolean => {
     const applied = mutateChecked((draft) => {
-      const index = draft.workflowTasks.findIndex((item) => item.id === next.id);
+      const index = draft.workflowTasks.findIndex(
+        (item) => item.id === next.id,
+      );
       if (index >= 0) draft.workflowTasks[index] = next;
       else draft.workflowTasks.push(next);
     });
@@ -773,7 +786,7 @@ export function App() {
       ? route.id
       : route.name === "timeline"
         ? route.universeId
-      : work?.universeId;
+        : work?.universeId;
   const chapterModalWork =
     modal?.kind === "chapter"
       ? workspace.works.find((item) => item.id === modal.workId)
@@ -809,15 +822,36 @@ export function App() {
         />
         <main className="studio-main">
           <ProductionPanel
-            workspace={workspace} locale={locale} t={t}
+            workspace={workspace}
+            locale={locale}
+            t={t}
             aiInfo={aiInfo}
             onOpenSettings={() => navigate({ name: "settings" })}
-            context={{ universeId: defaultUniverseId ?? workspace.universes[0]?.id, workId: work?.id, characterId: modal?.kind === "character" ? modal.initial?.id : undefined }}
-            onTasks={(tasks) => mutateChecked((draft) => { for (const task of tasks) { const index = draft.workflowTasks.findIndex((item) => item.id === task.id); if (index < 0) draft.workflowTasks.push(task); else draft.workflowTasks[index] = task; } })}
-            onStatus={changeWorkflowStatus} onResult={saveWorkflowResult}
+            context={{
+              universeId: defaultUniverseId ?? workspace.universes[0]?.id,
+              workId: work?.id,
+              characterId:
+                modal?.kind === "character" ? modal.initial?.id : undefined,
+            }}
+            onTasks={(tasks) =>
+              mutateChecked((draft) => {
+                for (const task of tasks) {
+                  const index = draft.workflowTasks.findIndex(
+                    (item) => item.id === task.id,
+                  );
+                  if (index < 0) draft.workflowTasks.push(task);
+                  else draft.workflowTasks[index] = task;
+                }
+              })
+            }
+            onStatus={changeWorkflowStatus}
+            onResult={saveWorkflowResult}
           />
           {state.recovered ? (
-            <div className="recovery-banner" title={state.rejectedReason ?? undefined}>
+            <div
+              className="recovery-banner"
+              title={state.rejectedReason ?? undefined}
+            >
               <Icon name="check" size={16} />
               {state.rejectedPath
                 ? t("recoveredFromBackup", { path: state.rejectedPath })
@@ -836,7 +870,9 @@ export function App() {
               workspace={workspace}
               locale={locale}
               t={t}
-              onOpenUniverse={(item) => navigate({ name: "universe", id: item.id })}
+              onOpenUniverse={(item) =>
+                navigate({ name: "universe", id: item.id })
+              }
               onOpenWork={(workId) => navigate({ name: "work", workId })}
               onNewWorld={() => setModal({ kind: "world" })}
               onNewNovel={() => setModal({ kind: "novel" })}
@@ -862,26 +898,51 @@ export function App() {
               locale={locale}
               t={t}
               onBack={back}
-              onEditUniverse={() => setModal({ kind: "world", initial: universe })}
+              onEditUniverse={() =>
+                setModal({ kind: "world", initial: universe })
+              }
               onDeleteUniverse={() => deleteUniverse(universe)}
               onOpenWork={(workId) => navigate({ name: "work", workId })}
-              onNewNovel={() => setModal({ kind: "novel", universeId: universe.id })}
-              onNewCharacter={() => setModal({ kind: "character", universeId: universe.id })}
-              onEditCharacter={(character) => setModal({ kind: "character", initial: character, universeId: universe.id })}
+              onNewNovel={() =>
+                setModal({ kind: "novel", universeId: universe.id })
+              }
+              onNewCharacter={() =>
+                setModal({ kind: "character", universeId: universe.id })
+              }
+              onEditCharacter={(character) =>
+                setModal({
+                  kind: "character",
+                  initial: character,
+                  universeId: universe.id,
+                })
+              }
               onDeleteCharacter={(character) =>
                 deleteCharacter(character, universe.id)
               }
               onRemoveCharacterFromWorld={(character) =>
                 removeCharacterFromUniverse(character, universe.id)
               }
-              onAddAtlas={(atlasKind) => setModal({ kind: "atlas", atlasKind, universeId: universe.id })}
-              onEditAtlas={(atlasKind, initial) => setModal({ kind: "atlas", atlasKind, universeId: universe.id, initial })}
+              onAddAtlas={(atlasKind) =>
+                setModal({ kind: "atlas", atlasKind, universeId: universe.id })
+              }
+              onEditAtlas={(atlasKind, initial) =>
+                setModal({
+                  kind: "atlas",
+                  atlasKind,
+                  universeId: universe.id,
+                  initial,
+                })
+              }
               onDeleteAtlas={deleteAtlas}
-              onAddRelationship={() => setModal({ kind: "relationship", universeId: universe.id })}
+              onAddRelationship={() =>
+                setModal({ kind: "relationship", universeId: universe.id })
+              }
               onDeleteRelationship={(id) => {
                 if (window.confirm(t("confirmDelete")))
                   mutate((draft) => {
-                    draft.relationships = draft.relationships.filter((item) => item.id !== id);
+                    draft.relationships = draft.relationships.filter(
+                      (item) => item.id !== id,
+                    );
                   });
               }}
             />
@@ -895,26 +956,30 @@ export function App() {
               locale={locale}
               t={t}
               onBack={back}
-              onOpenUniverse={() => navigate({ name: "universe", id: work.universeId })}
+              onOpenUniverse={() =>
+                navigate({ name: "universe", id: work.universeId })
+              }
               onEditWork={() => setModal({ kind: "novel", initial: work })}
               onDeleteWork={() => deleteNovel(work)}
-              onAddChapter={() => setModal({ kind: "chapter", workId: work.id })}
-              onOpenTimeline={(chapterId) =>
-                {
-                  navigate({
-                    name: "timeline",
-                    universeId: work.universeId,
-                  });
-                  setModal({
-                    kind: "timeline",
-                    universeId: work.universeId,
-                    workId: work.id,
-                    chapterId,
-                  });
-                }
+              onAddChapter={() =>
+                setModal({ kind: "chapter", workId: work.id })
               }
+              onOpenTimeline={(chapterId) => {
+                navigate({
+                  name: "timeline",
+                  universeId: work.universeId,
+                });
+                setModal({
+                  kind: "timeline",
+                  universeId: work.universeId,
+                  workId: work.id,
+                  chapterId,
+                });
+              }}
               onDeleteChapter={(chapter) => deleteChapter(work.id, chapter)}
-              onChangeChapter={(chapterId, change) => changeChapter(work.id, chapterId, change)}
+              onChangeChapter={(chapterId, change) =>
+                changeChapter(work.id, chapterId, change)
+              }
               onRecordExport={recordExport}
             />
           ) : null}
@@ -924,27 +989,43 @@ export function App() {
               workspace={workspace}
               locale={locale}
               t={t}
-              onNewCharacter={() => setModal({ kind: "character", universeId: defaultUniverseId })}
-              onEditCharacter={(character) => setModal({ kind: "character", initial: character })}
+              onNewCharacter={() =>
+                setModal({ kind: "character", universeId: defaultUniverseId })
+              }
+              onEditCharacter={(character) =>
+                setModal({ kind: "character", initial: character })
+              }
               onOpenUniverse={(id) => navigate({ name: "universe", id })}
             />
           ) : null}
 
           {route.name === "graph" ? (
             <RelationshipsView
-              onEditRelationship={(initial) => setModal({ kind: "relationship", universeId: initial.universeId, initial })}
+              onEditRelationship={(initial) =>
+                setModal({
+                  kind: "relationship",
+                  universeId: initial.universeId,
+                  initial,
+                })
+              }
               workspace={workspace}
               locale={locale}
               t={t}
               initialUniverseId={route.universeId}
-              onAddRelationship={(universeId) => setModal({ kind: "relationship", universeId })}
+              onAddRelationship={(universeId) =>
+                setModal({ kind: "relationship", universeId })
+              }
               onDeleteRelationship={(id) => {
                 if (window.confirm(t("confirmDelete")))
                   mutate((draft) => {
-                    draft.relationships = draft.relationships.filter((item) => item.id !== id);
+                    draft.relationships = draft.relationships.filter(
+                      (item) => item.id !== id,
+                    );
                   });
               }}
-              onEditCharacter={(character) => setModal({ kind: "character", initial: character })}
+              onEditCharacter={(character) =>
+                setModal({ kind: "character", initial: character })
+              }
             />
           ) : null}
 
@@ -957,16 +1038,12 @@ export function App() {
               onNewEvent={(universeId, workId) =>
                 setModal({ kind: "timeline", universeId, workId })
               }
-              onEditEvent={(initial) =>
-                setModal({ kind: "timeline", initial })
-              }
+              onEditEvent={(initial) => setModal({ kind: "timeline", initial })}
               onDeleteEvent={deleteTimelineEvent}
               onNewObject={(universeId) =>
                 setModal({ kind: "object", universeId })
               }
-              onEditObject={(initial) =>
-                setModal({ kind: "object", initial })
-              }
+              onEditObject={(initial) => setModal({ kind: "object", initial })}
               onDeleteObject={deleteObject}
               onOpenWork={(workId) => navigate({ name: "work", workId })}
             />
@@ -988,7 +1065,9 @@ export function App() {
               t={t}
               aiInfo={aiInfo}
               onNewStandard={() => setModal({ kind: "standard" })}
-              onEditStandard={(initial) => setModal({ kind: "standard", initial })}
+              onEditStandard={(initial) =>
+                setModal({ kind: "standard", initial })
+              }
               onStatusChange={changeStandardStatus}
               onRegisterCandidates={registerStandardCandidates}
               onOpenWorkflow={() => navigate({ name: "workflow" })}
@@ -1044,14 +1123,27 @@ export function App() {
           {route.name === "work" && !work ? (
             <div className="view">
               <p>{t("errorTitle")}</p>
-              <Button onClick={() => replaceRoute({ name: "dashboard" })}>{t("dashboard")}</Button>
+              <Button onClick={() => replaceRoute({ name: "dashboard" })}>
+                {t("dashboard")}
+              </Button>
             </div>
           ) : null}
         </main>
         <footer className="studio-statusbar">
-          <span><span className="status-dot" />{t("local")} · {dictionaries[locale].appName}</span>
-          <span>{workspace.name} · rev {workspace.revision}</span>
-          <span>{formatNumber(workspace.works.reduce((sum, item) => sum + workWords(item), 0), locale)} {t("words")}</span>
+          <span>
+            <span className="status-dot" />
+            {t("local")} · {dictionaries[locale].appName}
+          </span>
+          <span>
+            {workspace.name} · rev {workspace.revision}
+          </span>
+          <span>
+            {formatNumber(
+              workspace.works.reduce((sum, item) => sum + workWords(item), 0),
+              locale,
+            )}{" "}
+            {t("words")}
+          </span>
         </footer>
       </div>
 
@@ -1064,13 +1156,22 @@ export function App() {
         onSelect={selectSearchHit}
       />
 
-      {modal?.kind === "import" ? <ManuscriptImport locale={locale} t={t} onClose={() => setModal(null)} onImport={async (imported) => {
-        if (!(await snapshotBefore("before-import-novel"))) return;
-        // Validate the combined snapshot before scheduling the mutation.
-        mergeManuscriptImport(workspace, imported);
-        mutate((draft) => Object.assign(draft, mergeManuscriptImport(draft, imported)));
-        navigate({ name: "work", workId: imported.works[0]!.id });
-      }} /> : null}
+      {modal?.kind === "import" ? (
+        <ManuscriptImport
+          locale={locale}
+          t={t}
+          onClose={() => setModal(null)}
+          onImport={async (imported) => {
+            if (!(await snapshotBefore("before-import-novel"))) return;
+            // Validate the combined snapshot before scheduling the mutation.
+            mergeManuscriptImport(workspace, imported);
+            mutate((draft) =>
+              Object.assign(draft, mergeManuscriptImport(draft, imported)),
+            );
+            navigate({ name: "work", workId: imported.works[0]!.id });
+          }}
+        />
+      ) : null}
       {modal?.kind === "world" ? (
         <UniverseModal
           key={`world-${modal.initial?.id ?? "new"}`}
@@ -1172,17 +1273,14 @@ export function App() {
           initialNumber={
             chapterModalWork ? nextChapterNumber(chapterModalWork) : 1
           }
-          existingNumbers={chapterModalWork?.chapters.map((chapter) => chapter.number) ?? []}
+          existingNumbers={
+            chapterModalWork?.chapters.map((chapter) => chapter.number) ?? []
+          }
           onSave={(chapter) => addChapter(modal.workId, chapter)}
         />
       ) : null}
       {modal?.kind === "mcp" ? (
-        <McpModal
-          open
-          onClose={() => setModal(null)}
-          t={t}
-          locale={locale}
-        />
+        <McpModal open onClose={() => setModal(null)} t={t} locale={locale} />
       ) : null}
       {modal?.kind === "standard" ? (
         <StandardModal
@@ -1230,7 +1328,10 @@ function McpModal({
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
-    bridge.appInfo().then(setInfo).catch(() => setInfo(null));
+    bridge
+      .appInfo()
+      .then(setInfo)
+      .catch(() => setInfo(null));
   }, []);
   const config = info?.mcp ? JSON.stringify(info.mcp, null, 2) : "";
   return (
@@ -1243,7 +1344,9 @@ function McpModal({
       wide
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>{t("close")}</Button>
+          <Button variant="ghost" onClick={onClose}>
+            {t("close")}
+          </Button>
           {config ? (
             <Button
               variant="primary"
@@ -1272,18 +1375,26 @@ function McpModal({
               ) : null}
             </>
           ) : (
-            <h3>{info?.desktop ? t("mcpBundledDesktopServer") : t("browserPreview")}</h3>
+            <h3>
+              {info?.desktop
+                ? t("mcpBundledDesktopServer")
+                : t("browserPreview")}
+            </h3>
           )}
           <p>{mcpToolsNote(locale)}</p>
           <div className="tool-pills vertical">
-            {MCP_TOOL_NAMES.map((tool) => <code key={tool}>{tool}</code>)}
+            {MCP_TOOL_NAMES.map((tool) => (
+              <code key={tool}>{tool}</code>
+            ))}
           </div>
         </div>
         {config ? (
           <div className="code-block light">
             <div className="code-block-head">
               <span>{t("mcpConfig")}</span>
-              <span className="online-label"><i /> stdio</span>
+              <span className="online-label">
+                <i /> stdio
+              </span>
             </div>
             <pre>{config}</pre>
           </div>

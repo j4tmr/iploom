@@ -44,7 +44,9 @@ describe("studio domain", () => {
     const workspace = createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z");
     expect(workspace.universes).toHaveLength(2);
     expect(workspace.works).toHaveLength(2);
-    expect(workspace.characters.filter((item) => item.reusable)).toHaveLength(2);
+    expect(workspace.characters.filter((item) => item.reusable)).toHaveLength(
+      2,
+    );
     expect(
       workspace.characters.find((item) => item.id === "char_echo")?.universeIds,
     ).toEqual(["uni_mist_harbor", "uni_ninth_station"]);
@@ -72,11 +74,7 @@ describe("studio domain", () => {
 
   test("relationship graph is deterministic and reports degrees", () => {
     const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
-    const graph = buildRelationshipGraph(
-      workspace,
-      "uni_mist_harbor",
-      "en",
-    );
+    const graph = buildRelationshipGraph(workspace, "uni_mist_harbor", "en");
     expect(graph.nodes.map((node) => node.id)).toContain("char_lin");
     expect(graph.edges).toHaveLength(4);
     const lin = graph.nodes.find((node) => node.id === "char_lin");
@@ -102,18 +100,14 @@ describe("studio domain", () => {
   });
 
   test("rejects duplicate chapter numbers and dangling references", () => {
-    const duplicate = createDemoWorkspace(
-      "en",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const duplicate = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
     duplicate.works[0]!.chapters[1]!.number =
       duplicate.works[0]!.chapters[0]!.number;
-    expect(() => validateWorkspace(duplicate)).toThrow(/duplicate chapter number/);
-
-    const dangling = createDemoWorkspace(
-      "en",
-      "2026-11-06T00:00:00.000Z",
+    expect(() => validateWorkspace(duplicate)).toThrow(
+      /duplicate chapter number/,
     );
+
+    const dangling = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
     dangling.characters[0]!.universeIds = ["uni_missing"];
     expect(() => validateWorkspace(dangling)).toThrow(/unknown universe/);
   });
@@ -301,10 +295,7 @@ describe("studio domain", () => {
 
   test("keeps package, UI and generated manifests on one version", async () => {
     expect(APP_VERSION).toBe(packageMetadata.version);
-    const workspace = createDemoWorkspace(
-      "en",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
     const bundle = await buildArcReelBundle(workspace, {
       workId: "work_tide_clock",
       generatedAt: "2026-11-06T03:00:00.000Z",
@@ -318,10 +309,7 @@ describe("studio domain", () => {
 
 describe("ArcReel export", () => {
   test("produces a hashed, deterministic, IPloom-compatible handoff", async () => {
-    const workspace = createDemoWorkspace(
-      "zh-CN",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const workspace = createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z");
     const bundle = await buildArcReelBundle(workspace, {
       workId: "work_tide_clock",
       generatedAt: "2026-11-06T03:00:00.000Z",
@@ -352,10 +340,7 @@ describe("ArcReel export", () => {
   });
 
   test("approved-only exports skip drafts with warnings", async () => {
-    const workspace = createDemoWorkspace(
-      "en",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
     const bundle = await buildArcReelBundle(workspace, {
       workId: "work_tide_clock",
       approvedOnly: true,
@@ -366,17 +351,17 @@ describe("ArcReel export", () => {
   });
 
   test("uses scene-level locations and stable sequence numbers", async () => {
-    const workspace = createDemoWorkspace(
-      "en",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
     const chapter = workspace.works[0]!.chapters[0]!;
     workspace.works[0]!.language = "en";
     workspace.locations.push({
       ...workspace.locations[0]!,
       id: "loc_tide_market",
       name: { zh: "潮汐市场", en: "Tide Market" },
-      summary: { zh: "退潮后才出现的市场。", en: "A market revealed at low tide." },
+      summary: {
+        zh: "退潮后才出现的市场。",
+        en: "A market revealed at low tide.",
+      },
     });
     chapter.locationId = "loc_old_tower";
     chapter.scenes = [
@@ -426,9 +411,9 @@ describe("ArcReel export", () => {
       bundle.files.find((file) => file.path.startsWith("storyboards/"))!
         .content,
     );
-    expect(storyboard.scenes.map((scene: { sequence: number }) => scene.sequence)).toEqual([
-      1, 2,
-    ]);
+    expect(
+      storyboard.scenes.map((scene: { sequence: number }) => scene.sequence),
+    ).toEqual([1, 2]);
     expect(
       storyboard.scenes.map((scene: { location: string }) => scene.location),
     ).toEqual(["Tide Market", "The Old Clock Tower"]);
@@ -453,10 +438,7 @@ describe("ArcReel export", () => {
   });
 
   test("keeps source scene IDs attached to content after reordering", async () => {
-    const workspace = createDemoWorkspace(
-      "en",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
     const chapter = workspace.works[0]!.chapters[0]!;
     const scene = (id: string, summary: string, shotId: string) => ({
       id,
@@ -520,12 +502,12 @@ describe("ArcReel export", () => {
   });
 
   test("exports a 30k-character Chinese chapter with single-newline paragraphs", async () => {
-    const workspace = createDemoWorkspace(
-      "zh-CN",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const workspace = createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z");
     const chapter = workspace.works[0]!.chapters[0]!;
-    const paragraph = "潮声沿着石阶一层层退下去，林舟把铜钥匙贴在掌心，确认缺口仍对着旧钟塔的门。".repeat(4);
+    const paragraph =
+      "潮声沿着石阶一层层退下去，林舟把铜钥匙贴在掌心，确认缺口仍对着旧钟塔的门。".repeat(
+        4,
+      );
     chapter.content = Array.from(
       { length: 200 },
       (_, index) => `${paragraph}第${index + 1}段。`,
@@ -572,10 +554,7 @@ describe("ArcReel export", () => {
   });
 
   test("warns when author scenes exceed the scene limit", async () => {
-    const workspace = createDemoWorkspace(
-      "en",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
     const chapter = workspace.works[0]!.chapters[0]!;
     chapter.scenes = Array.from({ length: 15 }, (_, index) => ({
       id: `scene_author_${index + 1}`,
@@ -613,10 +592,7 @@ describe("ArcReel export", () => {
   });
 
   test("splits an oversized author scene and warns", async () => {
-    const workspace = createDemoWorkspace(
-      "en",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
     const chapter = workspace.works[0]!.chapters[0]!;
     chapter.scenes = [
       {
@@ -651,22 +627,20 @@ describe("ArcReel export", () => {
     expect(bundle.warnings.join(" ")).toContain(
       "Chapter 1: split 1 scene(s) with more than 20 shots.",
     );
-    expect(
-      storyboard.scenes[1]!.shots[0]!.data.source_shot_id,
-    ).toBe("shot_author_long_21");
+    expect(storyboard.scenes[1]!.shots[0]!.data.source_shot_id).toBe(
+      "shot_author_long_21",
+    );
   });
 
   test("handoff lists every package path including approved designs", async () => {
-    const workspace = createDemoWorkspace(
-      "zh-CN",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const workspace = createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z");
     const bundle = await buildArcReelBundle(workspace, {
       workId: "work_tide_clock",
       generatedAt: "2026-11-06T03:00:00.000Z",
     });
-    const handoff = bundle.files.find((file) => file.path === "handoff.md")!
-      .content;
+    const handoff = bundle.files.find(
+      (file) => file.path === "handoff.md",
+    )!.content;
     for (const file of bundle.files) {
       expect(handoff).toContain(`\`${file.path}\``);
     }
@@ -674,10 +648,7 @@ describe("ArcReel export", () => {
   });
 
   test("content hash is stable while in-limit chapter output is byte-identical", async () => {
-    const workspace = createDemoWorkspace(
-      "en",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
     const first = await buildArcReelBundle(structuredClone(workspace), {
       workId: "work_tide_clock",
       generatedAt: "2026-11-06T03:00:00.000Z",
@@ -705,10 +676,7 @@ describe("ArcReel export", () => {
 
 describe("AI workflow", () => {
   test("derives independent work from explicit dependencies", () => {
-    const workspace = createDemoWorkspace(
-      "zh-CN",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const workspace = createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z");
     const summary = workflowSummary(workspace);
     expect(summary).toMatchObject({
       total: 4,
@@ -729,28 +697,20 @@ describe("AI workflow", () => {
       (task) => task.id === "task_chapter_three",
     )!;
     expect(workflowTaskReadiness(workspace, chapter).ready).toBe(false);
-    expect(workflowTaskReadiness(workspace, chapter).blockers.map((item) => item.id)).toEqual([
-      "task_world_rules",
-    ]);
-    expect(taskDescendantIds(workspace.workflowTasks, "task_world_rules").sort()).toEqual([
-      "task_chapter_three",
-      "task_review_first",
-    ]);
+    expect(
+      workflowTaskReadiness(workspace, chapter).blockers.map((item) => item.id),
+    ).toEqual(["task_world_rules"]);
+    expect(
+      taskDescendantIds(workspace.workflowTasks, "task_world_rules").sort(),
+    ).toEqual(["task_chapter_three", "task_review_first"]);
     expect(
       taskCycleRiskIds(workspace.workflowTasks, "task_review_first").sort(),
     ).toEqual(["task_adaptation_pass", "task_review_first"]);
   });
 
   test("builds a scoped, deterministic AI brief", () => {
-    const workspace = createDemoWorkspace(
-      "zh-CN",
-      "2026-11-06T00:00:00.000Z",
-    );
-    const brief = buildWorkflowBrief(
-      workspace,
-      "task_chapter_three",
-      "zh-CN",
-    );
+    const workspace = createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z");
+    const brief = buildWorkflowBrief(workspace, "task_chapter_three", "zh-CN");
     expect(brief).toContain("# AI 任务简报");
     expect(brief).toContain("task_chapter_three");
     expect(brief).toContain("潮汐钟");
@@ -758,23 +718,17 @@ describe("AI workflow", () => {
     expect(brief).toContain("task_world_rules");
     expect(brief).toContain("不得把下游结果标记为已验收");
     expect(brief).not.toContain("末班列车");
-    expect(
-      buildWorkflowBrief(workspace, "task_review_first", "en"),
-    ).toContain("can start independently");
+    expect(buildWorkflowBrief(workspace, "task_review_first", "en")).toContain(
+      "can start independently",
+    );
   });
 
   test("rejects task cycles and dangling dependencies", () => {
-    const cyclic = createDemoWorkspace(
-      "en",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const cyclic = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
     cyclic.workflowTasks[0]!.parentId = "task_chapter_three";
     expect(() => validateWorkspace(cyclic)).toThrow(/workflow cycle/);
 
-    const dangling = createDemoWorkspace(
-      "en",
-      "2026-11-06T00:00:00.000Z",
-    );
+    const dangling = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
     dangling.workflowTasks[1]!.dependsOnIds = ["task_missing"];
     expect(() => validateWorkspace(dangling)).toThrow(
       /unknown task: task_missing/,
@@ -782,17 +736,13 @@ describe("AI workflow", () => {
   });
 });
 
-
 describe("workspace store", () => {
   test("round-trips atomically and writes an ArcReel package", async () => {
     const root = mkdtempSync(join(tmpdir(), "iploom-studio-"));
     try {
       const file = join(root, "workspace.json");
       const store = new WorkspaceStore(file);
-      const workspace = createDemoWorkspace(
-        "en",
-        "2026-11-06T00:00:00.000Z",
-      );
+      const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
       await store.save(workspace);
       const loaded = await store.load();
       expect(loaded.workspace.works[0]!.title.en).toBe("The Tide Clock");
@@ -836,10 +786,7 @@ describe("workspace store", () => {
     try {
       const file = join(root, "workspace.json");
       const store = new WorkspaceStore(file);
-      const first = createDemoWorkspace(
-        "en",
-        "2026-11-06T00:00:00.000Z",
-      );
+      const first = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
       first.name = "First";
       first.revision = 10;
       await store.save(first);
@@ -868,10 +815,7 @@ describe("workspace store", () => {
     try {
       const file = join(root, "workspace.json");
       const store = new WorkspaceStore(file);
-      const previous = createDemoWorkspace(
-        "en",
-        "2026-11-06T00:00:00.000Z",
-      );
+      const previous = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
       previous.name = "Previous";
       previous.revision = 40;
       await store.save(previous);
@@ -898,7 +842,9 @@ describe("workspace store", () => {
       const afterMissingPrimary = await store.ensure();
       expect(afterMissingPrimary.recoveredFromBackup).toBe(true);
       expect(afterMissingPrimary.workspace.name).toBe("Previous");
-      expect(readdirSync(root).some((name) => name.includes(".tmp-"))).toBe(false);
+      expect(readdirSync(root).some((name) => name.includes(".tmp-"))).toBe(
+        false,
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -935,10 +881,7 @@ describe("workspace store", () => {
   test("writes export packages atomically and never reuses a directory", async () => {
     const root = mkdtempSync(join(tmpdir(), "iploom-studio-export-"));
     try {
-      const workspace = createDemoWorkspace(
-        "en",
-        "2026-11-06T00:00:00.000Z",
-      );
+      const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
       const bundle = await buildArcReelBundle(workspace, {
         workId: "work_tide_clock",
         generatedAt: "2026-11-06T03:00:00.000Z",
@@ -963,10 +906,7 @@ describe("workspace store", () => {
   test("rejects malformed manifests and oversized packages before writing", async () => {
     const root = mkdtempSync(join(tmpdir(), "iploom-studio-bundle-"));
     try {
-      const workspace = createDemoWorkspace(
-        "en",
-        "2026-11-06T00:00:00.000Z",
-      );
+      const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
       const bundle = await buildArcReelBundle(workspace, {
         workId: "work_tide_clock",
         generatedAt: "2026-11-06T03:00:00.000Z",
@@ -1002,9 +942,9 @@ describe("workspace store", () => {
         content: "x",
         mediaType: "text/plain" as const,
       }));
-      await expect(
-        store.exportArcReel(oversized, destination),
-      ).rejects.toThrow(/Invalid ArcReel bundle/);
+      await expect(store.exportArcReel(oversized, destination)).rejects.toThrow(
+        /Invalid ArcReel bundle/,
+      );
       expect(existsSync(destination)).toBe(false);
 
       // A valid bundle still exports, and the package is exactly one level
@@ -1020,10 +960,12 @@ describe("workspace store", () => {
 describe("desktop MCP configuration", () => {
   test("uses the desktop runtime instead of a system Node dependency", () => {
     const config = createElectronMcpConfig({
-      executable: "/Applications/IPloom Studio.app/Contents/MacOS/IPloom Studio",
+      executable:
+        "/Applications/IPloom Studio.app/Contents/MacOS/IPloom Studio",
       mcpScript:
         "/Applications/IPloom Studio.app/Contents/Resources/bin/iploom-mcp",
-      workspacePath: "/Users/example/Library/Application Support/IPloom Studio/workspace.json",
+      workspacePath:
+        "/Users/example/Library/Application Support/IPloom Studio/workspace.json",
     });
     expect(config.mcpServers["iploom-studio"]).toMatchObject({
       command: "/Applications/IPloom Studio.app/Contents/MacOS/IPloom Studio",
@@ -1033,15 +975,16 @@ describe("desktop MCP configuration", () => {
       "/Resources/bin/iploom-mcp",
     );
     expect(
-      config.mcpServers["iploom-studio"].args.at(-1)?.endsWith("workspace.json"),
+      config.mcpServers["iploom-studio"].args
+        .at(-1)
+        ?.endsWith("workspace.json"),
     ).toBe(true);
   });
 
   test("uses an executable command on Windows and never a .cmd shim", () => {
     const config = createElectronMcpConfig({
       executable: "C:\\Program Files\\IPloom Studio\\IPloom Studio.exe",
-      mcpScript:
-        "C:\\Program Files\\IPloom Studio\\resources\\bin\\iploom-mcp",
+      mcpScript: "C:\\Program Files\\IPloom Studio\\resources\\bin\\iploom-mcp",
       workspacePath: "C:\\Users\\example\\AppData\\Roaming\\workspace.json",
     });
     const server = config.mcpServers["iploom-studio"];
@@ -1139,8 +1082,10 @@ describe("storyboard write contract", () => {
       scene(
         `sc_${sceneIndex + 1}`,
         sceneIndex + 1,
-        Array.from({ length: STORYBOARD_LIMITS.shotsPerScene }, (_, shotIndex) =>
-          shot(`sh_${sceneIndex}_${shotIndex}`, shotIndex + 1),
+        Array.from(
+          { length: STORYBOARD_LIMITS.shotsPerScene },
+          (_, shotIndex) =>
+            shot(`sh_${sceneIndex}_${shotIndex}`, shotIndex + 1),
         ),
       ),
     );
