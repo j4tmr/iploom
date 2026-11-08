@@ -64,12 +64,37 @@ export function Field({
   hint,
   children,
   wide,
+  group,
 }: {
   label: string;
   hint?: string;
   children: ReactNode;
   wide?: boolean;
+  /**
+   * Render as a named group instead of a `<label>`. Use for children that
+   * wrap each checkbox in its own row label (check grids, cast lists): a
+   * `<label>` labels only its first labelable descendant, so wrapping the
+   * whole list in one makes clicking the group text toggle the first
+   * checkbox. The rows keep their own labels; the group text labels nothing.
+   */
+  group?: boolean;
 }) {
+  const labelId = useId();
+  if (group) {
+    return (
+      <div
+        className={`field ${wide ? "field-wide" : ""}`}
+        role="group"
+        aria-labelledby={labelId}
+      >
+        <span className="field-label" id={labelId}>
+          {label}
+        </span>
+        {children}
+        {hint ? <span className="field-hint">{hint}</span> : null}
+      </div>
+    );
+  }
   return (
     // biome-ignore lint/a11y/noLabelWithoutControl: children render the control inside the label
     <label className={`field ${wide ? "field-wide" : ""}`}>

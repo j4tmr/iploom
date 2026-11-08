@@ -526,7 +526,7 @@ export function TimelineEventModal({
             onChange={(event) => setStateAfter(event.target.value)}
           />
         </Field>
-        <Field label={t("timelineCharacters")} wide>
+        <Field label={t("timelineCharacters")} group wide>
           <div className="check-grid">
             {characters.map((item) => (
               <label className="check-card" key={item.id}>
@@ -543,7 +543,7 @@ export function TimelineEventModal({
             ))}
           </div>
         </Field>
-        <Field label={t("timelineLocations")} wide>
+        <Field label={t("timelineLocations")} group wide>
           <div className="check-grid">
             {locations.map((item) => (
               <label className="check-card" key={item.id}>
@@ -560,7 +560,7 @@ export function TimelineEventModal({
             ))}
           </div>
         </Field>
-        <Field label={t("timelineProps")} wide>
+        <Field label={t("timelineProps")} group wide>
           <div className="check-grid">
             {objects.map((item) => (
               <label className="check-card" key={item.id}>

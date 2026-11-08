@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { buildArcReelBundle } from "../core/arcreel.ts";
 import { countChapterWords, displayText, workWords } from "../core/factory.ts";
 import { CHAPTER_LIMITS } from "../core/types.ts";
@@ -28,6 +28,7 @@ import {
   Cover,
   EmptyState,
   Field,
+  FieldGrid,
   IconButton,
   ProgressBar,
   Select,
@@ -66,10 +67,7 @@ export function WorkView({
   onAddChapter: () => void;
   onOpenTimeline: (chapterId?: string) => void;
   onDeleteChapter: (chapter: Chapter) => void;
-  onChangeChapter: (
-    chapterId: string,
-    change: (chapter: Chapter) => void,
-  ) => void;
+  onChangeChapter: (chapterId: string, change: (chapter: Chapter) => void) => void;
   onRecordExport: (
     bundle: ArcReelBundle,
     directory: string,
@@ -78,27 +76,34 @@ export function WorkView({
   ) => void;
 }) {
   const [tab, setTab] = useState<WorkTab>("manuscript");
-  const [selectedId, setSelectedId] = useState(work.chapters[0]?.id ?? "");
-  const [titleDraft, setTitleDraft] = useState(work.chapters[0]?.title ?? "");
-  const universe = workspace.universes.find(
-    (item) => item.id === work.universeId,
+  // Chapters render in story order; the stored array follows creation order,
+  // which drifts when chapters are added out of sequence.
+  const chapters = useMemo(
+    () => [...work.chapters].sort((a, b) => a.number - b.number),
+    [work.chapters],
   );
+  const [selectedId, setSelectedId] = useState(
+    chapters[0]?.id ?? "",
+  );
+  const [titleDraft, setTitleDraft] = useState(
+    chapters[0]?.title ?? "",
+  );
+  const proseEditorId = useId();
+  const universe = workspace.universes.find((item) => item.id === work.universeId);
   const characters = workspace.characters.filter((character) =>
     character.universeIds.includes(work.universeId),
   );
   const locations = workspace.locations.filter(
     (location) => location.universeId === work.universeId,
   );
-  const lore = workspace.lore.filter(
-    (entry) => entry.universeId === work.universeId,
-  );
-  const selected = work.chapters.find((chapter) => chapter.id === selectedId);
+  const lore = workspace.lore.filter((entry) => entry.universeId === work.universeId);
+  const selected = chapters.find((chapter) => chapter.id === selectedId);
   const words = workWords(work);
 
   useEffect(() => {
-    if (!work.chapters.some((chapter) => chapter.id === selectedId))
-      setSelectedId(work.chapters[0]?.id ?? "");
-  }, [selectedId, work.chapters]);
+    if (!chapters.some((chapter) => chapter.id === selectedId))
+      setSelectedId(chapters[0]?.id ?? "");
+  }, [selectedId, chapters]);
 
   useEffect(() => {
     setTitleDraft(selected?.title ?? "");
@@ -120,8 +125,11 @@ export function WorkView({
   };
 
   const chapterCast = useMemo(
-    () => new Set(work.chapters.flatMap((chapter) => chapter.characterIds)),
-    [work.chapters],
+    () =>
+      new Set(
+        chapters.flatMap((chapter) => chapter.characterIds),
+      ),
+    [chapters],
   );
 
   return (
@@ -131,11 +139,7 @@ export function WorkView({
         {universe ? displayText(universe.name, locale) : t("dashboard")}
       </button>
       <header className="work-hero">
-        <Cover
-          title={displayText(work.title, locale)}
-          accent={work.coverColor}
-          size="large"
-        />
+        <Cover title={displayText(work.title, locale)} accent={work.coverColor} size="large" />
         <div className="work-hero-copy">
           <button type="button" className="world-link" onClick={onOpenUniverse}>
             <span style={{ background: universe?.accent ?? work.coverColor }} />
@@ -148,66 +152,33 @@ export function WorkView({
             <Badge tone={work.status === "complete" ? "green" : "neutral"}>
               {statusLabels[locale][work.status]}
             </Badge>
-            <span>
-              {work.chapters.length} {t("chapters")}
-            </span>
-            <span>
-              {formatNumber(words, locale)} {t("words")}
-            </span>
+            <span>{chapters.length} {t("chapters")}</span>
+            <span>{formatNumber(words, locale)} {t("words")}</span>
             <span>{formatDate(work.updatedAt, locale)}</span>
           </div>
-          <ProgressBar
-            value={words}
-            max={work.targetWords}
-            color={work.coverColor}
-          />
+          <ProgressBar value={words} max={work.targetWords} color={work.coverColor} />
           <div className="work-hero-actions">
-            <Button variant="ghost" icon="edit" onClick={onEditWork}>
-              {t("edit")}
-            </Button>
-            <Button variant="danger" icon="trash" onClick={onDeleteWork}>
-              {t("deleteNovel")}
-            </Button>
+            <Button variant="ghost" icon="edit" onClick={onEditWork}>{t("edit")}</Button>
+            <Button variant="danger" icon="trash" onClick={onDeleteWork}>{t("deleteNovel")}</Button>
           </div>
         </div>
         <div className="work-hero-aside">
           <span className="eyebrow">{t("progress")}</span>
-          <strong>
-            {Math.round((words / Math.max(1, work.targetWords)) * 100)}%
-          </strong>
-          <small>
-            {formatNumber(work.targetWords, locale)} {t("words")}
-          </small>
-          <Button icon="package" onClick={() => setTab("adaptation")}>
-            {t("adaptation")}
-          </Button>
+          <strong>{Math.round((words / Math.max(1, work.targetWords)) * 100)}%</strong>
+          <small>{formatNumber(work.targetWords, locale)} {t("words")}</small>
+          <Button icon="package" onClick={() => setTab("adaptation")}>{t("adaptation")}</Button>
         </div>
       </header>
 
       <nav className="tab-bar">
-        <button
-          type="button"
-          className={`tab-button ${tab === "manuscript" ? "active" : ""}`}
-          onClick={() => setTab("manuscript")}
-        >
-          {t("manuscript")}
-          <span>{work.chapters.length}</span>
+        <button type="button" className={`tab-button ${tab === "manuscript" ? "active" : ""}`} onClick={() => setTab("manuscript")}>
+          {t("manuscript")}<span>{chapters.length}</span>
         </button>
-        <button
-          type="button"
-          className={`tab-button ${tab === "bible" ? "active" : ""}`}
-          onClick={() => setTab("bible")}
-        >
-          {t("storyBible")}
-          <span>{characters.length}</span>
+        <button type="button" className={`tab-button ${tab === "bible" ? "active" : ""}`} onClick={() => setTab("bible")}>
+          {t("storyBible")}<span>{characters.length}</span>
         </button>
-        <button
-          type="button"
-          className={`tab-button ${tab === "adaptation" ? "active" : ""}`}
-          onClick={() => setTab("adaptation")}
-        >
-          {t("adaptation")}
-          <span>3D</span>
+        <button type="button" className={`tab-button ${tab === "adaptation" ? "active" : ""}`} onClick={() => setTab("adaptation")}>
+          {t("adaptation")}<span>3D</span>
         </button>
       </nav>
 
@@ -216,40 +187,28 @@ export function WorkView({
           <aside className="chapter-list-panel">
             <div className="chapter-list-head">
               <span className="eyebrow">CHAPTERS / 章节</span>
-              <IconButton
-                label={t("addChapterTitle")}
-                icon="plus"
-                onClick={onAddChapter}
-              />
+              <IconButton label={t("addChapterTitle")} icon="plus" onClick={onAddChapter} />
             </div>
             <div className="chapter-list">
-              {work.chapters.map((chapter) => (
+              {chapters.map((chapter) => (
                 <button
                   type="button"
                   key={chapter.id}
                   className={`chapter-list-item ${selectedId === chapter.id ? "active" : ""}`}
                   onClick={() => setSelectedId(chapter.id)}
                 >
-                  <span className="chapter-number">
-                    {String(chapter.number).padStart(2, "0")}
-                  </span>
+                  <span className="chapter-number">{String(chapter.number).padStart(2, "0")}</span>
                   <span className="chapter-list-copy">
                     <strong>{chapter.title}</strong>
-                    <small>
-                      {statusLabels[locale][chapter.status]} ·{" "}
-                      {formatNumber(countChapterWords(chapter), locale)}{" "}
-                      {t("words")}
-                    </small>
+                    <small>{statusLabels[locale][chapter.status]} · {formatNumber(countChapterWords(chapter), locale)} {t("words")}</small>
                   </span>
                 </button>
               ))}
             </div>
-            {!work.chapters.length ? (
+            {!chapters.length ? (
               <div className="chapter-list-empty">
                 <p>{t("noChapters")}</p>
-                <Button variant="primary" icon="plus" onClick={onAddChapter}>
-                  {t("createFirstChapter")}
-                </Button>
+                <Button variant="primary" icon="plus" onClick={onAddChapter}>{t("createFirstChapter")}</Button>
               </div>
             ) : null}
             <div className="autosave-note">
@@ -301,48 +260,24 @@ export function WorkView({
                       })
                     }
                   >
-                    {(
-                      Object.keys(statusLabels[locale]) as Array<
-                        keyof (typeof statusLabels)["en"]
-                      >
-                    )
-                      .filter((key) =>
-                        [
-                          "idea",
-                          "outline",
-                          "draft",
-                          "revised",
-                          "approved",
-                        ].includes(key),
-                      )
+                    {(Object.keys(statusLabels[locale]) as Array<keyof (typeof statusLabels)["en"]>)
+                      .filter((key) => ["idea", "outline", "draft", "revised", "approved"].includes(key))
                       .map((key) => (
-                        <option key={key} value={key}>
-                          {statusLabels[locale][key]}
-                        </option>
+                        <option key={key} value={key}>{statusLabels[locale][key]}</option>
                       ))}
                   </Select>
-                  <IconButton
-                    label={t("delete")}
-                    icon="trash"
-                    onClick={() => onDeleteChapter(selected)}
-                  />
+                  <IconButton label={t("delete")} icon="trash" onClick={() => onDeleteChapter(selected)} />
                 </div>
               </div>
 
               <div className="chapter-split">
                 <div className="chapter-prose-column">
-                  <label
-                    className="prose-editor-label"
-                    htmlFor="chapter-prose-editor"
-                  >
+                  <label className="prose-editor-label" htmlFor={proseEditorId}>
                     <span>{t("chapterBody")}</span>
-                    <small>
-                      {formatNumber(countChapterWords(selected), locale)}{" "}
-                      {t("words")}
-                    </small>
+                    <small>{formatNumber(countChapterWords(selected), locale)} {t("words")}</small>
                   </label>
                   <textarea
-                    id="chapter-prose-editor"
+                    id={proseEditorId}
                     className="prose-editor"
                     value={selected.content}
                     maxLength={CHAPTER_LIMITS.content}
@@ -419,29 +354,22 @@ export function WorkView({
                       ))}
                     </Select>
                   </Field>
-                  <Field label={t("sceneCast")}>
+                  <Field label={t("sceneCast")} group>
                     <div className="cast-check-list">
                       {characters.map((character) => (
                         <label key={character.id} className="cast-check">
                           <input
                             type="checkbox"
-                            checked={selected.characterIds.includes(
-                              character.id,
-                            )}
+                            checked={selected.characterIds.includes(character.id)}
                             onChange={(event) =>
                               onChangeChapter(selected.id, (chapter) => {
                                 chapter.characterIds = event.target.checked
                                   ? [...chapter.characterIds, character.id]
-                                  : chapter.characterIds.filter(
-                                      (id) => id !== character.id,
-                                    );
+                                  : chapter.characterIds.filter((id) => id !== character.id);
                               })
                             }
                           />
-                          <span
-                            className="avatar avatar-tiny"
-                            style={{ background: character.color }}
-                          >
+                          <span className="avatar avatar-tiny" style={{ background: character.color }}>
                             {displayText(character.name, locale).slice(0, 1)}
                           </span>
                           {displayText(character.name, locale)}
@@ -461,14 +389,7 @@ export function WorkView({
                       }
                     />
                   </Field>
-                  <SceneEditor
-                    chapter={selected}
-                    characters={characters}
-                    locations={locations}
-                    locale={locale}
-                    t={t}
-                    onChange={(change) => onChangeChapter(selected.id, change)}
-                  />
+                  <SceneEditor chapter={selected} characters={characters} locations={locations} locale={locale} t={t} onChange={(change) => onChangeChapter(selected.id, change)} />
                 </aside>
               </div>
             </section>
@@ -476,11 +397,7 @@ export function WorkView({
             <EmptyState
               icon="book"
               title={t("chapterEmpty")}
-              action={
-                <Button variant="primary" icon="plus" onClick={onAddChapter}>
-                  {t("addChapterTitle")}
-                </Button>
-              }
+              action={<Button variant="primary" icon="plus" onClick={onAddChapter}>{t("addChapterTitle")}</Button>}
             >
               {t("noChaptersLead")}
             </EmptyState>
@@ -494,38 +411,22 @@ export function WorkView({
             <span className="eyebrow">SYNOPSIS / 梗概</span>
             <h2>{displayText(work.title, locale)}</h2>
             <p>{work.synopsis || displayText(work.logline, locale)}</p>
-            <TagList
-              values={[...work.themes, work.genre].filter(Boolean)}
-              max={8}
-            />
+            <TagList values={[...work.themes, work.genre].filter(Boolean)} max={8} />
           </section>
           <section>
             <SectionTitle title={t("castAnchors")}>
-              <Button variant="ghost" onClick={onOpenUniverse}>
-                {t("openWorld")}
-              </Button>
+              <Button variant="ghost" onClick={onOpenUniverse}>{t("openWorld")}</Button>
             </SectionTitle>
             <div className="bible-cast-grid">
               {characters.map((character) => (
-                <article
-                  className="bible-cast-card"
-                  key={character.id}
-                  style={{ "--cast": character.color } as React.CSSProperties}
-                >
-                  <span
-                    className="avatar avatar-large"
-                    style={{ background: character.color }}
-                  >
+                <article className="bible-cast-card" key={character.id} style={{ "--cast": character.color } as React.CSSProperties}>
+                  <span className="avatar avatar-large" style={{ background: character.color }}>
                     {displayText(character.name, locale).slice(0, 1)}
                   </span>
                   <div>
                     <h3>{displayText(character.name, locale)}</h3>
                     <p>{displayText(character.role, locale)}</p>
-                    <small>
-                      {chapterCast.has(character.id)
-                        ? t("castUsed")
-                        : t("worldDetails")}
-                    </small>
+                    <small>{chapterCast.has(character.id) ? t("castUsed") : t("worldDetails")}</small>
                   </div>
                 </article>
               ))}
@@ -536,9 +437,7 @@ export function WorkView({
             <div className="bible-rules">
               {lore.map((entry) => (
                 <article key={entry.id}>
-                  <span className={`rule-number ${entry.category}`}>
-                    {loreLabels[locale][entry.category]}
-                  </span>
+                  <span className={`rule-number ${entry.category}`}>{loreLabels[locale][entry.category]}</span>
                   <div>
                     <h3>{displayText(entry.title, locale)}</h3>
                     <p>{entry.body}</p>
@@ -574,15 +473,16 @@ function AdaptationPanel({
   work: StoryWork;
   locale: UiLocale;
   t: Translate;
-  onRecordExport: (
-    bundle: ArcReelBundle,
-    directory: string,
-    files: number,
-    bytes: number,
-  ) => void;
+  onRecordExport: (bundle: ArcReelBundle, directory: string, files: number, bytes: number) => void;
 }) {
+  // Same story order as the chapter list; the stored array follows creation
+  // order and can drift when chapters are added out of sequence.
+  const chapters = useMemo(
+    () => [...work.chapters].sort((a, b) => a.number - b.number),
+    [work.chapters],
+  );
   const [selected, setSelected] = useState<string[]>(
-    work.chapters.map((chapter) => chapter.id),
+    chapters.map((chapter) => chapter.id),
   );
   const [approvedOnly, setApprovedOnly] = useState(
     workspace.settings.exportApprovedOnly,
@@ -657,7 +557,7 @@ function AdaptationPanel({
           <span>{t("selected", { n: selected.length })}</span>
         </div>
         <div className="chapter-select-list">
-          {work.chapters.map((chapter) => (
+          {chapters.map((chapter) => (
             <label className="chapter-select-row" key={chapter.id}>
               <input
                 type="checkbox"
@@ -670,16 +570,10 @@ function AdaptationPanel({
                   )
                 }
               />
-              <span className="chapter-number">
-                {String(chapter.number).padStart(2, "0")}
-              </span>
+              <span className="chapter-number">{String(chapter.number).padStart(2, "0")}</span>
               <span>
                 <strong>{chapter.title}</strong>
-                <small>
-                  {statusLabels[locale][chapter.status]} ·{" "}
-                  {formatNumber(countChapterWords(chapter), locale)}{" "}
-                  {t("words")}
-                </small>
+                <small>{statusLabels[locale][chapter.status]} · {formatNumber(countChapterWords(chapter), locale)} {t("words")}</small>
               </span>
               <Badge tone={chapter.status === "approved" ? "green" : "neutral"}>
                 {statusLabels[locale][chapter.status]}
@@ -688,27 +582,12 @@ function AdaptationPanel({
           ))}
         </div>
         <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={approvedOnly}
-            onChange={(event) => setApprovedOnly(event.target.checked)}
-          />
-          <span>
-            <strong>{t("approvedOnly")}</strong>
-          </span>
+          <input type="checkbox" checked={approvedOnly} onChange={(event) => setApprovedOnly(event.target.checked)} />
+          <span><strong>{t("approvedOnly")}</strong></span>
         </label>
         <div className="adaptation-buttons">
-          <Button
-            variant="primary"
-            icon="sparkles"
-            disabled={busy || !selected.length}
-            onClick={() => void generate()}
-          >
-            {busy
-              ? t("exporting")
-              : bundle
-                ? t("regenerate")
-                : t("generatePreview")}
+          <Button variant="primary" icon="sparkles" disabled={busy || !selected.length} onClick={() => void generate()}>
+            {busy ? t("exporting") : bundle ? t("regenerate") : t("generatePreview")}
           </Button>
           <Button
             icon="download"
@@ -730,22 +609,10 @@ function AdaptationPanel({
         ) : (
           <>
             <div className="bundle-summary">
-              <div>
-                <strong>{bundle.chapters.length}</strong>
-                <span>{t("sourceChapters")}</span>
-              </div>
-              <div>
-                <strong>{formatNumber(bundle.totalWords, locale)}</strong>
-                <span>{t("statWords")}</span>
-              </div>
-              <div>
-                <strong>{bundle.totalScenes}</strong>
-                <span>{t("totalScenes")}</span>
-              </div>
-              <div>
-                <strong>{bundle.totalShots}</strong>
-                <span>{t("totalShots")}</span>
-              </div>
+              <div><strong>{bundle.chapters.length}</strong><span>{t("sourceChapters")}</span></div>
+              <div><strong>{formatNumber(bundle.totalWords, locale)}</strong><span>{t("statWords")}</span></div>
+              <div><strong>{bundle.totalScenes}</strong><span>{t("totalScenes")}</span></div>
+              <div><strong>{bundle.totalShots}</strong><span>{t("totalShots")}</span></div>
             </div>
             <div className="manifest-hash">
               <span>{t("manifestHash")}</span>
@@ -766,14 +633,8 @@ function AdaptationPanel({
                 <strong>{t("bundleWarnings")}</strong>
               </div>
               {bundle.warnings.length ? (
-                <ul>
-                  {bundle.warnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p>{t("noWarnings")}</p>
-              )}
+                <ul>{bundle.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+              ) : <p>{t("noWarnings")}</p>}
             </div>
             <div className="file-tree">
               <div className="file-tree-head">
@@ -782,33 +643,18 @@ function AdaptationPanel({
               </div>
               {bundle.files.map((file) => (
                 <div className="file-row" key={file.path}>
-                  <Icon
-                    name={
-                      file.mediaType === "application/json" ? "layers" : "file"
-                    }
-                    size={16}
-                  />
+                  <Icon name={file.mediaType === "application/json" ? "layers" : "file"} size={16} />
                   <code>{file.path}</code>
-                  <span>
-                    {new TextEncoder()
-                      .encode(file.content)
-                      .byteLength.toLocaleString()}{" "}
-                    B
-                  </span>
+                  <span>{new TextEncoder().encode(file.content).byteLength.toLocaleString()} B</span>
                 </div>
               ))}
             </div>
             <div className="preview-chapters">
               {bundle.chapters.map((chapter) => (
                 <div key={chapter.chapterId}>
-                  <span className="chapter-number">
-                    {String(chapter.number).padStart(2, "0")}
-                  </span>
+                  <span className="chapter-number">{String(chapter.number).padStart(2, "0")}</span>
                   <strong>{chapter.title}</strong>
-                  <small>
-                    {chapter.sceneCount} {t("scenes")} · {chapter.shotCount}{" "}
-                    {t("shots")}
-                  </small>
+                  <small>{chapter.sceneCount} {t("scenes")} · {chapter.shotCount} {t("shots")}</small>
                 </div>
               ))}
             </div>
