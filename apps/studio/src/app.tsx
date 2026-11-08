@@ -58,6 +58,7 @@ import { bridge, type AppInfo } from "./platform.ts";
 import { applyTheme, useStudioWorkspace } from "./use-studio-workspace.ts";
 import type { StudioRoute } from "./routes.ts";
 import { describeWorkspaceProblem } from "./validation-message.ts";
+import { describeResetFailure } from "./workspace-errors.ts";
 import { Sidebar, Topbar } from "./components/app-shell.tsx";
 import {
   AtlasModal,
@@ -712,19 +713,36 @@ export function App() {
   };
 
   const resetDemo = async () => {
-    const loaded = await bridge.resetDemo(locale);
-    state.replaceWorkspace(loaded.workspace);
-    setRoute({ name: "dashboard" });
-    setHistory([]);
-    notify(
-      loaded.snapshotPath
-        ? t("snapshotSaved", { path: loaded.snapshotPath })
-        : t("saved"),
-    );
+    try {
+      // The helper invalidates before dispatch: while the reset is in flight,
+      // a retry that wakes up would otherwise save the pre-reset workspace
+      // after the reset has already been written. A rejected reset re-arms
+      // the autosave for whatever was still unsaved.
+      const loaded = await state.dispatchWorkspaceReplacement(() =>
+        bridge.resetDemo(locale),
+      );
+      state.replaceWorkspace(loaded.workspace);
+      setRoute({ name: "dashboard" });
+      setHistory([]);
+      notify(
+        loaded.snapshotPath
+          ? t("snapshotSaved", { path: loaded.snapshotPath })
+          : t("saved"),
+      );
+    } catch (reason) {
+      // The settings view notifies with `message`; translate the known browser
+      // refusal here while the workspace locale is available.
+      throw new Error(describeResetFailure(reason, t));
+    }
   };
 
   const restoreSnapshot = async (snapshotPath: string) => {
-    const loaded = await bridge.restoreSnapshot(snapshotPath);
+    // Same in-flight window as demo reset: the helper stops stale retries
+    // before the restore IPC can be overtaken by a late save of the previous
+    // workspace, and re-arms the autosave if the restore fails.
+    const loaded = await state.dispatchWorkspaceReplacement(() =>
+      bridge.restoreSnapshot(snapshotPath),
+    );
     state.replaceWorkspace(loaded.workspace);
     setRoute({ name: "dashboard" });
     setHistory([]);

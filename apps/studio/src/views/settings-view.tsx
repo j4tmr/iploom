@@ -287,6 +287,11 @@ export function SettingsView({
                 try {
                   await onResetDemo();
                   await refreshSnapshots();
+                } catch (reason) {
+                  notify(
+                    reason instanceof Error ? reason.message : String(reason),
+                    "error",
+                  );
                 } finally {
                   setBusy(false);
                 }

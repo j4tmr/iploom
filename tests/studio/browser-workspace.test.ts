@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  NewerBrowserWorkspaceVersionError,
   StaleBrowserWorkspaceError,
   browserSnapshotKey,
   browserWorkspaceKey,
@@ -9,6 +10,7 @@ import {
   saveBrowserWorkspace,
 } from "../../apps/studio/src/browser-workspace.ts";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
+import { WORKSPACE_SCHEMA_VERSION } from "../../apps/studio/src/core/types.ts";
 
 function storageWith(raw: string | null = null) {
   const values = new Map<string, string>();
@@ -132,6 +134,45 @@ test("unreadable stored data cannot block a healthy save", () => {
   const workspace = createDemoWorkspace("en");
   saveBrowserWorkspace(storage, workspace);
   expect(loadBrowserWorkspace(storage, "en").workspace).toEqual(workspace);
+});
+
+test("a workspace written by a newer build is never overwritten", () => {
+  const future = JSON.stringify({
+    ...createDemoWorkspace("en"),
+    schema_version: WORKSPACE_SCHEMA_VERSION + 1,
+  });
+  const storage = storageWith(future);
+  const current = createDemoWorkspace("en");
+  current.revision += 1;
+
+  try {
+    saveBrowserWorkspace(storage, current);
+    throw new Error("expected a newer-schema workspace to be rejected");
+  } catch (error) {
+    expect(error).toBeInstanceOf(NewerBrowserWorkspaceVersionError);
+    expect((error as { retryable?: boolean }).retryable).toBe(false);
+    expect((error as NewerBrowserWorkspaceVersionError).foundVersion).toBe(
+      WORKSPACE_SCHEMA_VERSION + 1,
+    );
+  }
+  // A newer build's workspace is healthy, so a downgraded build must not
+  // mistake the validator's rejection for corruption and replace it.
+  expect(storage.getItem(browserWorkspaceKey)).toBe(future);
+});
+
+test("demo reset cannot overwrite a newer-schema workspace", () => {
+  const future = JSON.stringify({
+    ...createDemoWorkspace("en"),
+    schema_version: WORKSPACE_SCHEMA_VERSION + 2,
+  });
+  const storage = storageWith(future);
+
+  expect(() =>
+    saveBrowserWorkspace(storage, createDemoWorkspace("zh-CN"), {
+      allowRollback: true,
+    }),
+  ).toThrow(NewerBrowserWorkspaceVersionError);
+  expect(storage.getItem(browserWorkspaceKey)).toBe(future);
 });
 
 test("snapshot restore and demo reset may intentionally roll a revision back", () => {
