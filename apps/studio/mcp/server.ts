@@ -9,7 +9,7 @@ import {
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
 import { buildArcReelBundle } from "../src/core/arcreel.ts";
-import { countWords, createId } from "../src/core/factory.ts";
+import { countWords, createId, displayText } from "../src/core/factory.ts";
 import { buildRelationshipGraph } from "../src/core/graph.ts";
 import { reassignStandardUniverse } from "../src/core/integrity.ts";
 import {
@@ -26,10 +26,17 @@ import {
   timelineSubjectLabel,
 } from "../src/core/timeline.ts";
 import {
+  approvedAncestorTasks,
+  clipApprovedResult,
+  effectiveProductionTemplate,
+  productionTemplates,
+} from "../src/core/production.ts";
+import {
   buildWorkflowBrief,
   setWorkflowTaskResultLocalized,
   workflowSummary,
   workflowTaskReadiness,
+  type WorkflowBriefOptions,
 } from "../src/core/workflow.ts";
 import {
   MAX_WORKFLOW_RESULT_LENGTH,
@@ -2033,7 +2040,7 @@ export function createStudioMcpServer(
     {
       title: "AI 任务简报 / Workflow brief",
       description:
-        "生成一份确定性的 Markdown 简报，只包含该任务相关的世界、小说、章节、人物、关系与依赖；简报按 offset 与 max_chars 分窗返回。Build a deterministic Markdown brief scoped to one task, including only related world, novel, chapter, cast, relationships and dependencies; the brief is windowed by offset and max_chars.",
+        "生成一份确定性的 Markdown 简报，只包含该任务相关的世界、小说、章节、人物、关系与依赖；简报按 offset 与 max_chars 分窗返回。可用 include_approved_outputs 把所有已批准上游任务的产出注入「已批准的依赖产出」一节，与制作台提示词一致。Build a deterministic Markdown brief scoped to one task, including only related world, novel, chapter, cast, relationships and dependencies; the brief is windowed by offset and max_chars. With include_approved_outputs, the outputs of every approved ancestor task are injected into an APPROVED DEPENDENCY OUTPUTS section, matching the in-app production prompt.",
       annotations: READ_ONLY_ANNOTATIONS,
     },
     z.object({
@@ -2049,6 +2056,12 @@ export function createStudioMcpServer(
         .describe(
           `简报单次最多字符数，默认 ${BRIEF_CHARS} / Brief window size; default ${BRIEF_CHARS}.`,
         ),
+      include_approved_outputs: z
+        .boolean()
+        .optional()
+        .describe(
+          "把依赖链上所有已批准（done）任务的产出按制作台同样的规则截断后注入简报；默认不注入 / Include the clipped outputs of every approved (done) ancestor task, as the in-app production prompt does; default false.",
+        ),
     }),
     async (args) => {
       const loaded = await store.load();
@@ -2063,13 +2076,49 @@ export function createStudioMcpServer(
         );
       const locale: UiLocale = args.locale ?? workspace.settings.locale;
       const readiness = workflowTaskReadiness(workspace, task);
+      const briefOptions: WorkflowBriefOptions = {};
+      if (args.include_approved_outputs) {
+        const ancestors = approvedAncestorTasks(workspace, task).map(
+          (item) => ({
+            stage:
+              productionTemplates[effectiveProductionTemplate(item)][
+                locale === "en" ? 1 : 0
+              ],
+            title: displayText(item.title, locale),
+            result: displayText(item.result, locale) || "—",
+          }),
+        );
+        // Mirror taskProductionPrompt: no single ancestor may flood the brief,
+        // so every output gets an equal share of the remaining window budget
+        // (issue #21 semantics) instead of a fixed per-item cap.
+        const full = buildWorkflowBrief(workspace, task.id, locale, {
+          approvedOutputs: ancestors,
+        });
+        if (full.length > args.max_chars && ancestors.length) {
+          const bare = buildWorkflowBrief(workspace, task.id, locale, {
+            approvedOutputs: ancestors.map((item) => ({
+              ...item,
+              result: "",
+            })),
+          });
+          const share = Math.floor(
+            Math.max(0, args.max_chars - bare.length) / ancestors.length,
+          );
+          briefOptions.approvedOutputs = ancestors.map((item) => ({
+            ...item,
+            result: clipApprovedResult(item.result, share),
+          }));
+        } else {
+          briefOptions.approvedOutputs = ancestors;
+        }
+      }
       return {
         schema: MCP_SCHEMA,
         workspace: workspaceMeta(loaded),
         task: workflowTaskSummaryView(workspace, task),
         ready: readiness.ready,
         markdown: textWindow(
-          buildWorkflowBrief(workspace, task.id, locale),
+          buildWorkflowBrief(workspace, task.id, locale, briefOptions),
           args.offset,
           args.max_chars,
         ),

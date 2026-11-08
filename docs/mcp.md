@@ -20,27 +20,27 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 
 ## Tools
 
-| Tool                     | Read-only | Purpose                                                                                  |
-| ------------------------ | --------- | ---------------------------------------------------------------------------------------- |
-| `list_story_worlds`      | yes       | List universes and compact counts                                                        |
-| `get_story_world`        | yes       | Read world rules, cast, places, factions, lore and relationships                         |
-| `list_novels`            | yes       | List novels, optionally filtered by universe                                             |
-| `get_novel`              | yes       | Read novel metadata, chapter plans and statistics                                        |
-| `get_chapter`            | yes       | Read a chapter's full prose, outline, beats and scenes                                   |
-| `search_ip`              | yes       | Search the bilingual IP library                                                          |
-| `get_relationship_graph` | yes       | Return graph nodes, edges, degrees and warnings                                          |
-| `list_timeline_events`   | yes       | List story timeline events with world/novel/chapter/subject/status filters               |
-| `list_workflow_tasks`    | yes       | List AI authoring tasks with readiness, blockers and optional world/novel/status filters |
-| `get_workflow_brief`     | yes       | Generate a deterministic, task-scoped bilingual Markdown brief                           |
-| `get_workflow_result`    | yes       | Read a workflow task's bilingual result (full or windowed) and first pre-change snapshot |
-| `list_standards`         | yes       | List foundation standards with kind, status, scope and pinned task count                 |
-| `get_standard`           | yes       | Read one standard, its applied scope and the tasks that pin its version                  |
-| `create_standard`        | no        | Register a foundation standard as a draft (or active) with schema validation             |
-| `update_standard`        | no        | Update a standard; content changes bump its version, status-only changes do not          |
-| `create_timeline_event`  | no        | Create a story timeline event; defaults to `proposed` and validates every reference      |
-| `update_timeline_event`  | no        | Revise an event by id; omitted fields keep their values and references are re-validated  |
-| `save_workflow_result`   | no        | Save produced result text to a workflow task and move it to review                       |
-| `export_arcreel_bundle`  | no        | Write an ArcReel-style handoff package                                                   |
+| Tool                     | Read-only | Purpose                                                                                                   |
+| ------------------------ | --------- | --------------------------------------------------------------------------------------------------------- |
+| `list_story_worlds`      | yes       | List universes and compact counts                                                                         |
+| `get_story_world`        | yes       | Read world rules, cast, places, factions, lore and relationships                                          |
+| `list_novels`            | yes       | List novels, optionally filtered by universe                                                              |
+| `get_novel`              | yes       | Read novel metadata, chapter plans and statistics                                                         |
+| `get_chapter`            | yes       | Read a chapter's full prose, outline, beats and scenes                                                    |
+| `search_ip`              | yes       | Search the bilingual IP library                                                                           |
+| `get_relationship_graph` | yes       | Return graph nodes, edges, degrees and warnings                                                           |
+| `list_timeline_events`   | yes       | List story timeline events with world/novel/chapter/subject/status filters                                |
+| `list_workflow_tasks`    | yes       | List AI authoring tasks with readiness, blockers and optional world/novel/status filters                  |
+| `get_workflow_brief`     | yes       | Generate a deterministic, task-scoped bilingual Markdown brief, optionally with approved upstream outputs |
+| `get_workflow_result`    | yes       | Read a workflow task's bilingual result (full or windowed) and first pre-change snapshot                  |
+| `list_standards`         | yes       | List foundation standards with kind, status, scope and pinned task count                                  |
+| `get_standard`           | yes       | Read one standard, its applied scope and the tasks that pin its version                                   |
+| `create_standard`        | no        | Register a foundation standard as a draft (or active) with schema validation                              |
+| `update_standard`        | no        | Update a standard; content changes bump its version, status-only changes do not                           |
+| `create_timeline_event`  | no        | Create a story timeline event; defaults to `proposed` and validates every reference                       |
+| `update_timeline_event`  | no        | Revise an event by id; omitted fields keep their values and references are re-validated                   |
+| `save_workflow_result`   | no        | Save produced result text to a workflow task and move it to review                                        |
+| `export_arcreel_bundle`  | no        | Write an ArcReel-style handoff package                                                                    |
 
 Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The server registers 19 tools: thirteen read-only, five workspace writes (`create_standard`, `update_standard`, `create_timeline_event`, `update_timeline_event`, `save_workflow_result`) and one export (`export_arcreel_bundle`). Those six are the only tools that can change local state; writes are serialized and re-validated against the workspace schema. Tool names and access levels come from `apps/studio/src/core/mcp-tools.ts`, the single source the server, the settings copy and the verification script all share.
 
@@ -68,6 +68,7 @@ Every collection response is a page rather than a bare array:
 - `get_chapter` windows prose: pass `offset` and `max_chars` (default 6,000) and concatenate `content.text` until `content.next_offset` is `null` to rebuild the full chapter.
 - `get_standard` windows bodies the same way with `body_offset` and `body_max_chars` (default 4,000), applied to both `body.zh` and `body.en`. Because each language body has its own length, continue each one from its own `next_offset` via `body_offsets` (`{"zh": 4000, "en": 4002}`); a language omitted from `body_offsets` starts at `body_offset`. A shared offset would skip or repeat text once one language hits a surrogate pair at the cut. Windows never split a surrogate pair: an offset that lands between the two halves is pulled back, and a `max_chars` of 1 returns the whole two-code-unit character.
 - `get_workflow_result` supports the same per-language continuation with `offset`, `result_offsets` and `max_chars` (default 4,000). Without any window argument it returns the full text, which stays the expected shape for revision workflows.
+- `get_workflow_brief` accepts `include_approved_outputs` (default `false`). When true, the outputs of every approved ancestor task are appended in an "APPROVED DEPENDENCY OUTPUTS" section, using the same stage labels and dependency order the in-app production prompt uses. To keep one huge ancestor from flooding the brief, each output is clipped to an equal share of the remaining `max_chars` window with a `[…truncated]` marker (mirroring the in-app prompt's budget rule). The default call without the flag is unchanged.
 
 ### Bounded views and write acknowledgements
 
