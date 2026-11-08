@@ -35,7 +35,7 @@
     "lint": "biome lint .",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "check": "bun run lint && bun run format:check && bun run typecheck && bun run test:coverage && bun run studio:build:release && bun scripts/studio/verify-release-inputs.ts inputs && bun scripts/studio/verify-release-inputs.ts docs && bun run studio:verify-mcp",
+    "check": "bun run lint && bun run studio:verify-test-isolation && bun run format:check && bun run typecheck && bun run test:coverage && bun run studio:build:release && bun scripts/studio/verify-release-inputs.ts inputs && bun scripts/studio/verify-release-inputs.ts docs && bun run studio:verify-mcp",
     "test": "bun test tests/studio",
     "test:studio": "bun test tests/studio",
     "test:coverage": "bun test tests/studio --coverage",
@@ -49,7 +49,8 @@
     "studio:smoke": "bun scripts/studio/smoke.ts",
     "studio:smoke:package": "bun scripts/studio/smoke.ts --packaged",
     "studio:mcp": "bun apps/studio/mcp/server.ts",
-    "studio:verify-mcp": "bun scripts/studio/verify-mcp.ts"
+    "studio:verify-mcp": "bun scripts/studio/verify-mcp.ts",
+    "studio:verify-test-isolation": "bun scripts/studio/verify-test-isolation.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.4.0",

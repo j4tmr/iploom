@@ -77,7 +77,8 @@ function cloneWorkspace(workspace: StudioWorkspace): StudioWorkspace {
  * The bridge methods the workspace hook drives. Narrowed so a test can supply
  * a fake without stubbing the whole `StudioBridge` surface — and, unlike
  * `mock.module`, without replacing the real module for every later test file in
- * the same process.
+ * the same process. `scripts/studio/verify-test-isolation.ts` rejects
+ * `mock.module` in `tests/` for exactly that reason.
  */
 export type WorkspaceBridge = Pick<
   StudioBridge,
@@ -284,6 +285,16 @@ export function useStudioWorkspace(
     }
     retryWake.current?.();
   }, []);
+
+  // A sleeping retry outlives the hook otherwise: because nothing bumps the
+  // sequence on teardown, it wakes after unmount, still considers itself
+  // current, and writes through the bridge again. Closing the app already
+  // flushes through `saveNow`, so the abandoned attempt has nothing left to
+  // persist — but in the test process its write would land in whichever file
+  // runs next.
+  useEffect(() => {
+    return () => invalidatePendingSaves();
+  }, [invalidatePendingSaves]);
 
   /**
    * Invalidate before the bridge operation is dispatched, not after it

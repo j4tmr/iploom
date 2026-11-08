@@ -1,4 +1,6 @@
+import { afterEach, mock } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import "./mock-module-guard.ts";
 
 // bun:test has no DOM. Registering happy-dom before the component modules load
 // gives them document/window/localStorage; React portals and the capture-phase
@@ -13,3 +15,11 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 if (!GlobalRegistrator.isRegistered) {
   GlobalRegistrator.register();
 }
+
+// spyOn replaces a property in place; on a module-level singleton such as the
+// shared `bridge` a forgotten restore leaks into every test file that runs
+// later. mock.restore() undoes those spies — not direct assignments like
+// `window.confirm = mock(...)`, which the owning test restores itself.
+afterEach(() => {
+  mock.restore();
+});

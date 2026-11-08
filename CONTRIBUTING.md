@@ -14,7 +14,7 @@ Thank you for improving IPloom Studio.
 1. Open or link an issue for non-trivial work.
 2. Fork the repository and create a focused branch.
 3. Keep changes scoped. Do not combine unrelated refactors.
-4. Add or update tests for domain, persistence, MCP and export behavior.
+4. Add or update tests for domain, persistence, MCP and export behavior. Keep every test file isolated: inject fakes through parameters instead of `mock.module`, which Bun applies process-wide for every later test file (`bun run studio:verify-test-isolation` scans for it, and the `tests/studio/mock-module-guard.ts` preload makes any call throw at runtime).
 5. Run:
 
 ```sh

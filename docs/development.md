@@ -22,6 +22,7 @@ Development opens a Vite renderer on loopback and launches Electron against it. 
 
 ```sh
 bun run lint
+bun run studio:verify-test-isolation
 bun run format:check
 bun run typecheck
 bun run test
@@ -30,7 +31,9 @@ bun run studio:verify-mcp
 bun run studio:smoke
 ```
 
-`bun run check` runs the same steps in order, with coverage, the shared release-input checks and the documentation version check. Apply formatting with `bun run format`.
+`bun run check` runs the same steps in order, with coverage, the test-isolation guard, the shared release-input checks and the documentation version check. Apply formatting with `bun run format`.
+
+Tests must not call `mock.module`: Bun applies it to the whole process and `mock.restore()` cannot undo it, so one file poisons every file that runs after it. Inject fakes through function parameters instead — see `WorkspacePlatform` in `apps/studio/src/use-studio-workspace.ts`. `bun run studio:verify-test-isolation` enforces this in `bun run check` and in CI, and the `tests/studio/mock-module-guard.ts` preload replaces the function with one that throws, which also covers aliased calls the static scan cannot see.
 
 On a Linux CI runner, wrap the GUI smoke with Xvfb:
 

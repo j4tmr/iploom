@@ -71,7 +71,7 @@ bun scripts/studio/verify-mcp.ts --packaged --arch x86_64
 shasum -a 256 release/IPloom-Studio-* > /tmp/iploom-sha256.txt
 ```
 
-`bun run check` runs `biome lint`, `biome format`, the type check, coverage tests, the release build, the shared release-input and documentation checks, and the bundled MCP verification. On Windows use `Get-FileHash -Algorithm SHA256` and `--platform win32`.
+`bun run check` runs `biome lint`, the test-isolation guard, `biome format`, the type check, coverage tests, the release build, the shared release-input and documentation checks, and the bundled MCP verification. On Windows use `Get-FileHash -Algorithm SHA256` and `--platform win32`.
 
 The Intel-slice commands require Rosetta 2 on Apple silicon. They launch the universal macOS bundle through `/usr/bin/arch -x86_64`, so they exercise the Intel slice and the packaged MCP runtime the same way CI does. Install Rosetta once with `softwareupdate --install-rosetta --agree-to-license`.
 
