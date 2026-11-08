@@ -137,6 +137,205 @@ describe("story timeline", () => {
     expect(linOnly.canon.map((event) => event.id)).not.toContain(shenOnly.id);
   });
 
+  test("cast-only chapters keep unrelated location-free events out of scope", () => {
+    const workspace = createDemoWorkspace("en");
+    const chapter = workspace.works[0]!.chapters.find(
+      (item) => item.id === "chapter_tide_002",
+    )!;
+    chapter.locationId = undefined;
+    const outsider = structuredClone(workspace.timelineEvents[0]!);
+    outsider.id = "timeline_echo_earlier";
+    outsider.chapterId = "chapter_tide_001";
+    outsider.subjectKind = "character";
+    outsider.subjectId = "char_echo";
+    outsider.relatedCharacterIds = ["char_echo"];
+    outsider.relatedLocationIds = [];
+    outsider.relatedObjectIds = [];
+    workspace.timelineEvents.push(outsider);
+
+    const events = relevantTimelineEvents(workspace, {
+      workId: "work_tide_clock",
+      chapterId: "chapter_tide_002",
+    });
+    expect(events.canon.map((event) => event.id)).not.toContain(outsider.id);
+    expect(events.canon.map((event) => event.id)).toContain(
+      "timeline_rain_key_handoff",
+    );
+  });
+
+  test("restoring the chapter location leaves cast-scoped results unchanged", () => {
+    const workspace = createDemoWorkspace("en");
+    const chapter = workspace.works[0]!.chapters.find(
+      (item) => item.id === "chapter_tide_002",
+    )!;
+    const outsider = structuredClone(workspace.timelineEvents[0]!);
+    outsider.id = "timeline_echo_earlier";
+    outsider.chapterId = "chapter_tide_001";
+    outsider.subjectKind = "character";
+    outsider.subjectId = "char_echo";
+    outsider.relatedCharacterIds = ["char_echo"];
+    outsider.relatedLocationIds = [];
+    outsider.relatedObjectIds = [];
+    workspace.timelineEvents.push(outsider);
+    const scope = {
+      workId: "work_tide_clock",
+      chapterId: "chapter_tide_002",
+    };
+
+    chapter.locationId = undefined;
+    const castOnly = relevantTimelineEvents(workspace, scope).canon.map(
+      (event) => event.id,
+    );
+    chapter.locationId = "loc_old_tower";
+    const withLocation = relevantTimelineEvents(workspace, scope).canon.map(
+      (event) => event.id,
+    );
+
+    expect(withLocation).toEqual(castOnly);
+    expect(withLocation).not.toContain(outsider.id);
+    expect(withLocation).toContain("timeline_rain_key_handoff");
+  });
+
+  test("chapters without any scope information return every event in range", () => {
+    const workspace = createDemoWorkspace("en");
+    const chapter = workspace.works[0]!.chapters.find(
+      (item) => item.id === "chapter_tide_002",
+    )!;
+    chapter.characterIds = [];
+    chapter.locationId = undefined;
+    const outsider = structuredClone(workspace.timelineEvents[0]!);
+    outsider.id = "timeline_echo_earlier";
+    outsider.chapterId = "chapter_tide_001";
+    outsider.subjectKind = "character";
+    outsider.subjectId = "char_echo";
+    outsider.relatedCharacterIds = [];
+    outsider.relatedLocationIds = [];
+    outsider.relatedObjectIds = [];
+    workspace.timelineEvents.push(outsider);
+
+    const events = relevantTimelineEvents(workspace, {
+      workId: "work_tide_clock",
+      chapterId: "chapter_tide_002",
+    });
+    expect(new Set(events.canon.map((event) => event.id))).toEqual(
+      new Set([
+        "timeline_rain_key_handoff",
+        "timeline_lin_rain_costume",
+        "timeline_key_notch_reveal",
+        outsider.id,
+      ]),
+    );
+    expect(events.proposed).toEqual([]);
+  });
+
+  test("an empty scene does not narrow a chapter without cast or location", () => {
+    const workspace = createDemoWorkspace("en");
+    const chapter = workspace.works[0]!.chapters.find(
+      (item) => item.id === "chapter_tide_002",
+    )!;
+    chapter.characterIds = [];
+    chapter.locationId = undefined;
+    chapter.scenes = [];
+    const scope = {
+      workId: "work_tide_clock",
+      chapterId: "chapter_tide_002",
+    };
+    const withoutScenes = relevantTimelineEvents(workspace, scope);
+    chapter.scenes = [
+      {
+        id: "scene_blank",
+        title: "Blank",
+        summary: "",
+        characterIds: [],
+        shots: [],
+      },
+    ];
+    const withBlankScene = relevantTimelineEvents(workspace, scope);
+
+    expect(withBlankScene.canon.map((event) => event.id)).toEqual(
+      withoutScenes.canon.map((event) => event.id),
+    );
+    expect(new Set(withBlankScene.canon.map((event) => event.id))).toEqual(
+      new Set([
+        "timeline_rain_key_handoff",
+        "timeline_lin_rain_costume",
+        "timeline_key_notch_reveal",
+      ]),
+    );
+  });
+
+  test("keeps character and location facts anchored to the selected chapter", () => {
+    const workspace = createDemoWorkspace("en");
+    const dock = structuredClone(
+      workspace.locations.find((item) => item.id === "loc_old_tower")!,
+    );
+    dock.id = "loc_rain_dock";
+    workspace.locations.push(dock);
+
+    const characterFact = structuredClone(workspace.timelineEvents[0]!);
+    characterFact.id = "timeline_gu_chapter_anchor";
+    characterFact.chapterId = "chapter_tide_002";
+    characterFact.subjectKind = "character";
+    characterFact.subjectId = "char_gu";
+    characterFact.relatedCharacterIds = [];
+    characterFact.relatedLocationIds = [];
+    characterFact.relatedObjectIds = [];
+
+    const locationFact = structuredClone(workspace.timelineEvents[0]!);
+    locationFact.id = "timeline_dock_chapter_anchor";
+    locationFact.chapterId = "chapter_tide_002";
+    locationFact.subjectKind = "location";
+    locationFact.subjectId = "loc_rain_dock";
+    locationFact.relatedCharacterIds = [];
+    locationFact.relatedLocationIds = [];
+    locationFact.relatedObjectIds = [];
+
+    workspace.timelineEvents.push(characterFact, locationFact);
+
+    const events = relevantTimelineEvents(workspace, {
+      workId: "work_tide_clock",
+      chapterId: "chapter_tide_002",
+    });
+    const ids = events.canon.map((event) => event.id);
+    expect(ids).toContain(characterFact.id);
+    expect(ids).toContain(locationFact.id);
+  });
+
+  test("treats a scene cast as chapter scope", () => {
+    const workspace = createDemoWorkspace("en");
+    const chapter = workspace.works[0]!.chapters.find(
+      (item) => item.id === "chapter_tide_002",
+    )!;
+    chapter.characterIds = [];
+    chapter.locationId = undefined;
+    chapter.scenes = [
+      {
+        id: "scene_notch",
+        title: "Notch",
+        summary: "",
+        characterIds: ["char_gu"],
+        shots: [],
+      },
+    ];
+    const sceneCastFact = structuredClone(workspace.timelineEvents[0]!);
+    sceneCastFact.id = "timeline_gu_earlier";
+    sceneCastFact.chapterId = "chapter_tide_001";
+    sceneCastFact.subjectKind = "character";
+    sceneCastFact.subjectId = "char_gu";
+    sceneCastFact.relatedCharacterIds = [];
+    sceneCastFact.relatedLocationIds = [];
+    sceneCastFact.relatedObjectIds = [];
+    workspace.timelineEvents.push(sceneCastFact);
+
+    const events = relevantTimelineEvents(workspace, {
+      workId: "work_tide_clock",
+      chapterId: "chapter_tide_002",
+    });
+    const ids = events.canon.map((event) => event.id);
+    expect(ids).toContain(sceneCastFact.id);
+    expect(ids).not.toContain("timeline_lin_rain_costume");
+  });
+
   test("drops scene subjects and clears scene anchors when a scene is removed", () => {
     const workspace = createDemoWorkspace("en");
     const chapter = workspace.works[0]!.chapters[0]!;

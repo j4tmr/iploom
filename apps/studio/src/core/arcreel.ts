@@ -45,7 +45,7 @@ export function arcReelSlug(value: string): string {
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "");
-  return normalized.slice(0, 48) || "untitled";
+  return normalized.slice(0, surrogateSafeCut(normalized, 48)) || "untitled";
 }
 
 const slug = arcReelSlug;
@@ -146,6 +146,14 @@ function isLowSurrogate(code: number): boolean {
   return code >= 0xdc00 && code <= 0xdfff;
 }
 
+/** Step back one code unit when `cut` would split a surrogate pair. */
+function surrogateSafeCut(value: string, cut: number): number {
+  return isHighSurrogate(value.charCodeAt(cut - 1)) &&
+    isLowSurrogate(value.charCodeAt(cut))
+    ? cut - 1
+    : cut;
+}
+
 function clipText(
   value: string,
   max: number,
@@ -153,11 +161,7 @@ function clipText(
 ): { text: string; truncated: boolean } {
   if (value.length <= max) return { text: value, truncated: false };
   let cut = ellipsis && max > 1 ? max - 1 : max;
-  if (
-    isHighSurrogate(value.charCodeAt(cut - 1)) &&
-    isLowSurrogate(value.charCodeAt(cut))
-  )
-    cut -= 1;
+  cut = surrogateSafeCut(value, cut);
   if (cut <= 0)
     return { text: ellipsis ? "…" : value.slice(0, max), truncated: true };
   const text = value.slice(0, cut).trimEnd();
@@ -184,12 +188,7 @@ function splitLongParagraph(paragraph: string, max: number): string[] {
       }
     }
     if (cut <= 0) {
-      cut = max;
-      if (
-        isHighSurrogate(rest.charCodeAt(cut - 1)) &&
-        isLowSurrogate(rest.charCodeAt(cut))
-      )
-        cut -= 1;
+      cut = surrogateSafeCut(rest, max);
       if (cut <= 0) cut = 2;
     }
     const piece = rest.slice(0, cut).trim();
