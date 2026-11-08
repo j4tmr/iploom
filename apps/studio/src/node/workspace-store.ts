@@ -24,6 +24,7 @@ import {
   type StudioWorkspace,
 } from "../core/types.ts";
 import { parseArcReelBundle } from "./desktop-guards.ts";
+import { englishMainMessages, type MainMessages } from "./messages.ts";
 
 export interface LoadedWorkspace {
   workspace: StudioWorkspace;
@@ -51,23 +52,19 @@ export class StaleWorkspaceError extends Error {
     readonly storedRevision: number,
     readonly incomingRevision: number,
     readonly baseRevision?: number,
+    messages: MainMessages["store"] = englishMainMessages.store,
   ) {
     super(
       storedRevision === incomingRevision
-        ? `Refusing to overwrite ${path} revision ${storedRevision} with different ` +
-            `content. Another process (for example the MCP server) changed the ` +
-            `workspace. Reload the workspace to continue from the newer file; ` +
-            `the file was left untouched.`
+        ? messages.staleSameRevision(path, storedRevision)
         : baseRevision != null && baseRevision < storedRevision
-          ? `Refusing to overwrite ${path} revision ${storedRevision} with a draft ` +
-            `based on revision ${baseRevision} (incoming revision ${incomingRevision}). ` +
-            `Another process (for example the MCP server) changed the workspace. ` +
-            `Reload the workspace to continue from the newer file; ` +
-            `the file was left untouched.`
-          : `Refusing to overwrite ${path} revision ${storedRevision} with older ` +
-            `revision ${incomingRevision}. Another process (for example the MCP ` +
-            `server) changed the workspace. Reload the workspace to continue from ` +
-            `the newer file; the file was left untouched.`,
+          ? messages.staleBaseBehind(
+              path,
+              storedRevision,
+              baseRevision,
+              incomingRevision,
+            )
+          : messages.staleOlder(path, storedRevision, incomingRevision),
     );
     this.name = "StaleWorkspaceError";
   }
@@ -77,12 +74,12 @@ export class NewerWorkspaceVersionError extends Error {
   readonly path: string;
   readonly foundVersion: number;
 
-  constructor(path: string, foundVersion: number) {
-    super(
-      `This workspace was created by a newer IPloom Studio (schema ${foundVersion}; ` +
-        `this build supports ${WORKSPACE_SCHEMA_VERSION}). Update the app to open ${path}. ` +
-        `The file was left untouched.`,
-    );
+  constructor(
+    path: string,
+    foundVersion: number,
+    messages: MainMessages["store"] = englishMainMessages.store,
+  ) {
+    super(messages.newerVersion(path, foundVersion, WORKSPACE_SCHEMA_VERSION));
     this.name = "NewerWorkspaceVersionError";
     this.path = path;
     this.foundVersion = foundVersion;
@@ -244,19 +241,21 @@ function safeBundlePath(value: string): string {
     normalized.includes("/../") ||
     normalized.includes("\0")
   )
-    throw new Error(`Unsafe export path: ${value}`);
+    throw new Error(englishMainMessages.store.unsafeExportPath(value));
   return normalized;
 }
 
 export class WorkspaceStore {
   readonly filePath: string;
   readonly snapshotDirectory: string;
+  private readonly messages: MainMessages["store"];
   private saveQueue: Promise<void> = Promise.resolve();
   private updateQueue: Promise<void> = Promise.resolve();
 
-  constructor(filePath: string) {
+  constructor(filePath: string, messages: MainMessages = englishMainMessages) {
     this.filePath = resolve(filePath);
     this.snapshotDirectory = join(dirname(this.filePath), "snapshots");
+    this.messages = messages.store;
   }
 
   async ensure(): Promise<LoadedWorkspace> {
@@ -295,7 +294,7 @@ export class WorkspaceStore {
       }
       const version = schemaVersionOf(parsed);
       if (version !== null && version > WORKSPACE_SCHEMA_VERSION)
-        throw new NewerWorkspaceVersionError(candidate, version);
+        throw new NewerWorkspaceVersionError(candidate, version, this.messages);
       let workspace: StudioWorkspace;
       try {
         workspace = loadWorkspace(parsed);
@@ -335,7 +334,7 @@ export class WorkspaceStore {
       };
     }
     throw new Error(
-      `Workspace is missing or invalid. ${errors.join(" | ") || this.filePath}`,
+      this.messages.missingOrInvalid(errors.join(" | ") || this.filePath),
     );
   }
 
@@ -355,15 +354,17 @@ export class WorkspaceStore {
         await renameWithRetry(this.filePath, target);
       } catch (error) {
         throw new Error(
-          `Recovered from ${backupPath(this.filePath)}, but could not isolate the ` +
-            `unreadable file ${this.filePath}: ${
-              error instanceof Error ? error.message : String(error)
-            }. ${reason}`,
+          this.messages.quarantineFailed(
+            backupPath(this.filePath),
+            this.filePath,
+            error instanceof Error ? error.message : String(error),
+            reason,
+          ),
         );
       }
       return target;
     }
-    throw new Error(`Could not find a free name to isolate ${this.filePath}`);
+    throw new Error(this.messages.noIsolationName(this.filePath));
   }
 
   private async cleanupStaleTemps(): Promise<void> {
@@ -451,10 +452,7 @@ export class WorkspaceStore {
           // branch means the file changed after that check.
         }
         if (current === null) {
-          throw new Error(
-            `Refusing to overwrite unreadable workspace file ${this.filePath}. ` +
-              `Reload the workspace so the file can be quarantined first.`,
-          );
+          throw new Error(this.messages.unreadableOverwrite(this.filePath));
         }
         // The editor keeps the whole workspace in memory and autosaves it
         // without reloading while another process (the MCP server) may have
@@ -481,6 +479,7 @@ export class WorkspaceStore {
             current.revision,
             workspace.revision,
             options.baseRevision,
+            this.messages,
           );
         }
         // Renaming the previous primary keeps the `.bak` byte-identical to the
@@ -515,9 +514,7 @@ export class WorkspaceStore {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       }
     }
-    throw new Error(
-      `Could not find a free recovery-copy name for ${this.filePath}`,
-    );
+    throw new Error(this.messages.noRecoveryCopyName(this.filePath));
   }
 
   /**
@@ -527,7 +524,7 @@ export class WorkspaceStore {
    */
   async createSnapshot(reason = "manual"): Promise<string | null> {
     if (!SNAPSHOT_REASON.test(reason))
-      throw new Error(`Unsafe snapshot reason: ${reason}`);
+      throw new Error(this.messages.unsafeSnapshotReason(reason));
     await this.saveQueue;
     if (!(await exists(this.filePath))) return null;
     const raw = await readFile(this.filePath, "utf8");
@@ -598,7 +595,7 @@ export class WorkspaceStore {
       dirname(target) !== resolve(this.snapshotDirectory) ||
       !SNAPSHOT_NAME.test(basename(target))
     )
-      throw new Error(`Not a workspace snapshot: ${snapshotPath}`);
+      throw new Error(this.messages.notSnapshot(snapshotPath));
     const raw = await readFile(target, "utf8");
     const workspace = loadWorkspace(JSON.parse(raw));
     await this.createSnapshot("before-restore");
@@ -646,7 +643,7 @@ export class WorkspaceStore {
     }
     // The package must stay exactly one level below the selected destination.
     if (dirname(directory) !== destination) {
-      throw new Error("Export directory escapes the selected destination");
+      throw new Error(this.messages.exportDirectoryEscapes);
     }
     await mkdir(destination, { recursive: true });
     const staging = join(
@@ -660,11 +657,11 @@ export class WorkspaceStore {
       for (const file of bundle.files) {
         const relative = safeBundlePath(file.path);
         if (seen.has(relative))
-          throw new Error(`Duplicate export file: ${relative}`);
+          throw new Error(this.messages.duplicateExportFile(relative));
         seen.add(relative);
         const target = resolve(staging, relative);
         if (target !== staging && !target.startsWith(`${staging}${sep}`))
-          throw new Error(`Export path escapes package: ${relative}`);
+          throw new Error(this.messages.exportPathEscapes(relative));
         await mkdir(dirname(target), { recursive: true });
         await writeFile(target, file.content, "utf8");
         bytes += new TextEncoder().encode(file.content).byteLength;

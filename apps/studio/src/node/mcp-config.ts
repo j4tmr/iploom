@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
 import type { McpClientConfig } from "../platform.ts";
+import { englishMainMessages, type MainMessages } from "./messages.ts";
 
 export interface ElectronMcpConfigInput {
   executable: string;
@@ -90,6 +91,8 @@ export interface McpClientConfigOptions extends McpBinaryOptions {
    */
   sourceCandidates: readonly string[];
   pathEnv?: string;
+  /** Injected by the desktop app; the default stays byte-identical English. */
+  messages?: MainMessages;
 }
 
 export interface McpClientConfigState {
@@ -103,6 +106,7 @@ export interface McpClientConfigState {
 export function mcpClientConfigState(
   options: McpClientConfigOptions,
 ): McpClientConfigState {
+  const messages = options.messages ?? englishMainMessages;
   const exists = options.exists ?? existsSync;
   const binary = resolveMcpBinary(options);
   if (binary) {
@@ -122,7 +126,7 @@ export function mcpClientConfigState(
   if (!source) {
     return {
       config: null,
-      error: "Bundled MCP server is missing from this installation.",
+      error: messages.mcpConfig.binaryMissing,
       binary: null,
     };
   }
@@ -130,8 +134,7 @@ export function mcpClientConfigState(
   if (!bun) {
     return {
       config: null,
-      error:
-        "The development MCP server needs Bun, but no Bun executable was found.",
+      error: messages.mcpConfig.bunMissing,
       binary: null,
     };
   }

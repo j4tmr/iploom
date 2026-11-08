@@ -3,6 +3,7 @@ import { basename, dirname, posix, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { ARC_REEL_SCHEMA, type ArcReelBundle } from "../core/types.ts";
+import { englishMainMessages, type MainMessages } from "./messages.ts";
 
 /**
  * Pure policy shared by the Electron main process, the MCP server and tests.
@@ -221,12 +222,17 @@ export const arcReelBundleSchema = z
   });
 
 /** Parses an untrusted ArcReel bundle without echoing any payload back in errors. */
-export function parseArcReelBundle(value: unknown): ArcReelBundle {
+export function parseArcReelBundle(
+  value: unknown,
+  messages: MainMessages["guards"] = englishMainMessages.guards,
+): ArcReelBundle {
   const parsed = arcReelBundleSchema.safeParse(value);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    const where = issue?.path.length ? ` at ${issue.path.join(".")}` : "";
-    throw new Error(`Invalid ArcReel bundle${where}`);
+    const where = issue?.path.length
+      ? messages.invalidArcReelBundleAt(issue.path.join("."))
+      : "";
+    throw new Error(messages.invalidArcReelBundle(where));
   }
   return parsed.data;
 }
@@ -240,6 +246,7 @@ export interface RevealDependencies {
     isDirectory(): boolean;
   }>;
   realpath?: (path: string) => Promise<string>;
+  messages?: MainMessages["guards"];
 }
 
 /**
@@ -253,8 +260,9 @@ export async function revealKnownPath(
   value: string,
   deps: RevealDependencies,
 ): Promise<string> {
+  const messages = deps.messages ?? englishMainMessages.guards;
   if (typeof value !== "string" || !value.trim()) {
-    throw new Error("Folder path must be a string");
+    throw new Error(messages.revealPathMustBeString);
   }
   const platform = deps.platform ?? process.platform;
   const target = canonicalPath(value, platform);
@@ -265,30 +273,30 @@ export async function revealKnownPath(
   // process authenticate to an attacker-chosen SMB server. The post-realpath
   // check below still catches paths that escape through a symlink.
   if (!allowedFolders.some((folder) => isWithin(folder, target, platform))) {
-    throw new Error("Path is outside this workspace's known locations");
+    throw new Error(messages.revealOutsideKnownLocations);
   }
   if (isBlockedShellTarget(target)) {
-    throw new Error("Application bundles cannot be opened");
+    throw new Error(messages.revealBlockedBundle);
   }
   const fileStat = deps.stat ?? stat;
   let info: { isFile(): boolean; isDirectory(): boolean };
   try {
     info = await fileStat(target);
   } catch {
-    throw new Error("Path does not exist");
+    throw new Error(messages.revealPathDoesNotExist);
   }
   if (!info.isFile() && !info.isDirectory()) {
-    throw new Error("Path is not a file or directory");
+    throw new Error(messages.revealNotFileOrDirectory);
   }
   const fileRealpath = deps.realpath ?? realpath;
   let real: string;
   try {
     real = await fileRealpath(target);
   } catch {
-    throw new Error("Path is not accessible");
+    throw new Error(messages.revealNotAccessible);
   }
   if (isBlockedShellTarget(real)) {
-    throw new Error("Application bundles cannot be opened");
+    throw new Error(messages.revealBlockedBundle);
   }
   const allowed = await Promise.all(
     allowedFolders.map(async (folder) => {
@@ -304,7 +312,7 @@ export async function revealKnownPath(
     }),
   );
   if (!allowed.some(Boolean)) {
-    throw new Error("Path is outside this workspace's known locations");
+    throw new Error(messages.revealOutsideKnownLocations);
   }
   deps.showItemInFolder(real);
   return real;
