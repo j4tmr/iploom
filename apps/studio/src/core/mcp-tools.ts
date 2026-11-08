@@ -30,6 +30,7 @@ export const MCP_TOOLS = [
   { name: "update_standard", access: "write" },
   { name: "create_timeline_event", access: "write" },
   { name: "update_timeline_event", access: "write" },
+  { name: "save_workflow_result", access: "write" },
   { name: "export_arcreel_bundle", access: "export" },
 ] as const satisfies readonly McpToolDefinition[];
 

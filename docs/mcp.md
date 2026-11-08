@@ -38,9 +38,10 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 | `update_standard`        | no        | Update a standard; content changes bump its version, status-only changes do not          |
 | `create_timeline_event`  | no        | Create a story timeline event; defaults to `proposed` and validates every reference      |
 | `update_timeline_event`  | no        | Revise an event by id; omitted fields keep their values and references are re-validated  |
+| `save_workflow_result`   | no        | Save produced result text to a workflow task and move it to review                       |
 | `export_arcreel_bundle`  | no        | Write an ArcReel-style handoff package                                                   |
 
-Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The server registers 17 tools: twelve read-only, four workspace writes (`create_standard`, `update_standard`, `create_timeline_event`, `update_timeline_event`) and one export (`export_arcreel_bundle`). Those five are the only tools that can change local state; writes are serialized and re-validated against the workspace schema. Tool names and access levels come from `apps/studio/src/core/mcp-tools.ts`, the single source the server, the settings copy and the verification script all share.
+Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The server registers 18 tools: twelve read-only, five workspace writes (`create_standard`, `update_standard`, `create_timeline_event`, `update_timeline_event`, `save_workflow_result`) and one export (`export_arcreel_bundle`). Those six are the only tools that can change local state; writes are serialized and re-validated against the workspace schema. Tool names and access levels come from `apps/studio/src/core/mcp-tools.ts`, the single source the server, the settings copy and the verification script all share.
 
 ### Response shape and paging
 
@@ -75,6 +76,7 @@ Responses echo the fields a client needs for the next call, not every nested lis
 - `list_workflow_tasks` previews at most 10 unfinished prerequisites in `blockers` and reports the full number in `blocker_count`; the summary object counts all of them.
 - `create_standard` and `update_standard` acknowledge with the compact standard view. Bodies are reported as `body_chars` (`{ zh, en }` character counts) rather than echoed back, so a large write does not inflate the response. A language patch merges per language: sending only `title.zh` keeps the existing English title and both bodies.
 - `create_timeline_event` and `update_timeline_event` acknowledge with the compact timeline event view: long state, evidence and production-prompt fields are clipped and named in `truncated_fields`. Omitted fields keep their stored values, a title patch merges per language, and `chapter_id: null` clears the chapter together with any scene.
+- `save_workflow_result` acknowledges with the compact workflow task view, whose result is reported as `result_chars` and a short `result_excerpt` rather than echoed back. A result patch merges per language: omitting `zh` keeps the stored Chinese text, and an empty string clears one language only while the other still has text. The pre-change snapshot moves to `previous_result_chars`, done dependents are flagged `result_superseded`, and `queued` or `active` tasks become `review`; a `done` task is rejected until it is reopened in the app.
 - `export_arcreel_bundle` reports the counts (`chapter_count`, `path_count`, `warning_count`, `totals`) and previews only the first 50 chapters and paths and the first 20 warnings. Read the returned `directory` and `manifest.json` for the complete list; `files_written` remains the authoritative file count.
 
 ### Errors
@@ -165,7 +167,7 @@ bun run studio:verify-mcp
 
 ## Safety
 
-The server reads the workspace on every call. It only changes local state through `create_standard`, `update_standard`, `create_timeline_event`, `update_timeline_event` and `export_arcreel_bundle`. It does not call a model, network service or cloud API. MCP clients can still read all text in the active workspace, so only connect clients you trust.
+The server reads the workspace on every call. It only changes local state through `create_standard`, `update_standard`, `create_timeline_event`, `update_timeline_event`, `save_workflow_result` and `export_arcreel_bundle`. It does not call a model, network service or cloud API. MCP clients can still read all text in the active workspace, so only connect clients you trust.
 
 That text includes imported manuscripts and lore, which are third-party content. `get_chapter` returns full prose, and the world and search tools return lore and asset text verbatim. Treat imported content as a prompt-injection surface: an MCP agent may read instructions embedded in it, and neither the server nor the app can prevent the client's model from acting on them. Expose the workspace only to agents whose behavior and permissions you accept, and treat their conclusions as proposals that need author review.
 
