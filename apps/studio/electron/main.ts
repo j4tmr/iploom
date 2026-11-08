@@ -56,12 +56,16 @@ import {
   type WindowCloseState,
 } from "../src/node/window-close-state.ts";
 import {
-  AI_CANCELED_MESSAGE,
-  aiConfigSchema,
+  createAiConfigSchema,
   aiRequestSchema,
   isReportableAiError,
   runCompletion,
 } from "../src/node/ai-client.ts";
+import {
+  englishMainMessages,
+  mainMessagesFor,
+  type MainMessages,
+} from "../src/node/messages.ts";
 import type { AiConfig } from "../src/core/ai.ts";
 import type { AppInfo, WrittenBundle } from "../src/platform.ts";
 
@@ -72,6 +76,10 @@ const UPDATE_CHECK_TIMEOUT_MS = 10_000;
 
 let mainWindow: BrowserWindow | null = null;
 let workspaceStore: WorkspaceStore | null = null;
+// User-visible main-process copy lives in a bilingual catalog. English until
+// `bootstrap` learns the real locale (app.getLocale needs the ready event),
+// which also keeps every early failure English.
+let mainMessages: MainMessages = englishMainMessages;
 let devUrl: URL | null = null;
 const smokeMode = process.env.IPLOOM_STUDIO_SMOKE === "1";
 const smokeArch = process.env.IPLOOM_STUDIO_SMOKE_ARCH ?? "";
@@ -135,7 +143,7 @@ function isTrustedRendererUrl(value: string): boolean {
 
 async function openExternalSafely(value: string): Promise<void> {
   const url = safeExternalUrl(value);
-  if (!url) throw new Error("Only credential-free HTTP(S) links can be opened");
+  if (!url) throw new Error(mainMessages.shell.onlyHttpLinks);
   await shell.openExternal(url.toString());
 }
 
@@ -196,12 +204,12 @@ function requestUpdateCheck(): Promise<UpdateCheckResult> {
 function assertTrustedSender(event: IpcMainInvokeEvent): void {
   const senderUrl = event.senderFrame?.url ?? event.sender.getURL();
   if (!isTrustedRendererUrl(senderUrl)) {
-    throw new Error("Rejected IPC call from an untrusted renderer");
+    throw new Error(mainMessages.shell.untrustedRenderer);
   }
 }
 
 function requireStore(): WorkspaceStore {
-  if (!workspaceStore) throw new Error("Workspace store is not initialized");
+  if (!workspaceStore) throw new Error(mainMessages.shell.storeNotInitialized);
   return workspaceStore;
 }
 
@@ -220,20 +228,14 @@ function requestRendererFlush(window: BrowserWindow): Promise<void> {
     return Promise.resolve();
   }
   if (flushWaiter) {
-    return Promise.reject(
-      new Error("A workspace save handshake is already active"),
-    );
+    return Promise.reject(new Error(mainMessages.shell.handshakeActive));
   }
   const requestId = `flush-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
       if (flushWaiter?.requestId !== requestId) return;
       flushWaiter = undefined;
-      reject(
-        new Error(
-          "The editor did not confirm its final save within 8 seconds. The window was kept open.",
-        ),
-      );
+      reject(new Error(mainMessages.shell.flushTimeout));
     }, 8_000);
     timer.unref();
     flushWaiter = { requestId, resolve, reject, timer };
@@ -472,11 +474,12 @@ function mcpConfigState() {
       join(__dirname, "..", "..", "..", "apps", "studio", "mcp", "server.ts"),
       join(__dirname, "..", "..", "apps", "studio", "mcp", "server.ts"),
     ],
+    messages: mainMessages,
   });
 }
 
 async function exportArcReel(bundleInput: unknown): Promise<WrittenBundle> {
-  const bundle = parseArcReelBundle(bundleInput);
+  const bundle = parseArcReelBundle(bundleInput, mainMessages.guards);
   const options: OpenDialogOptions = {
     title:
       bundle.workLanguage === "zh-CN"
@@ -505,11 +508,8 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("iploom:configure-ai", (event, config: unknown) => {
     assertTrustedSender(event);
-    if (aiRuns.size)
-      throw new Error(
-        "Wait for the current AI task or cancel it before changing configuration.",
-      );
-    aiConfig = aiConfigSchema.parse(config);
+    if (aiRuns.size) throw new Error(mainMessages.ai.configureBusy);
+    aiConfig = createAiConfigSchema(mainMessages.ai).parse(config);
     return aiInfo();
   });
   ipcMain.handle("iploom:cancel-ai", (event, id: string) => {
@@ -519,10 +519,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle("iploom:run-ai", async (event, input: unknown) => {
     assertTrustedSender(event);
     const request = aiRequestSchema.parse(input);
-    if (aiRuns.size)
-      throw new Error("Another AI task is running. Wait or cancel it first.");
-    if (!aiInfo().configured)
-      throw new Error("Configure the model API in Settings first.");
+    if (aiRuns.size) throw new Error(mainMessages.ai.runBusy);
+    if (!aiInfo().configured) throw new Error(mainMessages.ai.notConfigured);
     const controller = new AbortController();
     aiRuns.set(request.id, controller);
     let lastSent = 0;
@@ -541,14 +539,17 @@ function registerIpcHandlers(): void {
             });
           }
         },
+        undefined,
+        {},
+        mainMessages,
       );
     } catch (error) {
-      if (controller.signal.aborted) throw new Error(AI_CANCELED_MESSAGE);
+      if (controller.signal.aborted) throw new Error(mainMessages.ai.canceled);
       // Never echo provider payloads or credential-bearing fetch errors into IPC/logs.
       throw new Error(
         isReportableAiError(error)
           ? error.message
-          : "Model request failed. Check configuration and retry.",
+          : mainMessages.ai.genericFailure,
       );
     } finally {
       aiRuns.delete(request.id);
@@ -569,7 +570,7 @@ function registerIpcHandlers(): void {
         baseRevision != null &&
         (typeof baseRevision !== "number" || !Number.isFinite(baseRevision))
       ) {
-        throw new Error("Base revision must be a finite number");
+        throw new Error(mainMessages.shell.baseRevisionFinite);
       }
       try {
         await requireStore().save(
@@ -601,7 +602,7 @@ function registerIpcHandlers(): void {
         recoveryWorkspace = workspace;
       }
       if (typeof requestId !== "string") {
-        throw new Error("Flush request id must be a string");
+        throw new Error(mainMessages.shell.flushRequestId);
       }
       if (!flushWaiter || flushWaiter.requestId !== requestId) return;
       const waiter = flushWaiter;
@@ -647,7 +648,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("iploom:copy-text", async (event, value: string) => {
     assertTrustedSender(event);
-    if (typeof value !== "string") throw new Error("Text must be a string");
+    if (typeof value !== "string")
+      throw new Error(mainMessages.shell.copyTextMustBeString);
     clipboard.writeText(value);
   });
 
@@ -656,12 +658,14 @@ function registerIpcHandlers(): void {
     await revealKnownPath(value, {
       allowedFolders,
       showItemInFolder: (path) => shell.showItemInFolder(path),
+      messages: mainMessages.guards,
     });
   });
 
   ipcMain.handle("iploom:open-external", async (event, value: string) => {
     assertTrustedSender(event);
-    if (typeof value !== "string") throw new Error("URL must be a string");
+    if (typeof value !== "string")
+      throw new Error(mainMessages.shell.openUrlMustBeString);
     await openExternalSafely(value);
   });
 
@@ -670,7 +674,7 @@ function registerIpcHandlers(): void {
     async (event, reason: string): Promise<string | null> => {
       assertTrustedSender(event);
       if (typeof reason !== "string") {
-        throw new Error("Snapshot reason must be a string");
+        throw new Error(mainMessages.shell.snapshotReasonMustBeString);
       }
       return requireStore().createSnapshot(reason);
     },
@@ -689,7 +693,7 @@ function registerIpcHandlers(): void {
     async (event, snapshotPath: string): Promise<LoadedWorkspace> => {
       assertTrustedSender(event);
       if (typeof snapshotPath !== "string") {
-        throw new Error("Snapshot path must be a string");
+        throw new Error(mainMessages.shell.snapshotPathMustBeString);
       }
       const loaded = await requireStore().restoreSnapshot(snapshotPath);
       rememberFolders();
@@ -700,7 +704,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle("iploom:reset-demo", async (event, locale: UiLocale) => {
     assertTrustedSender(event);
     if (locale !== "zh-CN" && locale !== "en") {
-      throw new Error("Unsupported locale");
+      throw new Error(mainMessages.shell.unsupportedLocale);
     }
     const store = requireStore();
     // Keep the pre-reset workspace out of reach of the `.bak` rotation: the
@@ -878,7 +882,7 @@ function createWindow(): BrowserWindow {
   }
   void load.catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
-    dialog.showErrorBox("IPloom Studio failed to load", message);
+    dialog.showErrorBox(mainMessages.shell.failedToLoadTitle, message);
   });
   return window;
 }
@@ -1085,10 +1089,11 @@ function focusMainWindow(): void {
 async function bootstrap(): Promise<void> {
   app.setAppUserModelId(APP_ID);
   devUrl = parseDevUrl();
+  mainMessages = mainMessagesFor(defaultLocale());
   const workspacePath = process.env.IPLOOM_STUDIO_WORKSPACE
     ? resolve(process.env.IPLOOM_STUDIO_WORKSPACE)
     : join(app.getPath("userData"), "workspace.json");
-  workspaceStore = new WorkspaceStore(workspacePath);
+  workspaceStore = new WorkspaceStore(workspacePath, mainMessages);
   await loadWorkspace();
   configureSessionSecurity();
   app.on("web-contents-created", (_event, contents) => {
@@ -1102,7 +1107,9 @@ async function bootstrap(): Promise<void> {
 function fail(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
   console.error("[IPloom Studio]", error);
-  dialog.showErrorBox("IPloom Studio could not start", message);
+  // `fail` can run before `app.whenReady`, so app.getLocale may be
+  // unavailable; the module-level default keeps this English and safe.
+  dialog.showErrorBox(mainMessages.shell.couldNotStartTitle, message);
   process.exitCode = 1;
   app.quit();
 }

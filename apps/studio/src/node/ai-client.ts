@@ -1,45 +1,51 @@
 import { z } from "zod";
 import type { AiCompletion, AiConfig, AiRequest, AiUsage } from "../core/ai.ts";
 import { MAX_AI_PROMPT_LENGTH } from "../core/types.ts";
+import { englishMainMessages, type MainMessages } from "./messages.ts";
 
-export const aiConfigSchema = z
-  .object({
-    endpoint: z.string().trim().url().max(2048),
-    model: z.string().trim().min(1).max(200),
-    apiKey: z.string().trim().max(4096),
-  })
-  .strict()
-  .superRefine((config, ctx) => {
-    // Refinements still run after .url() fails in zod 4, so an empty or scheme-less endpoint
-    // must not reach the URL constructor and surface as a raw TypeError over IPC.
-    let url: URL;
-    try {
-      url = new URL(config.endpoint);
-    } catch {
-      ctx.addIssue({
-        code: "custom",
-        message: "Enter a valid URL such as https://host/v1.",
-      });
-      return;
-    }
-    if (
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      (url.protocol !== "https:" &&
-        !(
-          url.protocol === "http:" &&
-          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
-        ))
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        message:
-          "Use HTTPS or loopback HTTP; no URL credentials, query or fragment.",
-      });
-    }
-  });
+/**
+ * The two refinement messages below are user-visible (the configure-ai IPC
+ * handler lets the ZodError propagate to the renderer), so the schema is built
+ * from the injected catalog. `aiConfigSchema` stays the default English
+ * instance: the MCP server and `runCompletion`'s internal revalidation must
+ * keep throwing byte-identical pre-localization text.
+ */
+export function createAiConfigSchema(
+  ai: MainMessages["ai"] = englishMainMessages.ai,
+) {
+  return z
+    .object({
+      endpoint: z.string().trim().url().max(2048),
+      model: z.string().trim().min(1).max(200),
+      apiKey: z.string().trim().max(4096),
+    })
+    .strict()
+    .superRefine((config, ctx) => {
+      // Refinements still run after .url() fails in zod 4, so an empty or scheme-less endpoint
+      // must not reach the URL constructor and surface as a raw TypeError over IPC.
+      let url: URL;
+      try {
+        url = new URL(config.endpoint);
+      } catch {
+        ctx.addIssue({ code: "custom", message: ai.urlInvalid });
+        return;
+      }
+      if (
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash ||
+        (url.protocol !== "https:" &&
+          !(
+            url.protocol === "http:" &&
+            ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+          ))
+      ) {
+        ctx.addIssue({ code: "custom", message: ai.endpointPolicy });
+      }
+    });
+}
+export const aiConfigSchema = createAiConfigSchema();
 export const aiRequestSchema = z
   .object({
     id: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
@@ -52,15 +58,35 @@ export const aiRequestSchema = z
 export const AI_FIRST_BYTE_TIMEOUT_MS = 120_000 as const;
 /** Every stream chunk resets this idle window, so a long but active generation is never cut off. */
 export const AI_IDLE_TIMEOUT_MS = 60_000 as const;
+/** English canonical text kept for backward-compatible imports and tests. */
 export const AI_CANCELED_MESSAGE =
   "Model request canceled by the user; no result was applied.";
 
 const MAX_ERROR_BODY_BYTES = 4_096;
 const MAX_ERROR_TEXT_LENGTH = 300;
 const MAX_OUTPUT_BYTES = 2_000_000;
-// The main process only forwards errors with these prefixes to the renderer; everything else
-// (a fetch TypeError, a provider payload that was not cleaned above, ...) becomes a generic hint.
-const REPORTABLE_AI_ERROR = /^(?:Model|Incomplete|Configure) /;
+
+/**
+ * Errors the main process forwards verbatim to the renderer, identified
+ * structurally instead of by message prefix so localized messages survive the
+ * gate. Everything else (a fetch TypeError, a provider payload that was not
+ * cleaned above, ...) becomes a generic hint.
+ */
+export class ReportableAiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReportableAiError";
+  }
+}
+
+/** True when a main-process error message is safe to show to the renderer. */
+export function isReportableAiError(error: unknown): error is Error {
+  return (
+    error instanceof ReportableAiError ||
+    (error instanceof Error &&
+      /^(?:Model|Incomplete|Configure) /.test(error.message))
+  );
+}
 
 export interface AiRunLimits {
   firstByteTimeoutMs?: number;
@@ -85,11 +111,6 @@ interface ProviderErrorDetail {
   code: string;
 }
 
-/** True when a main-process error message is safe to show to the renderer. */
-export function isReportableAiError(error: unknown): error is Error {
-  return error instanceof Error && REPORTABLE_AI_ERROR.test(error.message);
-}
-
 /** Sends only the explicitly reviewed prompt; credentials never enter workspace data. */
 export async function runCompletion(
   config: AiConfig,
@@ -98,6 +119,7 @@ export async function runCompletion(
   onText: (text: string) => void,
   fetcher: typeof fetch = fetch,
   limits: AiRunLimits = {},
+  messages: MainMessages = englishMainMessages,
 ): Promise<AiCompletion> {
   const valid = aiConfigSchema.parse(config);
   aiRequestSchema.parse(request);
@@ -116,11 +138,13 @@ export async function runCompletion(
     resolveAborted = resolve;
   });
   const abortText = () => {
-    if (abortKind === "canceled") return AI_CANCELED_MESSAGE;
+    if (abortKind === "canceled") return messages.ai.canceled;
     if (abortKind === "first-byte") {
-      return `Model sent no data for ${Math.round(firstByteTimeoutMs / 1000)} seconds; no result was applied. Check the endpoint and model, then retry.`;
+      return messages.ai.firstByteTimeout(
+        Math.round(firstByteTimeoutMs / 1000),
+      );
     }
-    return `Model stopped sending data for ${Math.round(idleTimeoutMs / 1000)} seconds; no result was applied. Retry, or shorten the prompt if the model is struggling with its length.`;
+    return messages.ai.idleTimeout(Math.round(idleTimeoutMs / 1000));
   };
   const abort = (kind: "canceled" | "first-byte" | "idle") => {
     if (requestAbort.signal.aborted) return;
@@ -146,11 +170,7 @@ export async function runCompletion(
     }, ms);
   };
   const abortedError = () =>
-    new Error(
-      abortKind
-        ? abortText()
-        : "Model request was canceled; no result was applied.",
-    );
+    new Error(abortKind ? abortText() : messages.ai.canceledFallback);
 
   // Racing the abort reason (instead of relying only on fetch's rejection) guarantees that a
   // stalled body ends the run even when a custom transport ignores the signal.
@@ -169,7 +189,7 @@ export async function runCompletion(
     const chatUrl = endpoint.endsWith("/chat/completions")
       ? endpoint
       : `${endpoint}/chat/completions`;
-    const messages = [
+    const chatMessages = [
       {
         role: "system",
         content:
@@ -194,7 +214,7 @@ export async function runCompletion(
             model: valid.model,
             stream: true,
             ...(withUsage ? { stream_options: { include_usage: true } } : {}),
-            messages,
+            chatMessages,
           }),
         }),
       );
@@ -204,31 +224,32 @@ export async function runCompletion(
     if (!response.ok && (response.status === 400 || response.status === 422)) {
       // Reading the error body must stay cancellable even if the provider stalls it.
       const described = await raceAbort(
-        describeHttpError(response, valid.apiKey),
+        describeHttpError(response, valid.apiKey, messages.ai),
       );
       if (described === ABORTED) throw abortedError();
       clearTimer();
       // A strict OpenAI-compatible endpoint may reject the usage extension
       // outright. Retry once without it, but only when the provider's own
       // message names the parameter, so unrelated 400s keep their error.
+      // The regex tests provider-own text, which is never localized.
       if (/stream[_ -]?options|include_usage/i.test(described)) {
         response = await send(false);
         if (response === ABORTED) throw abortedError();
       } else {
-        throw new Error(described);
+        throw new ReportableAiError(described);
       }
     }
     if (!response.ok) {
       const described = await raceAbort(
-        describeHttpError(response, valid.apiKey),
+        describeHttpError(response, valid.apiKey, messages.ai),
       );
       if (described === ABORTED) throw abortedError();
       clearTimer();
-      throw new Error(described);
+      throw new ReportableAiError(described);
     }
     if (!response.body) {
       clearTimer();
-      throw new Error("Model API returned no body.");
+      throw new ReportableAiError(messages.ai.noBody);
     }
     reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -255,21 +276,19 @@ export async function runCompletion(
       try {
         value = JSON.parse(trimmed);
       } catch {
-        if (strict)
-          throw new Error("Model API returned an unreadable response.");
+        if (strict) throw new ReportableAiError(messages.ai.unreadableResponse);
         // A provider may emit keep-alive or comment lines; they are not model output.
         return;
       }
       if (!value || typeof value !== "object") {
-        if (strict)
-          throw new Error("Model API returned an unreadable response.");
+        if (strict) throw new ReportableAiError(messages.ai.unreadableResponse);
         return;
       }
       const chunk = value as ChatChunk;
       if (chunk.error) {
         const detail = readProviderError(chunk.error, valid.apiKey);
-        throw new Error(
-          `Model API stream error${detail.code ? ` (${detail.code})` : ""}${detail.message ? `: ${detail.message}` : ""}.`,
+        throw new ReportableAiError(
+          messages.ai.streamError(detail.code, detail.message),
         );
       }
       if (
@@ -283,8 +302,10 @@ export async function runCompletion(
       const choice = chunk.choices.find((item) => (item?.index ?? 0) === 0);
       if (!choice) return;
       if (choice.finish_reason && choice.finish_reason !== "stop") {
-        throw new Error(
-          `Incomplete model output (${cleanProviderText(choice.finish_reason, valid.apiKey)}).`,
+        throw new ReportableAiError(
+          messages.ai.incompleteOutput(
+            cleanProviderText(choice.finish_reason, valid.apiKey),
+          ),
         );
       }
       if (choice.finish_reason === "stop") stopped = true;
@@ -312,7 +333,7 @@ export async function runCompletion(
       armTimer(idleTimeoutMs, "idle");
       bytes += chunk.value.byteLength;
       if (bytes > MAX_OUTPUT_BYTES)
-        throw new Error("Model output exceeded 2 MB.");
+        throw new ReportableAiError(messages.ai.outputTooLarge);
       buffer += decoder.decode(chunk.value, { stream: true });
       // A missing or wrong content-type must not turn a valid event stream into a JSON parse error.
       if (mode === "unknown") mode = detectMode(buffer, false);
@@ -328,9 +349,7 @@ export async function runCompletion(
       consume(buffer, true);
     }
     if (!stopped || !text.trim())
-      throw new Error(
-        "Model output was empty or interrupted; nothing was applied.",
-      );
+      throw new ReportableAiError(messages.ai.emptyOrInterrupted);
     return usage ? { text, usage } : { text };
   } catch (error) {
     if (abortKind) throw abortedError();
@@ -370,6 +389,7 @@ function detectMode(input: string, final: boolean): "sse" | "json" | "unknown" {
 async function describeHttpError(
   response: Response,
   apiKey: string,
+  ai: MainMessages["ai"] = englishMainMessages.ai,
 ): Promise<string> {
   const raw = await readBodySnippet(response);
   const detail = extractHttpError(raw, apiKey);
@@ -377,8 +397,8 @@ async function describeHttpError(
     response.status === 429
       ? parseRetryAfter(response.headers.get("retry-after"))
       : undefined;
-  const label = `Model API HTTP ${response.status}${detail.code ? ` (${detail.code})` : ""}`;
-  return `${label}${detail.message ? `: ${detail.message}` : ""}. ${httpHint(response.status, retryAfter)}`;
+  const label = ai.httpLabel(response.status, detail.code);
+  return `${label}${detail.message ? `: ${detail.message}` : ""}. ${ai.httpHint(response.status, retryAfter)}`;
 }
 
 async function readBodySnippet(response: Response): Promise<string> {
@@ -487,23 +507,4 @@ function parseRetryAfter(value: string | null): number | undefined {
   const at = Date.parse(trimmed);
   if (Number.isNaN(at)) return undefined;
   return Math.max(0, Math.ceil((at - Date.now()) / 1000));
-}
-
-function httpHint(status: number, retryAfter: number | undefined): string {
-  if (status === 400)
-    return "Check the prompt length, model ID and request parameters.";
-  if (status === 401) return "The API key was rejected; check it in Settings.";
-  if (status === 403)
-    return "Access was denied; check the key's model access and account permissions.";
-  if (status === 404) return "Check the endpoint URL and model ID.";
-  if (status === 413)
-    return "The request is too large; shorten the prompt or use a model with a larger context window.";
-  if (status === 429) {
-    return retryAfter === undefined
-      ? "Rate limit or quota reached; wait and retry."
-      : `Rate limit or quota reached; retry after ${retryAfter} seconds.`;
-  }
-  if (status >= 500)
-    return "The provider failed to handle the request; retry later.";
-  return "Check endpoint, model, credentials and quota.";
 }
