@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AiConfigInfo } from "./core/ai.ts";
+import { MCP_TOOL_NAMES, mcpToolsNote } from "./core/mcp-tools.ts";
 import {
   attachOverlayKeyboard,
   isComposingEvent,
@@ -1313,12 +1314,7 @@ export function App() {
         />
       ) : null}
       {modal?.kind === "mcp" ? (
-        <McpModal
-          open
-          onClose={() => setModal(null)}
-          t={t}
-          workspacePath={state.path}
-        />
+        <McpModal open onClose={() => setModal(null)} t={t} locale={locale} />
       ) : null}
       {modal?.kind === "standard" ? (
         <StandardModal
@@ -1356,12 +1352,12 @@ function McpModal({
   open,
   onClose,
   t,
-  workspacePath,
+  locale,
 }: {
   open: boolean;
   onClose: () => void;
   t: Translate;
-  workspacePath: string;
+  locale: UiLocale;
 }) {
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [copied, setCopied] = useState(false);
@@ -1371,36 +1367,7 @@ function McpModal({
       .then(setInfo)
       .catch(() => setInfo(null));
   }, []);
-  const config = info
-    ? JSON.stringify(info.mcp, null, 2)
-    : JSON.stringify(
-        {
-          mcpServers: {
-            "iploom-studio": {
-              command: "iploom-mcp",
-              args: ["--workspace", workspacePath || "/path/to/workspace.json"],
-            },
-          },
-        },
-        null,
-        2,
-      );
-  const tools = [
-    "list_story_worlds",
-    "get_story_world",
-    "list_novels",
-    "get_novel",
-    "get_chapter",
-    "search_ip",
-    "get_relationship_graph",
-    "list_workflow_tasks",
-    "get_workflow_brief",
-    "list_standards",
-    "get_standard",
-    "create_standard",
-    "update_standard",
-    "export_arcreel_bundle",
-  ];
+  const config = info?.mcp ? JSON.stringify(info.mcp, null, 2) : "";
   return (
     <Modal
       open={open}
@@ -1414,42 +1381,58 @@ function McpModal({
           <Button variant="ghost" onClick={onClose}>
             {t("close")}
           </Button>
-          <Button
-            variant="primary"
-            icon="copy"
-            onClick={async () => {
-              await bridge.copyText(config);
-              setCopied(true);
-              window.setTimeout(() => setCopied(false), 1800);
-            }}
-          >
-            {copied ? t("copied") : t("copyConfig")}
-          </Button>
+          {config ? (
+            <Button
+              variant="primary"
+              icon="copy"
+              onClick={async () => {
+                await bridge.copyText(config);
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1800);
+              }}
+            >
+              {copied ? t("copied") : t("copyConfig")}
+            </Button>
+          ) : null}
         </>
       }
     >
       <div className="mcp-modal-grid">
         <div>
           <span className="eyebrow">STDIO SERVER</span>
-          <h3>
-            {info?.desktop ? t("mcpBundledDesktopServer") : t("browserPreview")}
-          </h3>
-          <p>{t("mcpToolsNote")}</p>
+          {info?.desktop && !info.mcp ? (
+            <>
+              <h3>{t("mcpMissingTitle")}</h3>
+              <p>{t("mcpMissingLead")}</p>
+              {info.mcpError ? (
+                <p className="muted small">{info.mcpError}</p>
+              ) : null}
+            </>
+          ) : (
+            <h3>
+              {info?.desktop
+                ? t("mcpBundledDesktopServer")
+                : t("browserPreview")}
+            </h3>
+          )}
+          <p>{mcpToolsNote(locale)}</p>
           <div className="tool-pills vertical">
-            {tools.map((tool) => (
+            {MCP_TOOL_NAMES.map((tool) => (
               <code key={tool}>{tool}</code>
             ))}
           </div>
         </div>
-        <div className="code-block light">
-          <div className="code-block-head">
-            <span>{t("mcpConfig")}</span>
-            <span className="online-label">
-              <i /> stdio
-            </span>
+        {config ? (
+          <div className="code-block light">
+            <div className="code-block-head">
+              <span>{t("mcpConfig")}</span>
+              <span className="online-label">
+                <i /> stdio
+              </span>
+            </div>
+            <pre>{config}</pre>
           </div>
-          <pre>{config}</pre>
-        </div>
+        ) : null}
       </div>
     </Modal>
   );

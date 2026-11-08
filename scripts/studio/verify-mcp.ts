@@ -5,6 +5,10 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
+import {
+  MCP_TOOL_COUNTS,
+  MCP_TOOL_NAMES,
+} from "../../apps/studio/src/core/mcp-tools.ts";
 import { WorkspaceStore } from "../../apps/studio/src/node/workspace-store.ts";
 import { packagedPaths } from "./packaged-paths.ts";
 
@@ -56,8 +60,16 @@ try {
   const requestOptions = arch ? { timeout: 300_000 } : undefined;
   await client.connect(transport, requestOptions);
   const tools = await client.listTools(undefined, requestOptions);
-  if (tools.tools.length !== 14)
-    throw new Error(`Expected 14 MCP tools, received ${tools.tools.length}`);
+  if (tools.tools.length !== MCP_TOOL_COUNTS.total)
+    throw new Error(
+      `Expected ${MCP_TOOL_COUNTS.total} MCP tools, received ${tools.tools.length}`,
+    );
+  const names = tools.tools.map((tool) => tool.name);
+  if (names.join(",") !== MCP_TOOL_NAMES.join(",")) {
+    throw new Error(
+      `Bundled MCP tool list drifted from MCP_TOOL_NAMES: ${names.join(",")}`,
+    );
+  }
   const listed = await client.callTool(
     {
       name: "list_novels",
@@ -68,9 +80,10 @@ try {
   const text = listed.content.find(
     (item): item is { type: "text"; text: string } => item.type === "text",
   )?.text;
-  const body = JSON.parse(text ?? "{}") as { count?: number };
-  if (body.count !== 2)
-    throw new Error(`Expected 2 demo novels, received ${body.count}`);
+  const body = JSON.parse(text ?? "{}") as { novels?: { total?: number } };
+  if (body.novels?.total !== 2) {
+    throw new Error(`Expected 2 demo novels, received ${body.novels?.total}`);
+  }
   const workflow = await client.callTool(
     {
       name: "list_workflow_tasks",
@@ -81,10 +94,12 @@ try {
   const workflowText = workflow.content.find(
     (item): item is { type: "text"; text: string } => item.type === "text",
   )?.text;
-  const workflowBody = JSON.parse(workflowText ?? "{}") as { count?: number };
-  if (workflowBody.count !== 4) {
+  const workflowBody = JSON.parse(workflowText ?? "{}") as {
+    tasks?: { total?: number };
+  };
+  if (workflowBody.tasks?.total !== 4) {
     throw new Error(
-      `Expected 4 demo workflow tasks, received ${workflowBody.count}`,
+      `Expected 4 demo workflow tasks, received ${workflowBody.tasks?.total}`,
     );
   }
   const brief = await client.callTool(

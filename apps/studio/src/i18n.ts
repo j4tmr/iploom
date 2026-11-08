@@ -300,7 +300,9 @@ const zh = {
   copyConfig: "复制配置",
   copied: "已复制",
   mcpTools: "可用工具",
-  mcpToolsNote: "11 个只读查询工具 + 2 个基础规则写入工具 + 1 个本地导出工具。",
+  mcpMissingTitle: "MCP 服务不可用",
+  mcpMissingLead:
+    "当前安装缺少 MCP 服务文件，请重新安装或重新构建桌面版后再试。",
   mcpBundledDesktopServer: "桌面内置服务",
   resetDemo: "载入演示工作区",
   resetDemoNote:
@@ -1052,8 +1054,9 @@ const en: Record<MessageKey, string> = {
   copyConfig: "Copy config",
   copied: "Copied",
   mcpTools: "Available tools",
-  mcpToolsNote:
-    "11 read-only query tools + 2 foundation-standard writers + 1 local export tool.",
+  mcpMissingTitle: "MCP server unavailable",
+  mcpMissingLead:
+    "This installation is missing the MCP server files. Reinstall or rebuild the desktop app and try again.",
   mcpBundledDesktopServer: "Bundled desktop server",
   resetDemo: "Load demo workspace",
   resetDemoNote:

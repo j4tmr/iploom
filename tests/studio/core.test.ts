@@ -86,14 +86,14 @@ describe("studio domain", () => {
 
   test("search spans worlds, characters, chapters and lore", () => {
     const workspace = createDemoWorkspace("zh-CN");
-    const keys = searchWorkspace(workspace, "钥匙", "zh-CN").map(
+    const keys = searchWorkspace(workspace, "钥匙", "zh-CN").hits.map(
       (hit) => hit.kind,
     );
     expect(keys).toContain("chapter");
-    const echo = searchWorkspace(workspace, "回声", "en");
+    const echo = searchWorkspace(workspace, "回声", "en").hits;
     expect(echo.some((hit) => hit.id === "char_echo")).toBe(true);
     expect(
-      searchWorkspace(workspace, "00:07", "en").some(
+      searchWorkspace(workspace, "00:07", "en").hits.some(
         (hit) => hit.id === "loc_platform_seven",
       ),
     ).toBe(true);

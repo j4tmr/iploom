@@ -1,4 +1,4 @@
-import { constants, existsSync } from "node:fs";
+import { constants } from "node:fs";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -44,7 +44,7 @@ import {
   safeExternalUrl,
   workspaceRevealFolders,
 } from "../src/node/desktop-guards.ts";
-import { createElectronMcpConfig } from "../src/node/mcp-config.ts";
+import { mcpClientConfigState } from "../src/node/mcp-config.ts";
 import {
   AI_CANCELED_MESSAGE,
   aiConfigSchema,
@@ -53,11 +53,7 @@ import {
   runCompletion,
 } from "../src/node/ai-client.ts";
 import type { AiConfig } from "../src/core/ai.ts";
-import type {
-  AppInfo,
-  McpClientConfig,
-  WrittenBundle,
-} from "../src/platform.ts";
+import type { AppInfo, WrittenBundle } from "../src/platform.ts";
 
 const APP_ID = "com.j4tmr.iploom.studio";
 const RENDERER_FILE = join(__dirname, "..", "renderer", "index.html");
@@ -447,47 +443,18 @@ async function loadWorkspace(): Promise<LoadedWorkspace> {
   }
 }
 
-function resolveMcpBinary(): string {
-  const names = ["iploom-mcp"];
-  const resourcesRoot = app.isPackaged
-    ? process.resourcesPath
-    : join(__dirname, "..");
-  const bundledDirectory = join(resourcesRoot, "bin");
-  const candidates = [
-    process.env.IPLOOM_MCP_BINARY,
-    ...names.map((name) => join(bundledDirectory, name)),
-    ...names.map((name) => join(resourcesRoot, name)),
-  ].filter((candidate): candidate is string => Boolean(candidate));
-  return (
-    candidates.find((candidate) => existsSync(candidate)) ??
-    join(bundledDirectory, "iploom-mcp")
-  );
-}
-
-function mcpClientConfig(): McpClientConfig {
-  const binary = resolveMcpBinary();
-  if (existsSync(binary)) {
-    return createElectronMcpConfig({
-      executable: process.execPath,
-      mcpScript: binary,
-      workspacePath: requireStore().filePath,
-    });
-  }
-  const sourceMcp = [
-    join(__dirname, "..", "..", "..", "apps", "studio", "mcp", "server.ts"),
-    join(__dirname, "..", "..", "apps", "studio", "mcp", "server.ts"),
-  ].find((candidate) => existsSync(candidate));
-  if (!sourceMcp) {
-    throw new Error("Bundled MCP server is missing from this installation");
-  }
-  return {
-    mcpServers: {
-      "iploom-studio": {
-        command: "bun",
-        args: [sourceMcp, "--workspace", requireStore().filePath],
-      },
-    },
-  };
+function mcpConfigState() {
+  return mcpClientConfigState({
+    executable: process.execPath,
+    workspacePath: requireStore().filePath,
+    resourcesRoot: app.isPackaged
+      ? process.resourcesPath
+      : join(__dirname, ".."),
+    sourceCandidates: [
+      join(__dirname, "..", "..", "..", "apps", "studio", "mcp", "server.ts"),
+      join(__dirname, "..", "..", "apps", "studio", "mcp", "server.ts"),
+    ],
+  });
 }
 
 async function exportArcReel(bundleInput: unknown): Promise<WrittenBundle> {
@@ -639,14 +606,16 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("iploom:app-info", async (event): Promise<AppInfo> => {
     assertTrustedSender(event);
+    const state = mcpConfigState();
     return {
       version: app.getVersion(),
       platform: process.platform,
       workspacePath: requireStore().filePath,
       snapshotDirectory: requireStore().snapshotDirectory,
       desktop: true,
-      mcp: mcpClientConfig(),
-      mcpBinary: resolveMcpBinary(),
+      mcp: state.config,
+      mcpError: state.error,
+      mcpBinary: state.binary,
     };
   });
 
@@ -930,9 +899,15 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
               poll();
             });
             const info = await window.iploom.appInfo();
-            const server = info.mcp.mcpServers["iploom-studio"];
-            if (!info.desktop || !server) {
+            const server = info.mcp?.mcpServers["iploom-studio"];
+            if (!info.desktop) {
               reject(new Error("desktop bridge did not initialize"));
+              return;
+            }
+            if (!server) {
+              reject(
+                new Error(info.mcpError ?? "MCP config unavailable"),
+              );
               return;
             }
             if (server.env?.ELECTRON_RUN_AS_NODE !== "1") {

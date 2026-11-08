@@ -53,7 +53,7 @@ export function SearchOverlay({
   const listId = `${generatedId}-results`;
   const optionId = (index: number) => `${generatedId}-option-${index}`;
   const results = useMemo(
-    () => searchWorkspace(workspace, query, locale, 36),
+    () => searchWorkspace(workspace, query, locale, { limit: 36 }).hits,
     [locale, query, workspace],
   );
 

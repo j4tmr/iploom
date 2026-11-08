@@ -37,7 +37,50 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 | `update_standard`        | no        | Update a standard; content changes bump its version, status-only changes do not          |
 | `export_arcreel_bundle`  | no        | Write an ArcReel-style handoff package                                                   |
 
-Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The three write tools (`create_standard`, `update_standard`, `export_arcreel_bundle`) are the only ones that can change local state; writes are serialized and re-validated against the workspace schema.
+Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The server registers 14 tools: eleven read-only, two standard writes (`create_standard`, `update_standard`) and one export (`export_arcreel_bundle`). Those three are the only tools that can change local state; writes are serialized and re-validated against the workspace schema. Tool names and access levels come from `apps/studio/src/core/mcp-tools.ts`, the single source the server, the settings copy and the verification script all share.
+
+### Response shape and paging
+
+Every collection response is a page rather than a bare array:
+
+```json
+{
+  "total": 243,
+  "offset": 0,
+  "count": 20,
+  "next_offset": 20,
+  "truncated": true,
+  "items": []
+}
+```
+
+- List tools accept `offset` and `limit` (default 20, maximum 200); `get_novel` also pages `chapters`, `list_standards` pages `standards`.
+- `get_story_world` pages six collections with one shared `limit` but independent offsets: pass `offsets` (for example `{"characters": 20, "lore": 40}`) so advancing one collection leaves the others on their own page. Omitted collections start at 0.
+- `get_relationship_graph` uses the same idea with top-level `nodes_offset` and `edges_offset`.
+- Default responses stay under a roughly 50 KB budget; a page carries fewer items when large entries would exceed it, so `count` can be below `limit`. Opt-ins that ask for a large payload — `list_standards` with `include_body`, or a `max_chars` far above the default — can push a single response past that budget.
+- Follow `next_offset` until it is `null`; across all pages every item appears exactly once, and `total` does not change while the workspace revision does not change.
+- `search_ip` applies `world_id` and `kind` before ranking, so out-of-scope hits cannot crowd real matches out of the page.
+- `get_chapter` windows prose: pass `offset` and `max_chars` (default 6,000) and concatenate `content.text` until `content.next_offset` is `null` to rebuild the full chapter.
+- `get_standard` windows bodies the same way with `body_offset` and `body_max_chars` (default 4,000), applied to both `body.zh` and `body.en`. Because each language body has its own length, continue each one from its own `next_offset` via `body_offsets` (`{"zh": 4000, "en": 4002}`); a language omitted from `body_offsets` starts at `body_offset`. A shared offset would skip or repeat text once one language hits a surrogate pair at the cut. Windows never split a surrogate pair: an offset that lands between the two halves is pulled back, and a `max_chars` of 1 returns the whole two-code-unit character.
+
+### Bounded views and write acknowledgements
+
+Responses echo the fields a client needs for the next call, not every nested list:
+
+- Entity views cap repeated identifiers at 20 items and add the true size alongside: `character_ids`/`character_id_count`, `depends_on_ids`/`depends_on_id_count`, `pinned_by_task_ids`/`pinned_by_task_count`.
+- `list_workflow_tasks` previews at most 10 unfinished prerequisites in `blockers` and reports the full number in `blocker_count`; the summary object counts all of them.
+- `create_standard` and `update_standard` acknowledge with the compact standard view. Bodies are reported as `body_chars` (`{ zh, en }` character counts) rather than echoed back, so a large write does not inflate the response. A language patch merges per language: sending only `title.zh` keeps the existing English title and both bodies.
+- `export_arcreel_bundle` reports the counts (`chapter_count`, `path_count`, `warning_count`, `totals`) and previews only the first 50 chapters and paths and the first 20 warnings. Read the returned `directory` and `manifest.json` for the complete list; `files_written` remains the authoritative file count.
+
+### Errors
+
+Failures return `isError: true` with a JSON text block that clients can parse:
+
+```json
+{ "error": { "code": "invalid_arguments", "message": "...", "issues": ["query: ..."] } }
+```
+
+`issues` is present when the failure carries field-level details: argument parsing and foundation-standard validation. Unknown ids — including a story world referenced by `create_standard` or `update_standard` — and unknown task references return `not_found`. Both keep the connection alive so a client can correct the call without reconnecting.
 
 ### Export destination boundary
 

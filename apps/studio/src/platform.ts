@@ -63,8 +63,9 @@ export interface AppInfo {
   workspacePath: string;
   snapshotDirectory: string;
   desktop: boolean;
-  mcp: McpClientConfig;
-  mcpBinary: string;
+  mcp: McpClientConfig | null;
+  mcpError: string | null;
+  mcpBinary: string | null;
 }
 
 export interface StudioBridge {
@@ -106,20 +107,6 @@ declare global {
 function browserLoad(): LoadedWorkspace {
   const locale: UiLocale = navigator.language.startsWith("zh") ? "zh-CN" : "en";
   return loadBrowserWorkspace(localStorage, locale);
-}
-
-function browserMcpConfig(): McpClientConfig {
-  return {
-    mcpServers: {
-      "iploom-studio": {
-        command: "iploom-mcp",
-        args: ["--workspace", "/path/to/workspace.json"],
-        env: {
-          ELECTRON_RUN_AS_NODE: "1",
-        },
-      },
-    },
-  };
 }
 
 export const browserFallback: StudioBridge = {
@@ -195,8 +182,9 @@ export const browserFallback: StudioBridge = {
       workspacePath: "Browser localStorage",
       snapshotDirectory: "Browser localStorage",
       desktop: false,
-      mcp: browserMcpConfig(),
-      mcpBinary: "iploom-mcp",
+      mcp: null,
+      mcpError: null,
+      mcpBinary: null,
     };
   },
   async checkForUpdates() {
