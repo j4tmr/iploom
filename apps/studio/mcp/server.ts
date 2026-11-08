@@ -2131,7 +2131,7 @@ export function createStudioMcpServer(
     {
       title: "读取 AI 任务结果 / Workflow result",
       description:
-        "读取一个 AI 任务当前保存的中英文完整结果，以及首次改动前的快照（若有）；只读，不改变工作区。文本直接返回，便于在修订前核对待改内容；每种语言最多 200,000 字符，也可用 offset 与 max_chars 按语言分窗续读，把每种语言自己的 next_offset 传回。Return the full stored Chinese and English result of one workflow task and, when present, the first pre-change snapshot; read-only, with no workspace change. The text is returned directly so a client can inspect what it is about to revise; each language is capped at 200,000 characters, and offset with max_chars windows it per language — continue each language from its own next_offset via result_offsets.",
+        "读取一个 AI 任务当前保存的中英文完整结果，以及首次改动前的快照（若有）；只读，不改变工作区。文本直接返回，便于在修订前核对待改内容；每种语言最多 200,000 字符，也可用 offset 与 max_chars 按语言分窗续读，把每种语言自己的 next_offset 传回（窗口同时作用于当前结果与快照）。Return the full stored Chinese and English result of one workflow task and, when present, the first pre-change snapshot; read-only, with no workspace change. The text is returned directly so a client can inspect what it is about to revise; each language is capped at 200,000 characters, and offset with max_chars windows it per language — continue each language from its own next_offset via result_offsets. Windows apply to both the current result and the previous snapshot.",
       annotations: READ_ONLY_ANNOTATIONS,
     },
     z.object({
@@ -2162,7 +2162,7 @@ export function createStudioMcpServer(
         .strict()
         .optional()
         .describe(
-          "按语言分别续读，把每种语言自己的 next_offset 传回；省略的语言从 offset 开始 / Per-language continuation; pass each language's own next_offset. Omitted languages start at offset.",
+          "按语言分别续读（同时作用于当前结果与快照），把每种语言自己的 next_offset 传回；省略的语言从 offset 开始 / Per-language continuation for both the current result and the snapshot; pass each language's own next_offset. Omitted languages start at offset.",
         ),
       max_chars: z
         .number()
@@ -2206,10 +2206,13 @@ export function createStudioMcpServer(
           zh: window(task.result.zh, args.result_offsets?.zh),
           en: window(task.result.en, args.result_offsets?.en),
         },
+        // The snapshot pages with the same offsets: the two texts are cut by
+        // the same positions, so a past-the-end language returns empty text
+        // and lockstep calls reassemble both texts exactly.
         previous_result: task.previousResult
           ? {
-              zh: task.previousResult.zh,
-              en: task.previousResult.en,
+              zh: window(task.previousResult.zh, args.result_offsets?.zh),
+              en: window(task.previousResult.en, args.result_offsets?.en),
             }
           : null,
       };
