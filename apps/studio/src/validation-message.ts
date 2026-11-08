@@ -19,7 +19,7 @@ export function describeWorkspaceProblem(
   if (!first) return "";
   const segments = first.path ? first.path.split(".") : [];
   const entity = resolveEntity(segments, workspace, locale, t);
-  const field = resolveField(segments, locale, t);
+  const field = resolveField(segments, t);
   const where = entity.name
     ? t("validationWhere", {
         entity: entity.label,
@@ -70,7 +70,9 @@ function resolveEntity(
       return named("entityUniverse", item && displayText(item.name, locale));
     }
     case "works": {
-      const work = at(workspace?.works) as StudioWorkspace["works"][number] | undefined;
+      const work = at(workspace?.works) as
+        | StudioWorkspace["works"][number]
+        | undefined;
       if (child === "chapters") {
         const chapterIndex = Number(segments[3]);
         const chapter =
@@ -95,7 +97,10 @@ function resolveEntity(
       const item = at(workspace?.relationships) as
         | StudioWorkspace["relationships"][number]
         | undefined;
-      return named("entityRelationship", item && displayText(item.label, locale));
+      return named(
+        "entityRelationship",
+        item && displayText(item.label, locale),
+      );
     }
     case "standards": {
       const item = at(workspace?.standards) as
@@ -107,13 +112,19 @@ function resolveEntity(
       const item = at(workspace?.workflowTasks) as
         | StudioWorkspace["workflowTasks"][number]
         | undefined;
-      return named("entityWorkflowTask", item && displayText(item.title, locale));
+      return named(
+        "entityWorkflowTask",
+        item && displayText(item.title, locale),
+      );
     }
     case "timelineEvents": {
       const item = at(workspace?.timelineEvents) as
         | StudioWorkspace["timelineEvents"][number]
         | undefined;
-      return named("entityTimelineEvent", item && displayText(item.title, locale));
+      return named(
+        "entityTimelineEvent",
+        item && displayText(item.title, locale),
+      );
     }
     case "storyObjects": {
       const item = at(workspace?.storyObjects) as
@@ -134,7 +145,9 @@ function resolveEntity(
       return named("entityFaction", item && displayText(item.name, locale));
     }
     case "lore": {
-      const item = at(workspace?.lore) as StudioWorkspace["lore"][number] | undefined;
+      const item = at(workspace?.lore) as
+        | StudioWorkspace["lore"][number]
+        | undefined;
       return named("entityLore", item && displayText(item.title, locale));
     }
     case "exports": {
@@ -226,11 +239,7 @@ const FIELD_LABELS: Record<string, MessageKey> = {
   kind: "kind",
 };
 
-function resolveField(
-  segments: string[],
-  locale: UiLocale,
-  t: Translate,
-): string {
+function resolveField(segments: string[], t: Translate): string {
   let index = segments.length - 1;
   let field = segments[index] ?? "";
   let language: "zh" | "en" | null = null;
@@ -293,7 +302,8 @@ function describeCustomReason(message: string, t: Translate): string {
     return t("issueMissingChapterOrTime");
   if (message === "work is required for a chapter task")
     return t("issueMissingNovel");
-  if (message === "at least one state is required") return t("issueMissingState");
+  if (message === "at least one state is required")
+    return t("issueMissingState");
   if (message === "duplicate chapter number")
     return t("issueDuplicateChapterNumber");
   if (message === "self relation") return t("issueSelfRelation");
@@ -302,14 +312,16 @@ function describeCustomReason(message: string, t: Translate): string {
   if (message === "scene subject requires a chapter")
     return t("issueSceneSubjectNeedsChapter");
   if (message.endsWith("is required")) return t("issueRequired");
-  if (/^duplicate (id|standard|chapter):/.test(message)) return t("issueDuplicate");
+  if (/^duplicate (id|standard|chapter):/.test(message))
+    return t("issueDuplicate");
   if (/^unknown [a-z ]+: /.test(message)) {
     return t("issueUnknownNamed", {
       id: message.slice(message.indexOf(": ") + 2),
     });
   }
   if (/^unknown /.test(message)) return t("issueUnknownReference");
-  if (/cannot (parent|depend on) itself/.test(message)) return t("issueSelfReference");
+  if (/cannot (parent|depend on) itself/.test(message))
+    return t("issueSelfReference");
   if (/^workflow cycle: /.test(message)) return t("issueCycle");
   if (/belongs to another universe/.test(message)) return t("issueConflict");
   return message;

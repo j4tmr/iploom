@@ -237,7 +237,8 @@ const zh = {
   reusableBadge: "通用角色",
   noRelationships: "还没有人物关系。",
   noRelationshipsLead: "添加人物之间的关系，生成可用于写作与改编的关系图谱。",
-  relationshipNeedsTwoCharacters: "至少需要两个角色才能建立关系，请先在人物库中补充角色。",
+  relationshipNeedsTwoCharacters:
+    "至少需要两个角色才能建立关系，请先在人物库中补充角色。",
   addRelationship: "添加关系",
   sourceCharacter: "人物 A",
   targetCharacter: "人物 B",
@@ -301,7 +302,8 @@ const zh = {
   mcpToolsNote: "11 个只读查询工具 + 2 个基础规则写入工具 + 1 个本地导出工具。",
   mcpBundledDesktopServer: "桌面内置服务",
   resetDemo: "载入演示工作区",
-  resetDemoNote: "先把当前工作区存入 snapshots 快照目录，再载入双世界演示数据。",
+  resetDemoNote:
+    "先把当前工作区存入 snapshots 快照目录，再载入双世界演示数据。",
   snapshotsTitle: "工作区快照",
   snapshotsNote:
     "删除或导入前自动保存；快照不会被自动保存轮换覆盖，保留最近 20 份。",
@@ -413,8 +415,7 @@ const zh = {
   updateTitle: "应用更新",
   checkUpdates: "检查更新",
   checkingUpdates: "检查中…",
-  updateIdle:
-    "仅在你主动点击时查询 GitHub Releases，不会自动安装任何内容。",
+  updateIdle: "仅在你主动点击时查询 GitHub Releases，不会自动安装任何内容。",
   updateAvailable: "发现更新的稳定版本：{version}。",
   updateCurrent: "当前已是最新稳定版本（{version}）。",
   updateNoRelease: "暂未找到稳定版本。",
@@ -507,36 +508,35 @@ const zh = {
   productionRerunConfirm:
     "再次运行将替换“{title}”已审阅的结果。旧结果仍可找回，依赖此产出的已完成任务会标记需复审。继续吗？",
   productionWorkingOn: "正在执行：{label}",
-  productionTaskChanged:
-    "任务已发生变化，无法标记为进行中；请重新打开后再试。",
+  productionTaskChanged: "任务已发生变化，无法标记为进行中；请重新打开后再试。",
   productionTargetRemoved:
     "执行期间目标已被删除，请复制结果保留，本次没有写入。",
   productionOutputTooLong: "输出超过保存长度，请先复制保留。",
   productionResultNotSaved: "结果未能保存，请先复制保留。",
   productionResultNotSavedToWorkflow: "结果未能写入工作流，请先复制保留。",
-  productionDraftSaved:
-    "设计稿已保存到工作流，等待审阅；原稿未被覆盖。",
+  productionDraftSaved: "设计稿已保存到工作流，等待审阅；原稿未被覆盖。",
   productionSendRun: "发送并执行",
-  productionPromptTooLong:
-    "提示词超过 {limit} 字符，请缩小范围或编辑后发送。",
+  productionPromptTooLong: "提示词超过 {limit} 字符，请缩小范围或编辑后发送。",
   productionLiveOutput: "实时产出 / 待审结果",
   productionCopyResult: "复制结果",
-  productionReviewedSaved:
-    "审阅修改已保存，确认后可在工作流标记完成。",
+  productionReviewedSaved: "审阅修改已保存，确认后可在工作流标记完成。",
   productionReviewedNotSaved: "审阅修改未能保存。",
   productionSaveReviewed: "保存审阅修改",
   importNovel: "导入已有小说",
   importTitle: "导入已有小说",
-  importLead: "支持 TXT / Markdown 或粘贴文本。Word、EPUB、PDF 请先导出纯文本；导入会新建世界与小说，不覆盖已有作品。",
+  importLead:
+    "支持 TXT / Markdown 或粘贴文本。Word、EPUB、PDF 请先导出纯文本；导入会新建世界与小说，不覆盖已有作品。",
   importTitleField: "小说标题 / 新世界名称",
   importChooseFile: "选择 TXT / Markdown 文件",
   importFileTooLarge: "请选择 8 MB 以内的 TXT/Markdown。",
-  importFileUnreadable: "无法读取此文件，请转换为 UTF-8 TXT/Markdown（不超过 200 万字符）。",
+  importFileUnreadable:
+    "无法读取此文件，请转换为 UTF-8 TXT/Markdown（不超过 200 万字符）。",
   importSourceLabel: "原稿（导入前可编辑）",
   importCounts: "章节 / 模型请求数：{chapters} / {requests}",
   importPreview: "章节拆分预览",
   importSegments: "{count} 块",
-  importLeadBody: "分析会将原稿分段发送给已配置模型。每次最多 40 个请求；更长小说可拆分，或先不使用 AI 导入。后续片段失败或取消时会保留已完成片段。资产须包含原文依据，并由你审阅。",
+  importLeadBody:
+    "分析会将原稿分段发送给已配置模型。每次最多 40 个请求；更长小说可拆分，或先不使用 AI 导入。后续片段失败或取消时会保留已完成片段。资产须包含原文依据，并由你审阅。",
   importAnalyze: "自动分析世界、人物关系与场景",
   importRetry: "重试失败片段",
   importSkip: "跳过失败片段并继续",
@@ -548,15 +548,19 @@ const zh = {
   importNothingPending: "所有片段均已有结果或已被跳过；修改原稿可重新分析。",
   importNeedModel: "请先在桌面版设置中配置模型。",
   importKeptSegments: " 已保留 {done}/{total} 个完成片段，不会重复发送。",
-  importSendConfirm: "将 {pending} 段原稿发送至 {endpoint}（{model}）？服务商可能计费。",
+  importSendConfirm:
+    "将 {pending} 段原稿发送至 {endpoint}（{model}）？服务商可能计费。",
   importAnalyzingLabel: "正在分析章节 {chapter}",
   importCanceled: "分析已取消；已保留 {count} 个完成片段。",
   importSkippedNote: " 已跳过 {count} 个片段，不会写入导入结果。",
-  importFailure: "第 {chapter} 章第 {part} 块失败：{message} 已完成 {done}/{total} 块。可重试失败片段（不会重发已完成片段），或跳过失败片段继续。",
+  importFailure:
+    "第 {chapter} 章第 {part} 块失败：{message} 已完成 {done}/{total} 块。可重试失败片段（不会重发已完成片段），或跳过失败片段继续。",
   importReady: "分析完成。请审阅人物名、关系方向、场景及原文依据，再确认导入。",
-  importDiscardConfirm: "这次导入的原文或分析尚未导入，关闭后会丢失。确定关闭？",
+  importDiscardConfirm:
+    "这次导入的原文或分析尚未导入，关闭后会丢失。确定关闭？",
   scenesTitle: "场景与制作镜头",
-  scenesLead: "为章节维护场景地点、出场人物与镜头提示词。AI 草案先在制作台审阅，再将确认的设计填入这里。",
+  scenesLead:
+    "为章节维护场景地点、出场人物与镜头提示词。AI 草案先在制作台审阅，再将确认的设计填入这里。",
   scenesShots: "{count} 镜头",
   sceneTitleField: "场景标题",
   sceneSummaryField: "行动、时间与原文依据",
@@ -576,13 +580,15 @@ const zh = {
   shotAdd: "添加镜头",
   shotDelete: "删除镜头",
   shotDeleteConfirm: "删除此镜头？",
-  aiSettingsLead: "兼容 Chat Completions。配置与密钥仅保存在本次桌面会话内存，重启后需重新填写；只有点击执行才发送内容。本地服务可不填密钥。",
+  aiSettingsLead:
+    "兼容 Chat Completions。配置与密钥仅保存在本次桌面会话内存，重启后需重新填写；只有点击执行才发送内容。本地服务可不填密钥。",
   aiBaseUrl: "API 基础地址（含 /v1）",
   aiModelId: "模型 ID",
   aiApiKey: "API 密钥",
   aiConfigureSession: "配置本次会话",
   characterUnsavedClose: "这个人物还有未保存的修改，关闭后会丢失。确定关闭？",
-  workflowUnsavedSwitch: "当前任务的结果有未保存的修改，切换后这些修改会丢失。继续切换？",
+  workflowUnsavedSwitch:
+    "当前任务的结果有未保存的修改，切换后这些修改会丢失。继续切换？",
   workflowStatReady: "可独立开始",
   workflowStatWaiting: "等待依赖",
   workflowStatActive: "进行中",
@@ -594,9 +600,11 @@ const zh = {
   workflowFilterDone: "已完成",
   workflowReReview: "需复审",
   workflowBlocker: "依赖",
-  workflowSuperseded: "上游任务的结果已更新，本任务通过审阅时的产出可能过期；重新审阅并保存后标记完成即可清除。",
+  workflowSuperseded:
+    "上游任务的结果已更新，本任务通过审阅时的产出可能过期；重新审阅并保存后标记完成即可清除。",
   workflowDependencyOpen: " · 未完成",
-  workflowConflict: "这个结果的已保存版本在别处被更新了。你的修改仍保留在这里，未被覆盖。",
+  workflowConflict:
+    "这个结果的已保存版本在别处被更新了。你的修改仍保留在这里，未被覆盖。",
   workflowLoadSavedVersion: "载入已保存版本",
   workflowPreviousResult: "上次运行前的结果",
   workflowRestoreVersion: "恢复此版本",
@@ -608,24 +616,31 @@ const zh = {
   foundationStatDisabled: "停用",
   foundationStatPinned: "已引用任务",
   foundationNeedModel: "请先在设置中配置模型（仅桌面版），再让 AI 起草规则。",
-  foundationDraftConfirm: "根据当前项目前提起草基础规则，并发送至 {endpoint}（{model}）？服务商可能计费。",
+  foundationDraftConfirm:
+    "根据当前项目前提起草基础规则，并发送至 {endpoint}（{model}）？服务商可能计费。",
   foundationDraftingMessage: "正在根据已登记的项目前提起草候选规则…",
   foundationDraftLabel: "起草项目基础规则",
-  foundationDraftEmpty: "模型没有返回可登记的规则，请重试或手动新建。原有规则未改动。",
-  foundationDraftGenerated: "已生成 {count} 条候选规则。勾选并登记后才会写入项目，且默认仍为草稿。",
+  foundationDraftEmpty:
+    "模型没有返回可登记的规则，请重试或手动新建。原有规则未改动。",
+  foundationDraftGenerated:
+    "已生成 {count} 条候选规则。勾选并登记后才会写入项目，且默认仍为草稿。",
   foundationDraftingShort: "AI 起草中…",
   foundationDraftAction: "AI 起草规则",
   foundationNewStandardShort: "新建规则",
   foundationSearchPlaceholder: "搜索规则、正文或 ID…",
   foundationSearchLabel: "搜索规则",
   foundationNoMatch: "没有匹配的规则。",
-  foundationEmptyLead: "基础规则约束所有 AI 产出；小说、游戏与设定集共用同一套规则。",
+  foundationEmptyLead:
+    "基础规则约束所有 AI 产出；小说、游戏与设定集共用同一套规则。",
   foundationDraftingTitle: "正在起草候选规则",
-  foundationDraftingLead: "模型会读取已登记的世界与作品前提，返回 3 到 6 条可执行的规则候选。不会直接写入项目。",
+  foundationDraftingLead:
+    "模型会读取已登记的世界与作品前提，返回 3 到 6 条可执行的规则候选。不会直接写入项目。",
   foundationReviewCandidates: "审阅候选规则",
   foundationCandidateCount: "{count} 条",
-  foundationCandidateLead: "只登记确认过的条目；登记后为草稿，启用后才会注入 AI 提示词与工作简报。",
-  foundationRegisteredCount: "已登记 {count} 条草稿规则。启用后才会影响 AI 产出。",
+  foundationCandidateLead:
+    "只登记确认过的条目；登记后为草稿，启用后才会注入 AI 提示词与工作简报。",
+  foundationRegisteredCount:
+    "已登记 {count} 条草稿规则。启用后才会影响 AI 产出。",
   foundationRegisterSelected: "登记选中（{count}）",
   foundationClearAll: "取消全选",
   foundationSelectAll: "全选",
@@ -633,16 +648,21 @@ const zh = {
   foundationPinnedCount: "{count} 个任务引用",
   foundationBodyLabel: "规则正文",
   foundationAppliedScope: "生效范围",
-  foundationActiveScope: "此规则会注入项目内所有匹配范围的 AI 提示词与工作简报。",
-  foundationInactiveScope: "草稿与停用规则不会注入提示词；启用后才参与 AI 工作。",
+  foundationActiveScope:
+    "此规则会注入项目内所有匹配范围的 AI 提示词与工作简报。",
+  foundationInactiveScope:
+    "草稿与停用规则不会注入提示词；启用后才参与 AI 工作。",
   foundationPinnedByTasks: "任务固定引用",
-  foundationNoPins: "还没有任务固定引用此规则；新建任务时会自动固定当时生效的版本。",
+  foundationNoPins:
+    "还没有任务固定引用此规则；新建任务时会自动固定当时生效的版本。",
   foundationDisable: "停用",
   foundationActivate: "启用",
   foundationCopyBody: "复制正文",
-  foundationNoSelectionLead: "选择一条规则查看正文、适用范围和被任务固定的版本。",
+  foundationNoSelectionLead:
+    "选择一条规则查看正文、适用范围和被任务固定的版本。",
   timelineHeading: "每一次变化，都留下可追溯的状态。",
-  timelineLead: "按章节或故事内时间追踪人物、场景、地点与物件。既定状态会进入制作提示词，提案状态保持明确标记。",
+  timelineLead:
+    "按章节或故事内时间追踪人物、场景、地点与物件。既定状态会进入制作提示词，提案状态保持明确标记。",
   timelineAddEvent: "新增状态事件",
   timelineUniverseLabel: "宇宙",
   timelineAllNovels: "全部小说",
@@ -669,16 +689,19 @@ const zh = {
   timelineEvidence: "依据",
   timelineNoEvents: "当前筛选下没有状态事件。",
   timelineCreateFirst: "建立第一个事件",
-  timelineEmptyLead: "记录首次出现、服装变化、受伤、关系揭示、地点变化或物件交接。",
+  timelineEmptyLead:
+    "记录首次出现、服装变化、受伤、关系揭示、地点变化或物件交接。",
   timelineNewProp: "新增物件",
-  timelineObjectsLead: "物件在人物与场景之间流转时，固定轮廓、材质、磨损和持有规则。",
+  timelineObjectsLead:
+    "物件在人物与场景之间流转时，固定轮廓、材质、磨损和持有规则。",
   timelineProp: "物件",
   timelineLinkCount: "{count} 条时间线关联",
   timelineDeleteProp: "删除物件",
   timelineAddFirstProp: "添加第一个可复用物件",
   storyObjectEditTitle: "编辑故事物件",
   storyObjectNewTitle: "新增故事物件",
-  storyObjectLead: "物件可以记录外观、磨损、持有者变化、揭示规则与可复用的图像提示词。",
+  storyObjectLead:
+    "物件可以记录外观、磨损、持有者变化、揭示规则与可复用的图像提示词。",
   storyObjectSave: "保存物件",
   storyObjectUniverseFixed: "创建后不可更改所属宇宙。",
   storyObjectCategoryZh: "中文类别",
@@ -688,7 +711,8 @@ const zh = {
   storyObjectSourceNotes: "来源与连续性备注",
   timelineEventEditTitle: "编辑时间线事件",
   timelineEventNewTitle: "新增时间线事件",
-  timelineEventLead: "把状态变化绑定到章节、故事内时间或两者。既定事实与未来提案会保持明确区分。",
+  timelineEventLead:
+    "把状态变化绑定到章节、故事内时间或两者。既定事实与未来提案会保持明确区分。",
   timelineSaveEvent: "保存事件",
   timelineNovelSource: "小说 / 来源",
   timelineChapterAnchor: "章节锚点",
@@ -831,7 +855,8 @@ const en: Record<MessageKey, string> = {
   cancel: "Cancel",
   close: "Close",
   delete: "Delete",
-  confirmDelete: "Delete this item? The change will be written to your local workspace.",
+  confirmDelete:
+    "Delete this item? The change will be written to your local workspace.",
   confirmDeleteSubtasks: "Delete this task and {count} subtask(s)?",
   deleteEverywhere: "Delete in all worlds",
   removeFromThisWorld: "Remove from this world",
@@ -896,16 +921,21 @@ const en: Record<MessageKey, string> = {
   emptyDashboardLead:
     "Create an IP universe with its rules and cast. Novels inherit this material and can generate a stylized 3D screen handoff in one step.",
   createWorldTitle: "New IP universe",
-  createWorldLead: "One world can hold many novels, short stories and adaptations.",
+  createWorldLead:
+    "One world can hold many novels, short stories and adaptations.",
   createNovelTitle: "New novel",
-  createNovelLead: "The novel inherits cast, locations and relationships from its world.",
+  createNovelLead:
+    "The novel inherits cast, locations and relationships from its world.",
   createCharacterTitle: "New character",
   editCharacterTitle: "Edit character",
-  characterLead: "A character can belong to several worlds, enabling reusable cast and crossovers.",
+  characterLead:
+    "A character can belong to several worlds, enabling reusable cast and crossovers.",
   createRelationshipTitle: "New relationship",
-  relationshipLead: "The map displays stable character relationships inside one world.",
+  relationshipLead:
+    "The map displays stable character relationships inside one world.",
   addChapterTitle: "Add chapter",
-  addChapterLead: "Create the chapter card first, then build its outline and prose.",
+  addChapterLead:
+    "Create the chapter card first, then build its outline and prose.",
   addLocationTitle: "New location",
   addFactionTitle: "New faction",
   addLoreTitle: "New lore entry",
@@ -934,7 +964,8 @@ const en: Record<MessageKey, string> = {
   sceneCast: "Chapter cast",
   sceneLocation: "Primary location",
   noChapters: "No chapters yet.",
-  noChaptersLead: "Add the first chapter and start the three-layer writing flow.",
+  noChaptersLead:
+    "Add the first chapter and start the three-layer writing flow.",
   chapterEmpty: "Select a chapter to start writing.",
   autosaveNote: "Every change is autosaved to the local workspace.",
   fullText: "Full text",
@@ -982,13 +1013,15 @@ const en: Record<MessageKey, string> = {
   manifestHash: "Manifest SHA-256",
   adaptationStyle: "Visual direction",
   style3d: "Stylized 3D animation (3D comic drama)",
-  style3dMeta: "9:16 · character model sheets · negative prompts · scene drafts",
+  style3dMeta:
+    "9:16 · character model sheets · negative prompts · scene drafts",
   totalScenes: "Total scenes",
   totalShots: "Total shots",
   sourceChapters: "Source chapters",
   exportedHistory: "Export history",
   noExports: "No exports yet.",
-  noExportsLead: "Generate the first ArcReel handoff from a novel's adaptation tab.",
+  noExportsLead:
+    "Generate the first ArcReel handoff from a novel's adaptation tab.",
   generatedAt: "Generated",
   fileCount: "Files",
   settingsTitle: "Workspace settings",
@@ -1013,7 +1046,8 @@ const en: Record<MessageKey, string> = {
   copyConfig: "Copy config",
   copied: "Copied",
   mcpTools: "Available tools",
-  mcpToolsNote: "11 read-only query tools + 2 foundation-standard writers + 1 local export tool.",
+  mcpToolsNote:
+    "11 read-only query tools + 2 foundation-standard writers + 1 local export tool.",
   mcpBundledDesktopServer: "Bundled desktop server",
   resetDemo: "Load demo workspace",
   resetDemoNote:
@@ -1074,7 +1108,8 @@ const en: Record<MessageKey, string> = {
   errorTitle: "Something went wrong",
   retry: "Retry",
   emptySelection: "Nothing selected",
-  clickNode: "Click a node to edit its character; hover a line to inspect the relationship.",
+  clickNode:
+    "Click a node to edit its character; hover a line to inspect the relationship.",
   degree: "Connections",
   sceneDraft: "Scene draft",
   castAnchors: "Cast anchors",
@@ -1096,7 +1131,8 @@ const en: Record<MessageKey, string> = {
   selected: "{n} selected",
   wordProgress: "{actual} / {target} words",
   library: "Library",
-  libraryLead: "Browse every novel across worlds, filtered by world, status and genre.",
+  libraryLead:
+    "Browse every novel across worlds, filtered by world, status and genre.",
   allWorlds: "All worlds",
   editWorldTitle: "Edit IP universe",
   editNovelTitle: "Edit novel",
@@ -1140,13 +1176,15 @@ const en: Record<MessageKey, string> = {
   updateNoRelease: "No stable release was found yet.",
   updateUnavailable: "The update check did not complete.",
   updateReasonTimeout: "The request timed out. Try again shortly.",
-  updateReasonNetwork: "Could not reach GitHub. Check your connection and retry.",
+  updateReasonNetwork:
+    "Could not reach GitHub. Check your connection and retry.",
   updateReasonHttp: "GitHub returned HTTP {status}.",
   updateReasonResponse:
     "GitHub returned an unreadable response. Try again later.",
   updateReasonVersion:
     "The current version cannot be parsed, so versions cannot be compared.",
-  updateReasonDesktopOnly: "Update checks are available in the desktop app only.",
+  updateReasonDesktopOnly:
+    "Update checks are available in the desktop app only.",
   releaseNotes: "Release notes",
   openReleases: "All releases",
   downloadForPlatform: "Download for this platform",
@@ -1237,7 +1275,8 @@ const en: Record<MessageKey, string> = {
     "The target was removed while running. Copy the result; it was not saved.",
   productionOutputTooLong:
     "Output exceeds the saved-result limit; copy it before continuing.",
-  productionResultNotSaved: "The result was not saved; copy it before continuing.",
+  productionResultNotSaved:
+    "The result was not saved; copy it before continuing.",
   productionResultNotSavedToWorkflow:
     "The result could not be saved to Workflow. Copy it before continuing.",
   productionDraftSaved:
@@ -1443,7 +1482,8 @@ const en: Record<MessageKey, string> = {
   storyObjectCategoryZh: "Chinese category",
   storyObjectCategoryEn: "English category",
   storyObjectVisualPrompt: "Reusable visual prompt",
-  storyObjectVisualPromptHint: "Identity, materials, wear, views and negatives.",
+  storyObjectVisualPromptHint:
+    "Identity, materials, wear, views and negatives.",
   storyObjectSourceNotes: "Source and continuity notes",
   timelineEventEditTitle: "Edit timeline event",
   timelineEventNewTitle: "New timeline event",

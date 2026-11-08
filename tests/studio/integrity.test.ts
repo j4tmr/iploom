@@ -45,7 +45,10 @@ function characterById(
   return character;
 }
 
-function taskById(workspace: ReturnType<typeof demo>, id: string): WorkflowTask {
+function taskById(
+  workspace: ReturnType<typeof demo>,
+  id: string,
+): WorkflowTask {
   const task = workspace.workflowTasks.find((item) => item.id === id);
   if (!task) throw new Error(`missing task ${id}`);
   return task;
@@ -216,9 +219,9 @@ describe("workspace integrity", () => {
       "char_lin",
       "char_shen",
     ]);
-    expect(eventById(next, "timeline_tower_interior").relatedCharacterIds).toEqual(
-      ["char_lin", "char_shen"],
-    );
+    expect(
+      eventById(next, "timeline_tower_interior").relatedCharacterIds,
+    ).toEqual(["char_lin", "char_shen"]);
 
     expect(() => validateWorkspace(next)).not.toThrow();
   });
@@ -254,8 +257,8 @@ describe("workspace integrity", () => {
     expect(survivor.standardRefs).toEqual([]);
     expect(next.characters.some((item) => item.id === "char_lin")).toBe(false);
     expect(next.standards.some((item) => item.id === scoped.id)).toBe(false);
-    const survivorScene =
-      workById(next, "work_last_train").chapters[0]?.scenes[0];
+    const survivorScene = workById(next, "work_last_train").chapters[0]
+      ?.scenes[0];
     expect(survivorScene?.characterIds).toEqual(["char_echo"]);
     expect(survivorScene?.locationId).toBeUndefined();
 
@@ -335,9 +338,7 @@ describe("workspace integrity", () => {
     expect(() => validateWorkspace(before)).not.toThrow();
 
     const emitted = applyWorkspaceChange(before, (draft) => {
-      const character = draft.characters.find(
-        (item) => item.id === "char_lin",
-      );
+      const character = draft.characters.find((item) => item.id === "char_lin");
       if (character) character.universeIds = [];
     });
     expect(emitted.ok).toBe(false);
@@ -417,8 +418,12 @@ describe("workspace integrity", () => {
     const next = outcome.workspace;
 
     expect(next.works.map((item) => item.id)).toEqual(["work_last_train"]);
-    expect(next.timelineEvents.some((event) => event.workId === "work_tide_clock")).toBe(false);
-    expect(next.workflowTasks.some((task) => task.workId === "work_tide_clock")).toBe(false);
+    expect(
+      next.timelineEvents.some((event) => event.workId === "work_tide_clock"),
+    ).toBe(false);
+    expect(
+      next.workflowTasks.some((task) => task.workId === "work_tide_clock"),
+    ).toBe(false);
     const dependent = taskById(next, "task_train_after_tide");
     expect(dependent.parentId).toBeUndefined();
     expect(dependent.dependsOnIds).toEqual([]);
@@ -456,7 +461,8 @@ describe("workspace integrity", () => {
     expect(
       next.timelineEvents.some(
         (event) =>
-          (event.subjectKind === "character" && event.subjectId === "char_gu") ||
+          (event.subjectKind === "character" &&
+            event.subjectId === "char_gu") ||
           event.relatedCharacterIds.includes("char_gu"),
       ),
     ).toBe(false);
@@ -468,7 +474,9 @@ describe("workspace integrity", () => {
       }
     }
     expect(
-      next.workflowTasks.every((task) => !task.characterIds.includes("char_gu")),
+      next.workflowTasks.every(
+        (task) => !task.characterIds.includes("char_gu"),
+      ),
     ).toBe(true);
     expect(() => validateWorkspace(next)).not.toThrow();
   });
@@ -546,7 +554,8 @@ describe("workspace integrity", () => {
       next.timelineEvents.some(
         (event) =>
           event.universeId === "uni_mist_harbor" &&
-          ((event.subjectKind === "character" && event.subjectId === "char_echo") ||
+          ((event.subjectKind === "character" &&
+            event.subjectId === "char_echo") ||
             event.relatedCharacterIds.includes("char_echo")),
       ),
     ).toBe(false);
@@ -563,9 +572,9 @@ describe("workspace integrity", () => {
     ]);
 
     // Ninth-station data is intact.
-    expect(next.relationships.some((item) => item.id === "rel_echo_train")).toBe(
-      true,
-    );
+    expect(
+      next.relationships.some((item) => item.id === "rel_echo_train"),
+    ).toBe(true);
     expect(eventById(next, "timeline_echo_platform").subjectId).toBe(
       "char_echo",
     );
@@ -620,19 +629,21 @@ describe("workspace integrity", () => {
     expect(next.characters.some((item) => item.id === "char_echo")).toBe(false);
     expect(
       next.relationships.some(
-        (item) => item.sourceId === "char_echo" || item.targetId === "char_echo",
+        (item) =>
+          item.sourceId === "char_echo" || item.targetId === "char_echo",
       ),
     ).toBe(false);
     expect(
       next.timelineEvents.some(
         (event) =>
-          (event.subjectKind === "character" && event.subjectId === "char_echo") ||
+          (event.subjectKind === "character" &&
+            event.subjectId === "char_echo") ||
           event.relatedCharacterIds.includes("char_echo"),
       ),
     ).toBe(false);
-    expect(
-      workById(next, "work_last_train").chapters[0]?.characterIds,
-    ).toEqual([]);
+    expect(workById(next, "work_last_train").chapters[0]?.characterIds).toEqual(
+      [],
+    );
     expect(() => validateWorkspace(next)).not.toThrow();
   });
 
@@ -707,10 +718,9 @@ describe("workspace integrity", () => {
     if (!outcome.ok) return;
     const next = outcome.workspace;
 
-    expect(workById(next, "work_tide_clock").chapters.map((item) => item.id)).toEqual([
-      "chapter_tide_002",
-      "chapter_tide_003",
-    ]);
+    expect(
+      workById(next, "work_tide_clock").chapters.map((item) => item.id),
+    ).toEqual(["chapter_tide_002", "chapter_tide_003"]);
     const keptTrainChapter = workById(next, "work_last_train").chapters.find(
       (item) => item.id === sharedChapterId,
     );
@@ -718,16 +728,21 @@ describe("workspace integrity", () => {
     expect(
       next.timelineEvents.some(
         (event) =>
-          event.workId === "work_tide_clock" && event.chapterId === sharedChapterId,
+          event.workId === "work_tide_clock" &&
+          event.chapterId === sharedChapterId,
       ),
     ).toBe(false);
     const keptEvent = next.timelineEvents.find(
       (event) => event.id === "timeline_train_collision",
     );
     expect(keptEvent?.sceneId).toBe("scene_rain");
-    expect(next.workflowTasks.some((task) => task.id === "task_review_first")).toBe(false);
+    expect(
+      next.workflowTasks.some((task) => task.id === "task_review_first"),
+    ).toBe(false);
     expect(taskById(next, "task_adaptation_pass").dependsOnIds).toEqual([]);
-    expect(taskById(next, "task_chapter_three").parentId).toBe("task_world_rules");
+    expect(taskById(next, "task_chapter_three").parentId).toBe(
+      "task_world_rules",
+    );
     expect(
       next.exports.find((record) => record.id === "export_tide")?.chapterIds,
     ).toEqual(["chapter_tide_002"]);

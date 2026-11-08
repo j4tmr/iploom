@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { buildRelationshipGraph } from "../core/graph.ts";
 import { displayText } from "../core/factory.ts";
-import type { Character, Relationship, StudioWorkspace, UiLocale } from "../core/types.ts";
+import type {
+  Character,
+  Relationship,
+  StudioWorkspace,
+  UiLocale,
+} from "../core/types.ts";
 import {
   relationshipLabels,
   relationStatusLabels,
@@ -69,13 +74,20 @@ export function RelationshipsView({
               </option>
             ))}
           </Select>
-          <Button variant="primary" icon="plus" disabled={!universe} onClick={() => onAddRelationship(universeId)}>
+          <Button
+            variant="primary"
+            icon="plus"
+            disabled={!universe}
+            onClick={() => onAddRelationship(universeId)}
+          >
             {t("addRelationship")}
           </Button>
         </div>
       </header>
       {!universe ? (
-        <EmptyState icon="graph" title={t("emptyDashboard")}>{t("emptyDashboardLead")}</EmptyState>
+        <EmptyState icon="graph" title={t("emptyDashboard")}>
+          {t("emptyDashboardLead")}
+        </EmptyState>
       ) : (
         <div className="graph-layout large">
           <div className="graph-main">
@@ -84,16 +96,26 @@ export function RelationshipsView({
               locale={locale}
               t={t}
               onNodeClick={(node) => {
-                const character = characters.find((item) => item.id === node.id);
+                const character = characters.find(
+                  (item) => item.id === node.id,
+                );
                 if (character) onEditCharacter(character);
               }}
             />
           </div>
           <aside className="relation-sidebar">
-            <SectionTitle title={universe ? displayText(universe.name, locale) : ""} />
+            <SectionTitle
+              title={universe ? displayText(universe.name, locale) : ""}
+            />
             <div className="relation-summary">
-              <span><strong>{graph.nodes.length}</strong>{t("characters")}</span>
-              <span><strong>{graph.edges.length}</strong>{t("relationshipsCount")}</span>
+              <span>
+                <strong>{graph.nodes.length}</strong>
+                {t("characters")}
+              </span>
+              <span>
+                <strong>{graph.edges.length}</strong>
+                {t("relationshipsCount")}
+              </span>
             </div>
             <h3>{t("relationships")}</h3>
             {graph.edges.map((edge) => {
@@ -105,19 +127,48 @@ export function RelationshipsView({
                   <div>
                     <strong>
                       {source ? displayText(source.name, locale) : edge.source}
-                      <span className="relation-arrow">{edge.mutual ? "↔" : "→"}</span>
+                      <span className="relation-arrow">
+                        {edge.mutual ? "↔" : "→"}
+                      </span>
                       {target ? displayText(target.name, locale) : edge.target}
                     </strong>
-                    <p>{relationshipLabels[locale][edge.type]} · {edge.label}</p>
-                    <small>{relationStatusLabels[locale][edge.status]} · {edge.strength}/5</small>
-                    {edge.notes ? <details><summary>{t("notesSourceEvidence")}</summary><p>{edge.notes}</p></details> : null}
+                    <p>
+                      {relationshipLabels[locale][edge.type]} · {edge.label}
+                    </p>
+                    <small>
+                      {relationStatusLabels[locale][edge.status]} ·{" "}
+                      {edge.strength}/5
+                    </small>
+                    {edge.notes ? (
+                      <details>
+                        <summary>{t("notesSourceEvidence")}</summary>
+                        <p>{edge.notes}</p>
+                      </details>
+                    ) : null}
                   </div>
-                  <IconButton label={t("edit")} icon="edit" onClick={() => { const relationship = workspace.relationships.find((item) => item.id === edge.id); if (relationship) onEditRelationship(relationship); }} />
-                  <IconButton label={t("delete")} icon="trash" onClick={() => onDeleteRelationship(edge.id)} />
+                  <IconButton
+                    label={t("edit")}
+                    icon="edit"
+                    onClick={() => {
+                      const relationship = workspace.relationships.find(
+                        (item) => item.id === edge.id,
+                      );
+                      if (relationship) onEditRelationship(relationship);
+                    }}
+                  />
+                  <IconButton
+                    label={t("delete")}
+                    icon="trash"
+                    onClick={() => onDeleteRelationship(edge.id)}
+                  />
                 </article>
               );
             })}
-            {!graph.edges.length ? <EmptyState icon="graph" title={t("noRelationships")}>{t("noRelationshipsLead")}</EmptyState> : null}
+            {!graph.edges.length ? (
+              <EmptyState icon="graph" title={t("noRelationships")}>
+                {t("noRelationshipsLead")}
+              </EmptyState>
+            ) : null}
           </aside>
         </div>
       )}

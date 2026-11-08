@@ -71,6 +71,7 @@ export function Field({
   wide?: boolean;
 }) {
   return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: children render the control inside the label
     <label className={`field ${wide ? "field-wide" : ""}`}>
       <span className="field-label">{label}</span>
       {children}
@@ -83,9 +84,7 @@ export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input className="input" {...props} />;
 }
 
-export function TextArea(
-  props: TextareaHTMLAttributes<HTMLTextAreaElement>,
-) {
+export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className="input textarea" {...props} />;
 }
 
@@ -278,6 +277,7 @@ export function Modal({
   }, [open]);
   if (!open) return null;
   return createPortal(
+    // biome-ignore lint/a11y/noStaticElementInteractions: the backdrop only handles mouse dismissal; Escape is handled by the overlay stack
     <div
       className="modal-backdrop"
       role="presentation"
@@ -398,5 +398,12 @@ export function FieldGrid({ children }: { children: ReactNode }) {
 }
 
 export function splitTags(value: string): string[] {
-  return [...new Set(value.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      value
+        .split(/[,，\n]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
 }

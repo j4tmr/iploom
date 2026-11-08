@@ -54,18 +54,22 @@ Import existing manuscripts, analyze world/cast/relationships/scenes through a c
 
 Current release **0.3.0** — direct downloads:
 
-| macOS (Apple silicon + Intel) | Windows x64 |
-| --- | --- |
+| macOS (Apple silicon + Intel)                                                                                                                                                                                                     | Windows x64                                                                                              |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | [DMG](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-darwin-universal.dmg) · [ZIP](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-darwin-universal.zip) | [EXE](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-win32-x64.exe) |
 
 [Releases](https://github.com/j4tmr/iploom/releases) · [SHA256SUMS.txt](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/SHA256SUMS.txt)
 
-
 - macOS: universal DMG and ZIP for Apple silicon and Intel.
 - Windows: x64 NSIS installer.
 - `SHA256SUMS.txt`: verify the downloaded asset before opening it.
+- **Build provenance**: each `.dmg`, `.zip` and `.exe` is attested by the release workflow. Verify one with the GitHub CLI:
 
-The current release is **unsigned**. macOS Gatekeeper and Windows SmartScreen may show a warning. Verify the checksum first, then use the operating system's normal “Open” or “More info → Run anyway” flow only when you trust the source. Signed builds can be added later without changing the application format.
+  ```sh
+  gh attestation verify IPloom-Studio-0.3.0-darwin-universal.dmg --repo j4tmr/iploom
+  ```
+
+The current release is **unsigned**. macOS Gatekeeper and Windows SmartScreen may show a warning. On macOS 15 and later, Control-click → Open no longer bypasses Gatekeeper: if the first launch is blocked, open **System Settings → Privacy & Security**, click **Open Anyway** next to the IPloom Studio message, authenticate, then choose **Open**. On Windows, use **More info → Run anyway**. Verify the checksum and attestation first, and continue only when you trust the source. Signed builds can be added later without changing the application format.
 
 ## Quick start
 

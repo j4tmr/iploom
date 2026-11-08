@@ -380,11 +380,23 @@ export const workflowTaskSchema = z
   .object({
     id: identifier,
     title: localizedSchema,
-    brief: localizedSchema.extend({ zh: z.string().max(100_000).default(""), en: z.string().max(100_000).default("") }),
-    deliverable: localizedSchema.extend({ zh: z.string().max(100_000).default(""), en: z.string().max(100_000).default("") }),
-    result: localizedSchema.extend({ zh: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default(""), en: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default("") }),
+    brief: localizedSchema.extend({
+      zh: z.string().max(100_000).default(""),
+      en: z.string().max(100_000).default(""),
+    }),
+    deliverable: localizedSchema.extend({
+      zh: z.string().max(100_000).default(""),
+      en: z.string().max(100_000).default(""),
+    }),
+    result: localizedSchema.extend({
+      zh: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default(""),
+      en: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default(""),
+    }),
     previousResult: localizedSchema
-      .extend({ zh: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default(""), en: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default("") })
+      .extend({
+        zh: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default(""),
+        en: z.string().max(MAX_WORKFLOW_RESULT_LENGTH).default(""),
+      })
       .optional(),
     lastRun: workflowTaskRunMetaSchema.optional(),
     resultSuperseded: z.boolean().optional(),
@@ -438,22 +450,25 @@ export const workspaceSchema = z
   .strict()
   .superRefine((workspace, ctx) => {
     const universes = new Set(workspace.universes.map((item) => item.id));
-    const standards = new Map(workspace.standards.map((item) => [item.id, item]));
+    const standards = new Map(
+      workspace.standards.map((item) => [item.id, item]),
+    );
     const characters = new Set(workspace.characters.map((item) => item.id));
     const locations = new Set(workspace.locations.map((item) => item.id));
-    const storyObjects = new Set(workspace.storyObjects.map((item) => item.id));
-    const charactersById = new Map(workspace.characters.map((item) => [item.id, item]));
-    const locationsById = new Map(workspace.locations.map((item) => [item.id, item]));
-    const storyObjectsById = new Map(workspace.storyObjects.map((item) => [item.id, item]));
+    const charactersById = new Map(
+      workspace.characters.map((item) => [item.id, item]),
+    );
+    const locationsById = new Map(
+      workspace.locations.map((item) => [item.id, item]),
+    );
+    const storyObjectsById = new Map(
+      workspace.storyObjects.map((item) => [item.id, item]),
+    );
 
     const issue = (path: (string | number)[], message: string) =>
       ctx.addIssue({ code: "custom", path, message });
 
-    const unique = <T>(
-      items: T[],
-      path: string,
-      read: (item: T) => string,
-    ) => {
+    const unique = <T>(items: T[], path: string, read: (item: T) => string) => {
       const seen = new Set<string>();
       for (const [index, item] of items.entries()) {
         const id = read(item);
@@ -474,11 +489,16 @@ export const workspaceSchema = z
     unique(workspace.works, "works", (item) => item.id);
     unique(workspace.exports, "exports", (item) => item.id);
     const worksById = new Map(workspace.works.map((work) => [work.id, work]));
-    if (workspace.lastOpenedWorkId && !worksById.has(workspace.lastOpenedWorkId))
+    if (
+      workspace.lastOpenedWorkId &&
+      !worksById.has(workspace.lastOpenedWorkId)
+    )
       issue(["lastOpenedWorkId"], "unknown work");
     const chaptersById = new Map(
       workspace.works.flatMap((work) =>
-        work.chapters.map((chapter) => [`${work.id}:${chapter.id}`, chapter] as const),
+        work.chapters.map(
+          (chapter) => [`${work.id}:${chapter.id}`, chapter] as const,
+        ),
       ),
     );
     for (const [workIndex, work] of workspace.works.entries()) {
@@ -496,13 +516,7 @@ export const workspaceSchema = z
         for (const characterId of chapter.characterIds) {
           if (!characters.has(characterId))
             issue(
-              [
-                "works",
-                workIndex,
-                "chapters",
-                chapterIndex,
-                "characterIds",
-              ],
+              ["works", workIndex, "chapters", chapterIndex, "characterIds"],
               `unknown character: ${characterId}`,
             );
         }
@@ -583,10 +597,12 @@ export const workspaceSchema = z
       if (!universes.has(event.universeId))
         issue(["timelineEvents", index, "universeId"], "unknown universe");
       const work = worksById.get(event.workId);
-      if (!work)
-        issue(["timelineEvents", index, "workId"], "unknown work");
+      if (!work) issue(["timelineEvents", index, "workId"], "unknown work");
       else if (work.universeId !== event.universeId)
-        issue(["timelineEvents", index, "workId"], "work belongs to another universe");
+        issue(
+          ["timelineEvents", index, "workId"],
+          "work belongs to another universe",
+        );
       const chapter = event.chapterId
         ? work?.chapters.find((item) => item.id === event.chapterId)
         : undefined;
@@ -594,8 +610,14 @@ export const workspaceSchema = z
         issue(["timelineEvents", index, "chapterId"], "unknown chapter");
       if (event.sceneId) {
         if (!event.chapterId)
-          issue(["timelineEvents", index, "chapterId"], "chapter is required for a scene");
-        else if (chapter && !chapter.scenes.some((item) => item.id === event.sceneId))
+          issue(
+            ["timelineEvents", index, "chapterId"],
+            "chapter is required for a scene",
+          );
+        else if (
+          chapter &&
+          !chapter.scenes.some((item) => item.id === event.sceneId)
+        )
           issue(["timelineEvents", index, "sceneId"], "unknown scene");
       }
       if (event.subjectKind === "character") {
@@ -603,45 +625,81 @@ export const workspaceSchema = z
         if (!subject)
           issue(["timelineEvents", index, "subjectId"], "unknown character");
         else if (!subject.universeIds.includes(event.universeId))
-          issue(["timelineEvents", index, "subjectId"], "character belongs to another universe");
+          issue(
+            ["timelineEvents", index, "subjectId"],
+            "character belongs to another universe",
+          );
       } else if (event.subjectKind === "location") {
         const subject = locationsById.get(event.subjectId);
         if (!subject)
           issue(["timelineEvents", index, "subjectId"], "unknown location");
         else if (subject.universeId !== event.universeId)
-          issue(["timelineEvents", index, "subjectId"], "location belongs to another universe");
+          issue(
+            ["timelineEvents", index, "subjectId"],
+            "location belongs to another universe",
+          );
       } else if (event.subjectKind === "object") {
         const subject = storyObjectsById.get(event.subjectId);
         if (!subject)
           issue(["timelineEvents", index, "subjectId"], "unknown object");
         else if (subject.universeId !== event.universeId)
-          issue(["timelineEvents", index, "subjectId"], "object belongs to another universe");
+          issue(
+            ["timelineEvents", index, "subjectId"],
+            "object belongs to another universe",
+          );
       } else {
         if (!event.chapterId)
-          issue(["timelineEvents", index, "subjectId"], "scene subject requires a chapter");
-        else if (chapter && !chapter.scenes.some((item) => item.id === event.subjectId))
-          issue(["timelineEvents", index, "subjectId"], "unknown scene subject");
+          issue(
+            ["timelineEvents", index, "subjectId"],
+            "scene subject requires a chapter",
+          );
+        else if (
+          chapter &&
+          !chapter.scenes.some((item) => item.id === event.subjectId)
+        )
+          issue(
+            ["timelineEvents", index, "subjectId"],
+            "unknown scene subject",
+          );
       }
       for (const characterId of event.relatedCharacterIds) {
         const character = charactersById.get(characterId);
         if (!character)
-          issue(["timelineEvents", index, "relatedCharacterIds"], "unknown character");
+          issue(
+            ["timelineEvents", index, "relatedCharacterIds"],
+            "unknown character",
+          );
         else if (!character.universeIds.includes(event.universeId))
-          issue(["timelineEvents", index, "relatedCharacterIds"], "character belongs to another universe");
+          issue(
+            ["timelineEvents", index, "relatedCharacterIds"],
+            "character belongs to another universe",
+          );
       }
       for (const locationId of event.relatedLocationIds) {
         const location = locationsById.get(locationId);
         if (!location)
-          issue(["timelineEvents", index, "relatedLocationIds"], "unknown location");
+          issue(
+            ["timelineEvents", index, "relatedLocationIds"],
+            "unknown location",
+          );
         else if (location.universeId !== event.universeId)
-          issue(["timelineEvents", index, "relatedLocationIds"], "location belongs to another universe");
+          issue(
+            ["timelineEvents", index, "relatedLocationIds"],
+            "location belongs to another universe",
+          );
       }
       for (const objectId of event.relatedObjectIds) {
         const object = storyObjectsById.get(objectId);
         if (!object)
-          issue(["timelineEvents", index, "relatedObjectIds"], "unknown object");
+          issue(
+            ["timelineEvents", index, "relatedObjectIds"],
+            "unknown object",
+          );
         else if (object.universeId !== event.universeId)
-          issue(["timelineEvents", index, "relatedObjectIds"], "object belongs to another universe");
+          issue(
+            ["timelineEvents", index, "relatedObjectIds"],
+            "object belongs to another universe",
+          );
       }
     }
     for (const [index, record] of workspace.exports.entries()) {
@@ -678,9 +736,15 @@ export const workspaceSchema = z
       if (task.workId && !work)
         issue(["workflowTasks", index, "workId"], "unknown work");
       if (task.universeId && work && work.universeId !== task.universeId)
-        issue(["workflowTasks", index, "workId"], "work belongs to another universe");
+        issue(
+          ["workflowTasks", index, "workId"],
+          "work belongs to another universe",
+        );
       if (task.chapterId && !task.workId)
-        issue(["workflowTasks", index, "workId"], "work is required for a chapter task");
+        issue(
+          ["workflowTasks", index, "workId"],
+          "work is required for a chapter task",
+        );
       if (
         task.chapterId &&
         task.workId &&
@@ -689,7 +753,10 @@ export const workspaceSchema = z
         issue(["workflowTasks", index, "chapterId"], "unknown chapter");
       if (task.parentId) {
         if (task.parentId === task.id)
-          issue(["workflowTasks", index, "parentId"], "task cannot parent itself");
+          issue(
+            ["workflowTasks", index, "parentId"],
+            "task cannot parent itself",
+          );
         else if (!workflowTasks.has(task.parentId))
           issue(["workflowTasks", index, "parentId"], "unknown parent task");
       }
@@ -706,10 +773,15 @@ export const workspaceSchema = z
           );
       }
       for (const characterId of task.characterIds) {
-        const character = workspace.characters.find((item) => item.id === characterId);
+        const character = workspace.characters.find(
+          (item) => item.id === characterId,
+        );
         if (!character)
           issue(["workflowTasks", index, "characterIds"], "unknown character");
-        else if (task.universeId && !character.universeIds.includes(task.universeId))
+        else if (
+          task.universeId &&
+          !character.universeIds.includes(task.universeId)
+        )
           issue(
             ["workflowTasks", index, "characterIds"],
             "character belongs to another universe",
@@ -747,7 +819,9 @@ export const workspaceSchema = z
       if (visiting.has(id)) {
         const cycleStart = trail.indexOf(id);
         const cycle = [...trail.slice(Math.max(0, cycleStart)), id];
-        const taskIndex = workspace.workflowTasks.findIndex((item) => item.id === id);
+        const taskIndex = workspace.workflowTasks.findIndex(
+          (item) => item.id === id,
+        );
         issue(
           ["workflowTasks", Math.max(0, taskIndex), "dependsOnIds"],
           `workflow cycle: ${cycle.join(" -> ")}`,

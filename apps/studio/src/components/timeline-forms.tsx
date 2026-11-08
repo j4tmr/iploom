@@ -47,7 +47,10 @@ export function StoryObjectModal({
   onSave: (value: StoryObject) => boolean;
 }) {
   const [universeId, setUniverseId] = useState(
-    initial?.universeId ?? defaultUniverseId ?? workspace.universes[0]?.id ?? "",
+    initial?.universeId ??
+      defaultUniverseId ??
+      workspace.universes[0]?.id ??
+      "",
   );
   const [nameZh, setNameZh] = useState(initial?.name.zh ?? "");
   const [nameEn, setNameEn] = useState(initial?.name.en ?? "");
@@ -69,7 +72,9 @@ export function StoryObjectModal({
       wide
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>{t("cancel")}</Button>
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
           <Button
             variant="primary"
             icon="check"
@@ -107,37 +112,68 @@ export function StoryObjectModal({
             onChange={(event) => setUniverseId(event.target.value)}
           >
             {workspace.universes.map((item) => (
-              <option key={item.id} value={item.id}>{displayText(item.name, locale)}</option>
+              <option key={item.id} value={item.id}>
+                {displayText(item.name, locale)}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={t("nameZh")}>
-          <TextInput autoFocus value={nameZh} onChange={(event) => setNameZh(event.target.value)} />
+          <TextInput
+            autoFocus
+            value={nameZh}
+            onChange={(event) => setNameZh(event.target.value)}
+          />
         </Field>
         <Field label={t("nameEn")}>
-          <TextInput value={nameEn} onChange={(event) => setNameEn(event.target.value)} />
+          <TextInput
+            value={nameEn}
+            onChange={(event) => setNameEn(event.target.value)}
+          />
         </Field>
         <Field label={t("storyObjectCategoryZh")}>
-          <TextInput value={categoryZh} onChange={(event) => setCategoryZh(event.target.value)} />
+          <TextInput
+            value={categoryZh}
+            onChange={(event) => setCategoryZh(event.target.value)}
+          />
         </Field>
         <Field label={t("storyObjectCategoryEn")}>
-          <TextInput value={categoryEn} onChange={(event) => setCategoryEn(event.target.value)} />
+          <TextInput
+            value={categoryEn}
+            onChange={(event) => setCategoryEn(event.target.value)}
+          />
         </Field>
         <Field label={t("summaryZh")} wide>
-          <TextArea rows={3} value={summaryZh} onChange={(event) => setSummaryZh(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={summaryZh}
+            onChange={(event) => setSummaryZh(event.target.value)}
+          />
         </Field>
         <Field label={t("summaryEn")} wide>
-          <TextArea rows={3} value={summaryEn} onChange={(event) => setSummaryEn(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={summaryEn}
+            onChange={(event) => setSummaryEn(event.target.value)}
+          />
         </Field>
         <Field
           label={t("storyObjectVisualPrompt")}
           hint={t("storyObjectVisualPromptHint")}
           wide
         >
-          <TextArea rows={5} value={visualPrompt} onChange={(event) => setVisualPrompt(event.target.value)} />
+          <TextArea
+            rows={5}
+            value={visualPrompt}
+            onChange={(event) => setVisualPrompt(event.target.value)}
+          />
         </Field>
         <Field label={t("storyObjectSourceNotes")} wide>
-          <TextArea rows={4} value={sourceNotes} onChange={(event) => setSourceNotes(event.target.value)} />
+          <TextArea
+            rows={4}
+            value={sourceNotes}
+            onChange={(event) => setSourceNotes(event.target.value)}
+          />
         </Field>
       </FieldGrid>
     </Modal>
@@ -163,7 +199,9 @@ export function TimelineEventModal({
   defaultChapterId?: string;
   onSave: (value: TimelineEvent) => boolean;
 }) {
-  const initialWork = workspace.works.find((item) => item.id === (initial?.workId ?? defaultWorkId));
+  const initialWork = workspace.works.find(
+    (item) => item.id === (initial?.workId ?? defaultWorkId),
+  );
   const initialUniverseId =
     initial?.universeId ??
     initialWork?.universeId ??
@@ -171,8 +209,12 @@ export function TimelineEventModal({
     workspace.universes[0]?.id ??
     "";
   const [universeId, setUniverseId] = useState(initialUniverseId);
-  const [workId, setWorkId] = useState(initial?.workId ?? initialWork?.id ?? "");
-  const [chapterId, setChapterId] = useState(initial?.chapterId ?? defaultChapterId ?? "");
+  const [workId, setWorkId] = useState(
+    initial?.workId ?? initialWork?.id ?? "",
+  );
+  const [chapterId, setChapterId] = useState(
+    initial?.chapterId ?? defaultChapterId ?? "",
+  );
   const [sceneId, setSceneId] = useState(initial?.sceneId ?? "");
   const [storyTime, setStoryTime] = useState(initial?.storyTime ?? "");
   const [order, setOrder] = useState(initial?.order ?? 0);
@@ -204,7 +246,9 @@ export function TimelineEventModal({
     initial?.productionPrompt ?? "",
   );
 
-  const works = workspace.works.filter((item) => item.universeId === universeId);
+  const works = workspace.works.filter(
+    (item) => item.universeId === universeId,
+  );
   const work = works.find((item) => item.id === workId);
   const chapters = work?.chapters ?? [];
   const chapter = chapters.find((item) => item.id === chapterId);
@@ -219,20 +263,28 @@ export function TimelineEventModal({
   );
   const subjectOptions =
     subjectKind === "character"
-      ? characters.map((item) => [item.id, displayText(item.name, locale)] as const)
+      ? characters.map(
+          (item) => [item.id, displayText(item.name, locale)] as const,
+        )
       : subjectKind === "location"
-        ? locations.map((item) => [item.id, displayText(item.name, locale)] as const)
+        ? locations.map(
+            (item) => [item.id, displayText(item.name, locale)] as const,
+          )
         : subjectKind === "object"
-          ? objects.map((item) => [item.id, displayText(item.name, locale)] as const)
-          : (chapter?.scenes ?? []).map((item) => [item.id, item.title] as const);
+          ? objects.map(
+              (item) => [item.id, displayText(item.name, locale)] as const,
+            )
+          : (chapter?.scenes ?? []).map(
+              (item) => [item.id, item.title] as const,
+            );
   const canSave = Boolean(
     universeId &&
-    workId &&
-    subjectId &&
-    (chapterId || storyTime.trim()) &&
-    (titleZh.trim() || titleEn.trim()) &&
-    (stateBefore.trim() || stateAfter.trim()) &&
-    (subjectKind !== "scene" || chapterId),
+      workId &&
+      subjectId &&
+      (chapterId || storyTime.trim()) &&
+      (titleZh.trim() || titleEn.trim()) &&
+      (stateBefore.trim() || stateAfter.trim()) &&
+      (subjectKind !== "scene" || chapterId),
   );
 
   const toggle = (
@@ -240,9 +292,11 @@ export function TimelineEventModal({
     values: string[],
     setValues: (next: string[]) => void,
   ) =>
-    setValues(values.includes(id)
-      ? values.filter((value) => value !== id)
-      : [...values, id]);
+    setValues(
+      values.includes(id)
+        ? values.filter((value) => value !== id)
+        : [...values, id],
+    );
 
   return (
     <Modal
@@ -254,7 +308,9 @@ export function TimelineEventModal({
       wide
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>{t("cancel")}</Button>
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
           <Button
             variant="primary"
             icon="check"
@@ -268,7 +324,9 @@ export function TimelineEventModal({
                 chapterId: chapterId || undefined,
                 sceneId: sceneId || undefined,
                 storyTime: storyTime.trim(),
-                order: Number.isFinite(order) ? Math.max(0, Math.trunc(order)) : 0,
+                order: Number.isFinite(order)
+                  ? Math.max(0, Math.trunc(order))
+                  : 0,
                 subjectKind,
                 subjectId,
                 eventKind,
@@ -308,7 +366,9 @@ export function TimelineEventModal({
             }}
           >
             {workspace.universes.map((item) => (
-              <option key={item.id} value={item.id}>{displayText(item.name, locale)}</option>
+              <option key={item.id} value={item.id}>
+                {displayText(item.name, locale)}
+              </option>
             ))}
           </Select>
         </Field>
@@ -328,11 +388,16 @@ export function TimelineEventModal({
           >
             <option value="">—</option>
             {works.map((item) => (
-              <option key={item.id} value={item.id}>{displayText(item.title, locale)}</option>
+              <option key={item.id} value={item.id}>
+                {displayText(item.title, locale)}
+              </option>
             ))}
           </Select>
         </Field>
-        <Field label={t("timelineChapterAnchor")} hint={t("timelineChapterAnchorHint")}>
+        <Field
+          label={t("timelineChapterAnchor")}
+          hint={t("timelineChapterAnchorHint")}
+        >
           <Select
             value={chapterId}
             onChange={(event) => {
@@ -343,18 +408,28 @@ export function TimelineEventModal({
           >
             <option value="">—</option>
             {chapters.map((item) => (
-              <option key={item.id} value={item.id}>{item.number}. {item.title}</option>
+              <option key={item.id} value={item.id}>
+                {item.number}. {item.title}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={t("timelineStoryTime")} hint={t("timelineStoryTimeHint")}>
-          <TextInput value={storyTime} onChange={(event) => setStoryTime(event.target.value)} />
+          <TextInput
+            value={storyTime}
+            onChange={(event) => setStoryTime(event.target.value)}
+          />
         </Field>
         <Field label={t("timelineSceneAssociation")}>
-          <Select value={sceneId} onChange={(event) => setSceneId(event.target.value)}>
+          <Select
+            value={sceneId}
+            onChange={(event) => setSceneId(event.target.value)}
+          >
             <option value="">—</option>
             {(chapter?.scenes ?? []).map((item) => (
-              <option key={item.id} value={item.id}>{item.title}</option>
+              <option key={item.id} value={item.id}>
+                {item.title}
+              </option>
             ))}
           </Select>
         </Field>
@@ -374,43 +449,82 @@ export function TimelineEventModal({
               setSubjectId("");
             }}
           >
-            {(Object.keys(timelineSubjectLabels[locale]) as TimelineSubjectKind[]).map((kind) => (
-              <option key={kind} value={kind}>{timelineSubjectLabels[locale][kind]}</option>
+            {(
+              Object.keys(
+                timelineSubjectLabels[locale],
+              ) as TimelineSubjectKind[]
+            ).map((kind) => (
+              <option key={kind} value={kind}>
+                {timelineSubjectLabels[locale][kind]}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={t("timelineSubject")}>
-          <Select value={subjectId} onChange={(event) => setSubjectId(event.target.value)}>
+          <Select
+            value={subjectId}
+            onChange={(event) => setSubjectId(event.target.value)}
+          >
             <option value="">—</option>
             {subjectOptions.map(([id, label]) => (
-              <option key={id} value={id}>{label}</option>
+              <option key={id} value={id}>
+                {label}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={t("timelineEventKind")}>
-          <Select value={eventKind} onChange={(event) => setEventKind(event.target.value as TimelineEventKind)}>
-            {(Object.keys(timelineEventLabels[locale]) as TimelineEventKind[]).map((kind) => (
-              <option key={kind} value={kind}>{timelineEventLabels[locale][kind]}</option>
+          <Select
+            value={eventKind}
+            onChange={(event) =>
+              setEventKind(event.target.value as TimelineEventKind)
+            }
+          >
+            {(
+              Object.keys(timelineEventLabels[locale]) as TimelineEventKind[]
+            ).map((kind) => (
+              <option key={kind} value={kind}>
+                {timelineEventLabels[locale][kind]}
+              </option>
             ))}
           </Select>
         </Field>
         <Field label={t("timelineCanonStatus")}>
-          <Select value={canonStatus} onChange={(event) => setCanonStatus(event.target.value as TimelineCanonStatus)}>
+          <Select
+            value={canonStatus}
+            onChange={(event) =>
+              setCanonStatus(event.target.value as TimelineCanonStatus)
+            }
+          >
             <option value="canon">{t("timelineEstablished")}</option>
             <option value="proposed">{t("timelineProposedNeedsReview")}</option>
           </Select>
         </Field>
         <Field label={t("titleZh")}>
-          <TextInput value={titleZh} onChange={(event) => setTitleZh(event.target.value)} />
+          <TextInput
+            value={titleZh}
+            onChange={(event) => setTitleZh(event.target.value)}
+          />
         </Field>
         <Field label={t("titleEn")}>
-          <TextInput value={titleEn} onChange={(event) => setTitleEn(event.target.value)} />
+          <TextInput
+            value={titleEn}
+            onChange={(event) => setTitleEn(event.target.value)}
+          />
         </Field>
         <Field label={t("timelineStateBefore")} wide>
-          <TextArea rows={3} value={stateBefore} onChange={(event) => setStateBefore(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={stateBefore}
+            onChange={(event) => setStateBefore(event.target.value)}
+          />
         </Field>
         <Field label={t("timelineStateAfter")} wide>
-          <TextArea rows={3} value={stateAfter} onChange={(event) => setStateAfter(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={stateAfter}
+            onChange={(event) => setStateAfter(event.target.value)}
+          />
         </Field>
         <Field label={t("timelineCharacters")} wide>
           <div className="check-grid">
@@ -419,7 +533,9 @@ export function TimelineEventModal({
                 <input
                   type="checkbox"
                   checked={relatedCharacterIds.includes(item.id)}
-                  onChange={() => toggle(item.id, relatedCharacterIds, setRelatedCharacterIds)}
+                  onChange={() =>
+                    toggle(item.id, relatedCharacterIds, setRelatedCharacterIds)
+                  }
                 />
                 <span style={{ background: item.color }} />
                 {displayText(item.name, locale)}
@@ -434,7 +550,9 @@ export function TimelineEventModal({
                 <input
                   type="checkbox"
                   checked={relatedLocationIds.includes(item.id)}
-                  onChange={() => toggle(item.id, relatedLocationIds, setRelatedLocationIds)}
+                  onChange={() =>
+                    toggle(item.id, relatedLocationIds, setRelatedLocationIds)
+                  }
                 />
                 <span className="timeline-check-mark">⌖</span>
                 {displayText(item.name, locale)}
@@ -449,7 +567,9 @@ export function TimelineEventModal({
                 <input
                   type="checkbox"
                   checked={relatedObjectIds.includes(item.id)}
-                  onChange={() => toggle(item.id, relatedObjectIds, setRelatedObjectIds)}
+                  onChange={() =>
+                    toggle(item.id, relatedObjectIds, setRelatedObjectIds)
+                  }
                 />
                 <span className="timeline-check-mark">◇</span>
                 {displayText(item.name, locale)}
@@ -458,14 +578,22 @@ export function TimelineEventModal({
           </div>
         </Field>
         <Field label={t("timelineEvidenceField")} wide>
-          <TextArea rows={3} value={evidence} onChange={(event) => setEvidence(event.target.value)} />
+          <TextArea
+            rows={3}
+            value={evidence}
+            onChange={(event) => setEvidence(event.target.value)}
+          />
         </Field>
         <Field
           label={t("timelineProductionPrompt")}
           hint={t("timelineProductionPromptHint")}
           wide
         >
-          <TextArea rows={5} value={productionPrompt} onChange={(event) => setProductionPrompt(event.target.value)} />
+          <TextArea
+            rows={5}
+            value={productionPrompt}
+            onChange={(event) => setProductionPrompt(event.target.value)}
+          />
         </Field>
       </FieldGrid>
     </Modal>

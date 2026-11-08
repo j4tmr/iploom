@@ -1,9 +1,5 @@
 import { displayText } from "./factory.ts";
-import type {
-  StudioWorkspace,
-  TimelineEvent,
-  UiLocale,
-} from "./types.ts";
+import type { StudioWorkspace, TimelineEvent, UiLocale } from "./types.ts";
 import type { ProductionScope } from "./production.ts";
 
 function chapterNumber(
@@ -55,11 +51,8 @@ export function timelineAnchorLabel(
   event: TimelineEvent,
   locale: UiLocale,
 ): string {
-  const chapter = event.chapterId
-    ? chapterLabel(workspace, event, locale)
-    : "";
-  if (event.storyTime && chapter)
-    return `${chapter} / ${event.storyTime}`;
+  const chapter = event.chapterId ? chapterLabel(workspace, event, locale) : "";
+  if (event.storyTime && chapter) return `${chapter} / ${event.storyTime}`;
   return event.storyTime || chapter;
 }
 
@@ -69,25 +62,35 @@ export function timelineSubjectLabel(
   locale: UiLocale,
 ): string {
   if (event.subjectKind === "character") {
-    const item = workspace.characters.find((value) => value.id === event.subjectId);
+    const item = workspace.characters.find(
+      (value) => value.id === event.subjectId,
+    );
     return item ? displayText(item.name, locale) : event.subjectId;
   }
   if (event.subjectKind === "location") {
-    const item = workspace.locations.find((value) => value.id === event.subjectId);
+    const item = workspace.locations.find(
+      (value) => value.id === event.subjectId,
+    );
     return item ? displayText(item.name, locale) : event.subjectId;
   }
   if (event.subjectKind === "object") {
-    const item = workspace.storyObjects.find((value) => value.id === event.subjectId);
+    const item = workspace.storyObjects.find(
+      (value) => value.id === event.subjectId,
+    );
     return item ? displayText(item.name, locale) : event.subjectId;
   }
   const work = workspace.works.find((item) => item.id === event.workId);
   const chapter = work?.chapters.find((item) => item.id === event.chapterId);
-  return chapter?.scenes.find((item) => item.id === event.subjectId)?.title ??
-    (locale === "en" ? "Scene" : "场景");
+  return (
+    chapter?.scenes.find((item) => item.id === event.subjectId)?.title ??
+    (locale === "en" ? "Scene" : "场景")
+  );
 }
 
 function intersects(values: string[], expected: string[]): boolean {
-  return expected.length === 0 || values.some((value) => expected.includes(value));
+  return (
+    expected.length === 0 || values.some((value) => expected.includes(value))
+  );
 }
 
 export function relevantTimelineEvents(
@@ -132,7 +135,8 @@ export function relevantTimelineEvents(
     }
     if (!chapter) return true;
     return (
-      (event.subjectKind === "character" && castIds.includes(event.subjectId)) ||
+      (event.subjectKind === "character" &&
+        castIds.includes(event.subjectId)) ||
       (event.subjectKind === "location" &&
         [...castIds, ...locationIds].includes(event.subjectId)) ||
       (event.subjectKind === "scene" && sceneIds.includes(event.subjectId)) ||
@@ -166,10 +170,7 @@ export function removeSceneReferences(
       next.push(event);
       continue;
     }
-    if (
-      event.subjectKind === "scene" &&
-      removedSceneIds.has(event.subjectId)
-    ) {
+    if (event.subjectKind === "scene" && removedSceneIds.has(event.subjectId)) {
       continue;
     }
     next.push(
@@ -197,15 +198,24 @@ export function timelinePromptContext(
     stateAfter: event.stateAfter,
     relatedCharacters: event.relatedCharacterIds.map(
       (id) =>
-        workspace.characters.find((item) => item.id === id)?.name ?? { zh: id, en: id },
+        workspace.characters.find((item) => item.id === id)?.name ?? {
+          zh: id,
+          en: id,
+        },
     ),
     relatedLocations: event.relatedLocationIds.map(
       (id) =>
-        workspace.locations.find((item) => item.id === id)?.name ?? { zh: id, en: id },
+        workspace.locations.find((item) => item.id === id)?.name ?? {
+          zh: id,
+          en: id,
+        },
     ),
     relatedObjects: event.relatedObjectIds.map(
       (id) =>
-        workspace.storyObjects.find((item) => item.id === id)?.name ?? { zh: id, en: id },
+        workspace.storyObjects.find((item) => item.id === id)?.name ?? {
+          zh: id,
+          en: id,
+        },
     ),
     evidence: event.evidence,
     productionPrompt: event.productionPrompt,

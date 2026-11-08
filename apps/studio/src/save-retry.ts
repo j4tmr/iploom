@@ -33,7 +33,8 @@ export async function retrySave<T>(
       if (options.isCurrent && !options.isCurrent()) throw error;
       // Errors that flag themselves as permanent (a rejected stale browser
       // save, a version mismatch) cannot succeed on a retry.
-      if ((error as { retryable?: boolean } | null)?.retryable === false) throw error;
+      if ((error as { retryable?: boolean } | null)?.retryable === false)
+        throw error;
       if (attempt < attempts - 1) await sleep(delayMs * 2 ** attempt);
     }
   }

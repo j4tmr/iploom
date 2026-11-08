@@ -28,7 +28,12 @@ function describeFailure(reason: unknown): WorkspaceChangeRejected {
     const issues = reason.issues;
     const shown = issues.slice(0, 3).join("; ");
     const remainder = issues.length > 3 ? ` (+${issues.length - 3} more)` : "";
-    return { ok: false, error: `${shown}${remainder}`, issues, details: reason.details };
+    return {
+      ok: false,
+      error: `${shown}${remainder}`,
+      issues,
+      details: reason.details,
+    };
   }
   return {
     ok: false,
@@ -159,9 +164,7 @@ export function reassignWorkUniverse(
     else if (event.subjectKind === "object")
       subjectExists = objectIds.has(event.subjectId);
     else {
-      const chapter = work.chapters.find(
-        (item) => item.id === event.chapterId,
-      );
+      const chapter = work.chapters.find((item) => item.id === event.chapterId);
       subjectExists = Boolean(
         chapter?.scenes.some((scene) => scene.id === event.subjectId),
       );
@@ -194,9 +197,7 @@ export function reassignWorkUniverse(
       ...task,
       universeId,
       characterIds: task.characterIds.filter((id) => characterIds.has(id)),
-      standardRefs: task.standardRefs.filter((ref) =>
-        standardIds.has(ref.id),
-      ),
+      standardRefs: task.standardRefs.filter((ref) => standardIds.has(ref.id)),
     };
   });
 }
@@ -373,9 +374,15 @@ export function deleteUniverseFromDraft(
 
   const events: TimelineEvent[] = [];
   for (const event of draft.timelineEvents) {
-    if (event.subjectKind === "character" && removedCharacters.has(event.subjectId))
+    if (
+      event.subjectKind === "character" &&
+      removedCharacters.has(event.subjectId)
+    )
       continue;
-    if (event.subjectKind === "location" && removedLocations.has(event.subjectId))
+    if (
+      event.subjectKind === "location" &&
+      removedLocations.has(event.subjectId)
+    )
       continue;
     if (event.subjectKind === "object" && removedObjects.has(event.subjectId))
       continue;
@@ -530,14 +537,11 @@ export function deleteChapterFromDraft(
   if (!work) return;
   work.chapters = work.chapters.filter((item) => item.id !== chapterId);
   draft.timelineEvents = draft.timelineEvents.filter(
-    (event) =>
-      !(event.workId === workId && event.chapterId === chapterId),
+    (event) => !(event.workId === workId && event.chapterId === chapterId),
   );
   const removedTasks = new Set(
     draft.workflowTasks
-      .filter(
-        (task) => task.workId === workId && task.chapterId === chapterId,
-      )
+      .filter((task) => task.workId === workId && task.chapterId === chapterId)
       .map((task) => task.id),
   );
   draft.workflowTasks = draft.workflowTasks

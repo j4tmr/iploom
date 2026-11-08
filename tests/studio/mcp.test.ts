@@ -205,12 +205,12 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
       id: string;
       ready: boolean;
     }>;
-    expect(taskItems.find((task) => task.id === "task_review_first")?.ready).toBe(
-      true,
-    );
-    expect(taskItems.find((task) => task.id === "task_chapter_three")?.ready).toBe(
-      false,
-    );
+    expect(
+      taskItems.find((task) => task.id === "task_review_first")?.ready,
+    ).toBe(true);
+    expect(
+      taskItems.find((task) => task.id === "task_chapter_three")?.ready,
+    ).toBe(false);
 
     const taskBrief = await call(client, "get_workflow_brief", {
       task_id: "task_chapter_three",
@@ -618,9 +618,9 @@ test("MCP export stays inside allowed roots and honours --export-root", async ()
       output_dir: outside,
     });
     expect(absolute.isError).toBe(true);
-    expect(
-      (absolute.body.error as { message: string }).message,
-    ).toContain("allowed export directories");
+    expect((absolute.body.error as { message: string }).message).toContain(
+      "allowed export directories",
+    );
     expect(readdirSync(outside)).toEqual([]);
 
     const traversal = await call(client, "export_arcreel_bundle", {
@@ -628,9 +628,9 @@ test("MCP export stays inside allowed roots and honours --export-root", async ()
       output_dir: `../${basename(root)}-escape`,
     });
     expect(traversal.isError).toBe(true);
-    expect(
-      (traversal.body.error as { message: string }).message,
-    ).toContain("allowed export directories");
+    expect((traversal.body.error as { message: string }).message).toContain(
+      "allowed export directories",
+    );
     expect(existsSync(escaped)).toBe(false);
 
     const nested = await call(client, "export_arcreel_bundle", {
@@ -683,9 +683,7 @@ test("WorkspaceStore.update serializes concurrent mutations and recovers from fa
   const workspacePath = join(root, "workspace.json");
   const store = new WorkspaceStore(workspacePath);
   try {
-    await store.save(
-      createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"),
-    );
+    await store.save(createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"));
     const now = "2026-11-06T00:00:01.000Z";
     const results = await Promise.all(
       Array.from({ length: 5 }, (_, index) =>
@@ -703,9 +701,9 @@ test("WorkspaceStore.update serializes concurrent mutations and recovers from fa
         }),
       ),
     );
-    expect(results.map((result) => result.revision).sort((a, b) => a - b)).toEqual(
-      [8, 9, 10, 11, 12],
-    );
+    expect(
+      results.map((result) => result.revision).sort((a, b) => a - b),
+    ).toEqual([8, 9, 10, 11, 12]);
     let current = (await store.load()).workspace;
     expect(current.standards).toHaveLength(11);
     expect(current.revision).toBe(12);

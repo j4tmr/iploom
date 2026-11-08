@@ -158,10 +158,7 @@ export function platformDownload(
   return undefined;
 }
 
-function summarize(
-  release: GithubRelease,
-  version: Semver,
-): ReleaseSummary {
+function summarize(release: GithubRelease, version: Semver): ReleaseSummary {
   return {
     version: formatSemver(version),
     tag: release.tag,
@@ -184,7 +181,9 @@ export function buildUpdateCheck(
         entry.version !== null,
     )
     .sort((a, b) => compareSemver(b.version, a.version));
-  const recent = stable.slice(0, 5).map((entry) => summarize(entry.release, entry.version));
+  const recent = stable
+    .slice(0, 5)
+    .map((entry) => summarize(entry.release, entry.version));
 
   if (!current) {
     return {

@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createDemoWorkspace, createEmptyWorkspace } from "../../apps/studio/src/core/factory.ts";
+import {
+  createDemoWorkspace,
+  createEmptyWorkspace,
+} from "../../apps/studio/src/core/factory.ts";
 import {
   applicableStandards,
   buildStandardDraftPrompt,
@@ -58,9 +61,9 @@ describe("foundation standards", () => {
     );
     expect(textSource?.body.zh).toContain("下游产物");
     expect(textSource?.body.en).toContain("downstream");
-    expect(createEmptyWorkspace("New project", "en", NOW).standards).toHaveLength(
-      6,
-    );
+    expect(
+      createEmptyWorkspace("New project", "en", NOW).standards,
+    ).toHaveLength(6);
   });
 
   test("applicability is scoped, active-only and deterministically ordered", () => {
@@ -141,9 +144,9 @@ describe("foundation standards", () => {
     );
     const expected = standardRefsFor(workspace, "uni_mist_harbor");
     expect(tasks).toHaveLength(6);
-    expect(tasks.every((task) => task.standardRefs.length === expected.length)).toBe(
-      true,
-    );
+    expect(
+      tasks.every((task) => task.standardRefs.length === expected.length),
+    ).toBe(true);
     expect(
       expected.some(
         (ref) => ref.id === "std_custom_style" && ref.version === 3,
@@ -239,18 +242,21 @@ describe("AI standard drafting", () => {
   });
 
   test("caps a runaway candidate list and rejects non-arrays", () => {
-    const many = Array.from({ length: MAX_STANDARD_CANDIDATES + 5 }, (_, index) => ({
-      kind: "style",
-      title: { zh: `规则 ${index}`, en: `Rule ${index}` },
-      body: { zh: `正文 ${index}`, en: `Body ${index}` },
-    }));
+    const many = Array.from(
+      { length: MAX_STANDARD_CANDIDATES + 5 },
+      (_, index) => ({
+        kind: "style",
+        title: { zh: `规则 ${index}`, en: `Rule ${index}` },
+        body: { zh: `正文 ${index}`, en: `Body ${index}` },
+      }),
+    );
     expect(parseStandardCandidates(JSON.stringify(many))).toHaveLength(
       MAX_STANDARD_CANDIDATES,
     );
     expect(() => parseStandardCandidates("no array here")).toThrow(
       /did not contain a standards array/,
     );
-    expect(() => parseStandardCandidates("[{\"kind\":]")).toThrow(
+    expect(() => parseStandardCandidates('[{"kind":]')).toThrow(
       /not valid JSON/,
     );
   });

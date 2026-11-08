@@ -53,18 +53,22 @@ IP 宇宙
 
 当前发行版 **0.3.0**，直接下载：
 
-| macOS (Apple silicon + Intel) | Windows x64 |
-| --- | --- |
+| macOS (Apple silicon + Intel)                                                                                                                                                                                                     | Windows x64                                                                                              |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | [DMG](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-darwin-universal.dmg) · [ZIP](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-darwin-universal.zip) | [EXE](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/IPloom-Studio-0.3.0-win32-x64.exe) |
 
 [Releases](https://github.com/j4tmr/iploom/releases) · [SHA256SUMS.txt](https://github.com/j4tmr/iploom/releases/download/studio-v0.3.0/SHA256SUMS.txt)
 
-
 - macOS：同时支持 Apple silicon 与 Intel 的 universal DMG / ZIP。
 - Windows：x64 NSIS 安装包。
 - `SHA256SUMS.txt`：打开前先核验下载文件。
+- **构建溯源**：每个 `.dmg`、`.zip` 与 `.exe` 都由发布工作流生成构建证明，可用 GitHub CLI 校验：
 
-当前发行版**未签名**，macOS Gatekeeper 或 Windows SmartScreen 可能提示风险。请先核验校验和；确认来源可信后，再使用系统正常的“打开”或“更多信息 → 仍要运行”流程。后续可在不改变应用格式的前提下补充正式签名。
+  ```sh
+  gh attestation verify IPloom-Studio-0.3.0-darwin-universal.dmg --repo j4tmr/iploom
+  ```
+
+当前发行版**未签名**，macOS Gatekeeper 或 Windows SmartScreen 可能提示风险。macOS 15 及以后，Control 键点按 →“打开”已不再能绕过 Gatekeeper：若首次启动被拦截，请打开**系统设置 → 隐私与安全性**，在“安全性”中点按 IPloom Studio 提示旁的**仍要打开**，完成认证后选择**打开**。Windows 上使用“更多信息 → 仍要运行”。请先核验校验和与构建溯源，确认来源可信后再继续。后续可在不改变应用格式的前提下补充正式签名。
 
 ## 本地开发
 

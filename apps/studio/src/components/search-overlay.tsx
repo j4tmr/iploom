@@ -13,10 +13,10 @@ const kindLabels: Record<UiLocale, Record<SearchHit["kind"], string>> = {
     chapter: "章节",
     character: "人物",
     location: "地点",
-  object: "物件",
+    object: "物件",
     faction: "势力",
     lore: "设定",
-  timeline: "时间线",
+    timeline: "时间线",
   },
   en: {
     universe: "IP world",
@@ -24,10 +24,10 @@ const kindLabels: Record<UiLocale, Record<SearchHit["kind"], string>> = {
     chapter: "Chapter",
     character: "Character",
     location: "Location",
-  object: "Prop",
+    object: "Prop",
     faction: "Faction",
     lore: "Lore",
-  timeline: "Timeline",
+    timeline: "Timeline",
   },
 };
 
@@ -92,12 +92,14 @@ export function SearchOverlay({
     };
   }, [open]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `query` is the trigger — a new query resets the highlight even though the setter does not read it
   useEffect(() => setActive(0), [query]);
   // Keep the highlighted result inside the scroll viewport while the query
   // changes. `block: "nearest"` scrolls only when it has actually left it.
   // The result set is a dependency too: new results re-render the list while
   // `setActive(0)` bails at index 0, so otherwise the list keeps its old
   // scroll offset and the highlighted first result can sit out of view.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `results` is required even though the effect does not read it — the DOM must be re-scrolled after new results render
   useEffect(() => {
     if (!open) return;
     document
@@ -107,6 +109,7 @@ export function SearchOverlay({
   if (!open) return null;
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the backdrop only handles mouse dismissal; Escape is handled by the overlay stack
     <div
       className="search-backdrop"
       onMouseDown={(event) => {
@@ -149,7 +152,9 @@ export function SearchOverlay({
               }
               if (event.key === "ArrowDown") {
                 event.preventDefault();
-                setActive((current) => Math.min(results.length - 1, current + 1));
+                setActive((current) =>
+                  Math.min(results.length - 1, current + 1),
+                );
               } else if (event.key === "ArrowUp") {
                 event.preventDefault();
                 setActive((current) => Math.max(0, current - 1));
@@ -162,11 +167,14 @@ export function SearchOverlay({
           />
           <kbd>ESC</kbd>
         </div>
+        {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: role and aria-label are applied together, only when there are results */}
         <div
           className="command-results"
           id={listId}
           role={query && results.length ? "listbox" : undefined}
-          aria-label={query && results.length ? t("searchDialogLabel") : undefined}
+          aria-label={
+            query && results.length ? t("searchDialogLabel") : undefined
+          }
         >
           {!query ? (
             <div className="command-hint">
@@ -181,6 +189,7 @@ export function SearchOverlay({
           ) : (
             results.map((hit, index) => (
               <button
+                type="button"
                 key={`${hit.kind}-${hit.id}`}
                 id={optionId(index)}
                 role="option"
@@ -207,8 +216,13 @@ export function SearchOverlay({
           )}
         </div>
         <footer className="command-footer">
-          <span><kbd>↑</kbd><kbd>↓</kbd> {t("searchNavigate")}</span>
-          <span><kbd>↵</kbd> {t("searchOpen")}</span>
+          <span>
+            <kbd>↑</kbd>
+            <kbd>↓</kbd> {t("searchNavigate")}
+          </span>
+          <span>
+            <kbd>↵</kbd> {t("searchOpen")}
+          </span>
           <span>{t("searchResultCount", { count: results.length })}</span>
         </footer>
       </section>

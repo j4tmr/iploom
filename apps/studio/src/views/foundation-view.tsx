@@ -9,7 +9,6 @@ import {
   standardRefLabel,
   standardStatusLabel,
   standardTitle,
-  STANDARD_KINDS,
   type StandardCandidate,
 } from "../core/standards.ts";
 import type {
@@ -66,10 +65,7 @@ export function FoundationView({
   aiInfo: AiConfigInfo | null;
   onNewStandard: () => void;
   onEditStandard: (standard: WorkspaceStandard) => void;
-  onStatusChange: (
-    standard: WorkspaceStandard,
-    status: StandardStatus,
-  ) => void;
+  onStatusChange: (standard: WorkspaceStandard, status: StandardStatus) => void;
   onRegisterCandidates: (candidates: StandardCandidate[]) => void;
   onOpenWorkflow: () => void;
   onOpenSettings: () => void;
@@ -107,7 +103,12 @@ export function FoundationView({
   );
 
   const counts = useMemo(() => {
-    const next = { total: workspace.standards.length, active: 0, draft: 0, disabled: 0 };
+    const next = {
+      total: workspace.standards.length,
+      active: 0,
+      draft: 0,
+      disabled: 0,
+    };
     for (const standard of workspace.standards) next[standard.status] += 1;
     return next;
   }, [workspace.standards]);
@@ -208,11 +209,13 @@ export function FoundationView({
     setSelectedCandidates(new Set());
     setDraftMessage(t("foundationDraftingMessage"));
     try {
-      const raw = (await bridge.runAi({
-        id,
-        prompt: buildStandardDraftPrompt(workspace, locale),
-        label: t("foundationDraftLabel"),
-      })).text;
+      const raw = (
+        await bridge.runAi({
+          id,
+          prompt: buildStandardDraftPrompt(workspace, locale),
+          label: t("foundationDraftLabel"),
+        })
+      ).text;
       const parsed = parseStandardCandidates(raw);
       if (!parsed.length) {
         setDraftMessage(t("foundationDraftEmpty"));
@@ -220,9 +223,7 @@ export function FoundationView({
       }
       setCandidates(parsed);
       setSelectedCandidates(new Set(parsed.map((_, index) => index)));
-      setDraftMessage(
-        t("foundationDraftGenerated", { count: parsed.length }),
-      );
+      setDraftMessage(t("foundationDraftGenerated", { count: parsed.length }));
     } catch (error) {
       setDraftMessage(String(error));
     } finally {
@@ -257,7 +258,9 @@ export function FoundationView({
             disabled={drafting}
             onClick={() => void draft()}
           >
-            {drafting ? t("foundationDraftingShort") : t("foundationDraftAction")}
+            {drafting
+              ? t("foundationDraftingShort")
+              : t("foundationDraftAction")}
           </Button>
           <Button variant="primary" icon="plus" onClick={onNewStandard}>
             {t("foundationNewStandardShort")}
@@ -310,6 +313,7 @@ export function FoundationView({
           <div className="workflow-filters" role="tablist">
             {filters.map((item) => (
               <button
+                type="button"
                 key={item.id}
                 className={filter === item.id ? "active" : ""}
                 onClick={() => setFilter(item.id)}
@@ -326,6 +330,7 @@ export function FoundationView({
             {filtered.length ? (
               filtered.map((standard) => (
                 <button
+                  type="button"
                   key={standard.id}
                   className={
                     "workflow-row " +
@@ -401,7 +406,7 @@ export function FoundationView({
                   const checked = selectedCandidates.has(index);
                   return (
                     <label
-                      key={`${candidate.kind}-${index}`}
+                      key={`${candidate.kind}-${candidate.title.zh || candidate.title.en}`}
                       className={
                         "foundation-candidate " + (checked ? "selected" : "")
                       }
@@ -523,9 +528,7 @@ export function FoundationView({
                   <div className="foundation-pinned-list">
                     {workspace.workflowTasks
                       .filter((task) =>
-                        task.standardRefs.some(
-                          (ref) => ref.id === selected.id,
-                        ),
+                        task.standardRefs.some((ref) => ref.id === selected.id),
                       )
                       .slice(0, 6)
                       .map((task) => {
@@ -533,7 +536,11 @@ export function FoundationView({
                           (item) => item.id === selected.id,
                         )!;
                         return (
-                          <button key={task.id} onClick={onOpenWorkflow}>
+                          <button
+                            type="button"
+                            key={task.id}
+                            onClick={onOpenWorkflow}
+                          >
                             <Icon name="link" size={13} />
                             {displayText(task.title, locale)}
                             <code>{standardRefLabel(ref)}</code>

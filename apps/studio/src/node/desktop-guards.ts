@@ -306,5 +306,8 @@ export function workspaceRevealFolders(
   workspaceFile: string,
   snapshotDirectory: string,
 ): string[] {
-  return [canonicalPath(dirname(workspaceFile)), canonicalPath(snapshotDirectory)];
+  return [
+    canonicalPath(dirname(workspaceFile)),
+    canonicalPath(snapshotDirectory),
+  ];
 }

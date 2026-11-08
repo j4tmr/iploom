@@ -39,7 +39,13 @@ import {
   workspaceRevealFolders,
 } from "../src/node/desktop-guards.ts";
 import { createElectronMcpConfig } from "../src/node/mcp-config.ts";
-import { AI_CANCELED_MESSAGE, aiConfigSchema, aiRequestSchema, isReportableAiError, runCompletion } from "../src/node/ai-client.ts";
+import {
+  AI_CANCELED_MESSAGE,
+  aiConfigSchema,
+  aiRequestSchema,
+  isReportableAiError,
+  runCompletion,
+} from "../src/node/ai-client.ts";
 import type { AiConfig } from "../src/core/ai.ts";
 import type {
   AppInfo,
@@ -56,10 +62,35 @@ let mainWindow: BrowserWindow | null = null;
 let workspaceStore: WorkspaceStore | null = null;
 let devUrl: URL | null = null;
 const smokeMode = process.env.IPLOOM_STUDIO_SMOKE === "1";
+const smokeArch = process.env.IPLOOM_STUDIO_SMOKE_ARCH ?? "";
+// Rosetta translates the whole Electron runtime on the first Intel-slice
+// launch, so every renderer step in that run needs a much larger budget than
+// the native one. The launcher in scripts/studio/smoke.ts keeps the overall
+// hard bound.
+const smokeShellReadyMs = smokeArch ? 120_000 : 20_000;
+const smokeWorkflowReadyMs = smokeArch ? 60_000 : 5_000;
+const smokeScenarioStepMs = smokeArch ? 90_000 : 8_000;
+const smokeSaveReadyMs = smokeArch ? 30_000 : 2_000;
+let smokeExitCode = 0;
 const allowedFolders = new Set<string>();
 let aiConfig: AiConfig = { endpoint: "", model: "", apiKey: "" };
 const aiRuns = new Map<string, AbortController>();
-const aiInfo = () => ({ endpoint: aiConfig.endpoint, model: aiConfig.model, configured: Boolean(aiConfig.endpoint && aiConfig.model) });
+const aiInfo = () => ({
+  endpoint: aiConfig.endpoint,
+  model: aiConfig.model,
+  configured: Boolean(aiConfig.endpoint && aiConfig.model),
+});
+/**
+ * Every smoke-mode exit funnels through here. `app.exit` tears the windows
+ * down, and the window "closed" handler calls `app.exit(0)` from inside that
+ * teardown, which used to overwrite the failure code of a run that had already
+ * failed. The highest code wins so a broken smoke run can never report success.
+ */
+function exitSmoke(code: number): void {
+  smokeExitCode = Math.max(smokeExitCode, code);
+  app.exit(smokeExitCode);
+}
+
 let closeApproved = false;
 let closeInFlight = false;
 let quitApproved = false;
@@ -167,7 +198,9 @@ function requestRendererFlush(window: BrowserWindow): Promise<void> {
     return Promise.resolve();
   }
   if (flushWaiter) {
-    return Promise.reject(new Error("A workspace save handshake is already active"));
+    return Promise.reject(
+      new Error("A workspace save handshake is already active"),
+    );
   }
   const requestId = `flush-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return new Promise<void>((resolve, reject) => {
@@ -202,7 +235,7 @@ async function reloadAfterFlush(window: BrowserWindow): Promise<void> {
   } catch (error) {
     console.error("[IPloom Studio] reload flush failed", error);
     if (smokeMode) {
-      app.exit(1);
+      exitSmoke(1);
       return;
     }
     await showMessage(window, {
@@ -279,7 +312,7 @@ async function closeAfterFlush(
         const message = error instanceof Error ? error.message : String(error);
         console.error("[IPloom Studio] close flush failed", error);
         if (smokeMode) {
-          app.exit(1);
+          exitSmoke(1);
           return;
         }
         const choice = await chooseCloseFailureAction(window, message);
@@ -301,7 +334,8 @@ async function closeAfterFlush(
             continue;
           }
           try {
-            const path = await requireStore().saveRecoveryCopy(recoveryWorkspace);
+            const path =
+              await requireStore().saveRecoveryCopy(recoveryWorkspace);
             await showMessage(window, {
               type: "info",
               title: "Recovery copy saved",
@@ -413,16 +447,7 @@ function mcpClientConfig(): McpClientConfig {
     });
   }
   const sourceMcp = [
-    join(
-      __dirname,
-      "..",
-      "..",
-      "..",
-      "apps",
-      "studio",
-      "mcp",
-      "server.ts",
-    ),
+    join(__dirname, "..", "..", "..", "apps", "studio", "mcp", "server.ts"),
     join(__dirname, "..", "..", "apps", "studio", "mcp", "server.ts"),
   ].find((candidate) => existsSync(candidate));
   if (!sourceMcp) {
@@ -432,11 +457,7 @@ function mcpClientConfig(): McpClientConfig {
     mcpServers: {
       "iploom-studio": {
         command: "bun",
-        args: [
-          sourceMcp,
-          "--workspace",
-          requireStore().filePath,
-        ],
+        args: [sourceMcp, "--workspace", requireStore().filePath],
       },
     },
   };
@@ -466,34 +487,60 @@ async function exportArcReel(bundleInput: unknown): Promise<WrittenBundle> {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle("iploom:ai-config", (event) => { assertTrustedSender(event); return aiInfo(); });
+  ipcMain.handle("iploom:ai-config", (event) => {
+    assertTrustedSender(event);
+    return aiInfo();
+  });
   ipcMain.handle("iploom:configure-ai", (event, config: unknown) => {
     assertTrustedSender(event);
-    if (aiRuns.size) throw new Error("Wait for the current AI task or cancel it before changing configuration.");
+    if (aiRuns.size)
+      throw new Error(
+        "Wait for the current AI task or cancel it before changing configuration.",
+      );
     aiConfig = aiConfigSchema.parse(config);
     return aiInfo();
   });
-  ipcMain.handle("iploom:cancel-ai", (event, id: string) => { assertTrustedSender(event); aiRuns.get(id)?.abort(); });
+  ipcMain.handle("iploom:cancel-ai", (event, id: string) => {
+    assertTrustedSender(event);
+    aiRuns.get(id)?.abort();
+  });
   ipcMain.handle("iploom:run-ai", async (event, input: unknown) => {
     assertTrustedSender(event);
     const request = aiRequestSchema.parse(input);
-    if (aiRuns.size) throw new Error("Another AI task is running. Wait or cancel it first.");
-    if (!aiInfo().configured) throw new Error("Configure the model API in Settings first.");
+    if (aiRuns.size)
+      throw new Error("Another AI task is running. Wait or cancel it first.");
+    if (!aiInfo().configured)
+      throw new Error("Configure the model API in Settings first.");
     const controller = new AbortController();
     aiRuns.set(request.id, controller);
     let lastSent = 0;
     try {
-      return await runCompletion(aiConfig, request, controller.signal, (text) => {
-        if (!event.sender.isDestroyed() && Date.now() - lastSent >= 80) {
-          lastSent = Date.now();
-          event.sender.send("iploom:ai-progress", { id: request.id, label: request.label, text });
-        }
-      });
+      return await runCompletion(
+        aiConfig,
+        request,
+        controller.signal,
+        (text) => {
+          if (!event.sender.isDestroyed() && Date.now() - lastSent >= 80) {
+            lastSent = Date.now();
+            event.sender.send("iploom:ai-progress", {
+              id: request.id,
+              label: request.label,
+              text,
+            });
+          }
+        },
+      );
     } catch (error) {
       if (controller.signal.aborted) throw new Error(AI_CANCELED_MESSAGE);
       // Never echo provider payloads or credential-bearing fetch errors into IPC/logs.
-      throw new Error(isReportableAiError(error) ? error.message : "Model request failed. Check configuration and retry.");
-    } finally { aiRuns.delete(request.id); }
+      throw new Error(
+        isReportableAiError(error)
+          ? error.message
+          : "Model request failed. Check configuration and retry.",
+      );
+    } finally {
+      aiRuns.delete(request.id);
+    }
   });
   ipcMain.handle("iploom:load", async (event) => {
     assertTrustedSender(event);
@@ -502,7 +549,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("iploom:save", async (event, workspace: StudioWorkspace) => {
     assertTrustedSender(event);
-    if (workspace && typeof workspace === "object") recoveryWorkspace = workspace;
+    if (workspace && typeof workspace === "object")
+      recoveryWorkspace = workspace;
     await requireStore().save(workspace);
     return { savedAt: new Date().toISOString() };
   });
@@ -531,13 +579,10 @@ function registerIpcHandlers(): void {
     },
   );
 
-  ipcMain.handle(
-    "iploom:export-arc-reel",
-    async (event, bundle: unknown) => {
-      assertTrustedSender(event);
-      return exportArcReel(bundle);
-    },
-  );
+  ipcMain.handle("iploom:export-arc-reel", async (event, bundle: unknown) => {
+    assertTrustedSender(event);
+    return exportArcReel(bundle);
+  });
 
   ipcMain.handle("iploom:app-info", async (event): Promise<AppInfo> => {
     assertTrustedSender(event);
@@ -552,10 +597,13 @@ function registerIpcHandlers(): void {
     };
   });
 
-  ipcMain.handle("iploom:check-update", async (event): Promise<UpdateCheckResult> => {
-    assertTrustedSender(event);
-    return requestUpdateCheck();
-  });
+  ipcMain.handle(
+    "iploom:check-update",
+    async (event): Promise<UpdateCheckResult> => {
+      assertTrustedSender(event);
+      return requestUpdateCheck();
+    },
+  );
 
   ipcMain.handle("iploom:copy-text", async (event, value: string) => {
     assertTrustedSender(event);
@@ -674,8 +722,7 @@ function configureSessionSecurity(): void {
  * a flush-then-reload in `createWindow`.
  */
 function configureApplicationMenu(): void {
-  const devToolsAllowed =
-    !app.isPackaged || process.env.IPLOOM_STUDIO_DEVTOOLS === "1";
+  const devToolsAllowed = !app.isPackaged;
   const isMac = process.platform === "darwin";
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(isMac ? [{ role: "appMenu" as const }] : []),
@@ -708,7 +755,7 @@ function createWindow(): BrowserWindow {
       navigateOnDragDrop: false,
       webviewTag: false,
       spellcheck: false,
-      devTools: !app.isPackaged || process.env.IPLOOM_STUDIO_DEVTOOLS === "1",
+      devTools: !app.isPackaged,
     },
   });
 
@@ -733,7 +780,7 @@ function createWindow(): BrowserWindow {
     if (window.isDestroyed()) return;
     if (closeApproved || closeInFlight || quitApproved || quitInFlight) return;
     if (smokeMode) {
-      app.exit(1);
+      exitSmoke(1);
       return;
     }
     void (async () => {
@@ -767,7 +814,7 @@ function createWindow(): BrowserWindow {
   });
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
-    if (smokeMode) app.exit(0);
+    if (smokeMode) exitSmoke(0);
   });
 
   const load = devUrl
@@ -777,13 +824,10 @@ function createWindow(): BrowserWindow {
     window.webContents.once("did-finish-load", () => {
       void finishSmoke(window);
     });
-    window.webContents.once(
-      "did-fail-load",
-      (_event, code, description) => {
-        console.error(`[smoke] renderer failed: ${code} ${description}`);
-        app.exit(1);
-      },
-    );
+    window.webContents.once("did-fail-load", (_event, code, description) => {
+      console.error(`[smoke] renderer failed: ${code} ${description}`);
+      exitSmoke(1);
+    });
   }
   void load.catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
@@ -796,7 +840,7 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
   try {
     const result = (await window.webContents.executeJavaScript(
       `new Promise((resolve, reject) => {
-        const deadline = Date.now() + 20_000;
+        const deadline = Date.now() + ${smokeShellReadyMs};
         const check = async () => {
           const shell = document.querySelector(".studio-shell");
           const text = document.body.innerText.trim();
@@ -808,10 +852,10 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
             }
             workflowNav.click();
             await new Promise((resolveWorkflow, rejectWorkflow) => {
-              const workflowDeadline = Date.now() + 5_000;
+              const workflowDeadline = Date.now() + ${smokeWorkflowReadyMs};
               const timeout = setTimeout(() => {
                 rejectWorkflow(new Error("workflow view timed out"));
-              }, 5_000);
+              }, ${smokeWorkflowReadyMs});
               const poll = () => {
                 if (
                   document.querySelector(".workflow-view") &&
@@ -879,9 +923,10 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
     await new Promise((resolveWait) => setTimeout(resolveWait, 600));
     const mockEndpoint = process.env.IPLOOM_STUDIO_SMOKE_AI_ENDPOINT;
     if (mockEndpoint) {
-      await window.webContents.executeJavaScript(`(async () => {
+      await window.webContents.executeJavaScript(
+        `(async () => {
         const waitFor = async (test) => {
-          const deadline = Date.now() + 8000;
+          const deadline = Date.now() + ${smokeScenarioStepMs};
           while (!test()) { if (Date.now() > deadline) throw new Error("Production UI smoke timed out"); await new Promise(r => setTimeout(r, 30)); }
         };
         const setValue = (selector, value) => {
@@ -913,9 +958,15 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
         await waitFor(() => document.querySelector('.work-view h1')?.textContent === 'smoke-import-novel');
         document.querySelector('[data-route="workflow"]').click();
         await waitFor(() => document.querySelector('[data-testid="workflow-result"]'));
-      })()`, true);
-      console.log("[smoke] live model output, review persistence and novel import verified (local mock)");
-      await window.webContents.executeJavaScript(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+      })()`,
+        true,
+      );
+      console.log(
+        "[smoke] live model output, review persistence and novel import verified (local mock)",
+      );
+      await window.webContents.executeJavaScript(
+        `new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`,
+      );
       await new Promise((resolveWait) => setTimeout(resolveWait, 500));
     }
     const screenshot = process.env.IPLOOM_STUDIO_SMOKE_SCREENSHOT;
@@ -943,7 +994,7 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
           ).set;
           setValue.call(textarea, ${JSON.stringify(saveMarker)});
           textarea.dispatchEvent(new Event("input", { bubbles: true }));
-          const deadline = Date.now() + 2_000;
+          const deadline = Date.now() + ${smokeSaveReadyMs};
           const save = () => {
             const button = document.querySelector(
               '[data-testid="workflow-save-result"]',
@@ -967,7 +1018,7 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
     window.close();
   } catch (error) {
     console.error("[smoke] failed", error);
-    app.exit(1);
+    exitSmoke(1);
   }
 }
 
