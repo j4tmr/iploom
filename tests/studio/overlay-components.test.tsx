@@ -1,7 +1,7 @@
 import "./dom-setup";
 import { useState } from "react";
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, createEvent, fireEvent, render } from "@testing-library/react";
 import { CharacterModal } from "../../apps/studio/src/components/forms.tsx";
 import { ManuscriptImport } from "../../apps/studio/src/components/manuscript-import.tsx";
 import { SearchOverlay } from "../../apps/studio/src/components/search-overlay.tsx";
@@ -415,6 +415,136 @@ test("the palette exposes its results and keeps the active one in view", () => {
   } finally {
     Element.prototype.scrollIntoView = previous;
   }
+});
+
+function PaletteToDialogHarness({
+  onDialogClose,
+}: {
+  onDialogClose: () => void;
+}) {
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setPaletteOpen(true);
+        }}
+      >
+        open palette
+      </button>
+      <SearchOverlay
+        open={paletteOpen}
+        workspace={createDemoWorkspace("en")}
+        locale="en"
+        t={translator("en")}
+        onClose={() => setPaletteOpen(false)}
+        onSelect={() => setDialogOpen(true)}
+      />
+      <Modal
+        open={dialogOpen}
+        title="Search result"
+        onClose={() => {
+          setDialogOpen(false);
+          onDialogClose();
+        }}
+      >
+        <p>result details</p>
+      </Modal>
+    </>
+  );
+}
+
+test("a palette result that opens a dialog restores focus to the palette opener", () => {
+  const onDialogClose = mock(() => {});
+  const view = render(
+    <PaletteToDialogHarness onDialogClose={onDialogClose} />,
+  );
+  const trigger = view.getByRole("button", { name: "open palette" });
+  trigger.focus();
+  fireEvent.click(trigger);
+
+  const input = view.getByRole("combobox") as HTMLInputElement;
+  // The palette focuses its input while open, and selecting a result opens the
+  // dialog in the same batched commit that unmounts the palette.
+  input.focus();
+  fireEvent.change(input, { target: { value: "the" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+
+  expect(document.querySelector(".command-palette")).toBeNull();
+  expect(document.querySelector(".modal")).not.toBeNull();
+
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(onDialogClose).toHaveBeenCalledTimes(1);
+  // The dialog's opener must be the palette trigger, not the search input that
+  // was unmounted by the handoff.
+  expect(document.activeElement).toBe(trigger);
+});
+
+function SvgOpenerHarness({ onClose }: { onClose: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <svg role="img" aria-label="relationship graph">
+        <g
+          role="button"
+          tabIndex={0}
+          aria-label="graph node"
+          onClick={() => {
+            setOpen(true);
+          }}
+        />
+      </svg>
+      <Modal
+        open={open}
+        title="Graph node"
+        onClose={() => {
+          setOpen(false);
+          onClose();
+        }}
+      >
+        <p>node details</p>
+      </Modal>
+    </>
+  );
+}
+
+test("a dialog restores focus to a keyboard-focusable SVG opener", () => {
+  const onClose = mock(() => {});
+  const view = render(<SvgOpenerHarness onClose={onClose} />);
+  const node = view.container.querySelector<SVGElement>("g")!;
+  expect(node).toBeInstanceOf(SVGElement);
+  node.focus();
+  expect(document.activeElement).toBe(node);
+
+  fireEvent.click(node);
+  expect(document.querySelector(".modal")).not.toBeNull();
+
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(onClose).toHaveBeenCalledTimes(1);
+  expect(document.activeElement).toBe(node);
+});
+
+test("Tab keeps focus inside the palette's search input", () => {
+  const view = render(
+    <SearchOverlay
+      open
+      workspace={createDemoWorkspace("en")}
+      locale="en"
+      t={translator("en")}
+      onClose={() => {}}
+      onSelect={() => {}}
+    />,
+  );
+
+  const input = view.getByRole("combobox") as HTMLInputElement;
+  input.focus();
+
+  const tab = createEvent.keyDown(input, { key: "Tab" });
+  fireEvent(input, tab);
+  expect(tab.defaultPrevented).toBe(true);
+  expect(document.activeElement).toBe(input);
 });
 
 test("a new query scrolls the highlighted result back into view", () => {
