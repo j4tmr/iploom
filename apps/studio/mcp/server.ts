@@ -17,7 +17,7 @@ import {
   MCP_TOOL_NAMES,
   type McpToolName,
 } from "../src/core/mcp-tools.ts";
-import { standardSchema } from "../src/core/schemas.ts";
+import { standardSchema, timelineEventSchema } from "../src/core/schemas.ts";
 import { searchWorkspace } from "../src/core/search.ts";
 import { applicableStandards, STANDARD_KINDS } from "../src/core/standards.ts";
 import {
@@ -108,7 +108,7 @@ const EXPORT_ANNOTATIONS: ToolAnnotations = {
   idempotentHint: false,
   openWorldHint: false,
 };
-const STANDARD_WRITE_ANNOTATIONS: ToolAnnotations = {
+const WORKSPACE_WRITE_ANNOTATIONS: ToolAnnotations = {
   readOnlyHint: false,
   destructiveHint: false,
   idempotentHint: false,
@@ -412,6 +412,88 @@ const pageOffsetSchema = z
   .min(0)
   .default(0)
   .describe("分页起点（从 0 开始）/ Zero-based item offset.");
+
+const timelineSubjectKindSchema = z
+  .enum(["character", "scene", "location", "object"])
+  .describe("事件主体类型 / Timeline subject kind.");
+const timelineEventKindSchema = z
+  .enum([
+    "introduction",
+    "state-change",
+    "transfer",
+    "reveal",
+    "loss",
+    "recovery",
+    "other",
+  ])
+  .describe("事件类型 / Timeline event kind.");
+const timelineCanonStatusSchema = z
+  .enum(["proposed", "canon"])
+  .describe(
+    "正典状态；proposed 为待作者确认的提案，canon 为已确认事实 / Canon status; proposed awaits author confirmation, canon is confirmed.",
+  );
+const timelineEventIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .describe("时间线事件 ID / Story timeline event ID.");
+const timelineSubjectIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .describe("事件主体 ID / Timeline subject ID.");
+const timelineTitleSchema = z
+  .object({
+    zh: z.string().max(500).default("").describe("中文标题 / Chinese title."),
+    en: z.string().max(500).default("").describe("英文标题 / English title."),
+  })
+  .strict()
+  .describe(
+    "双语事件标题，至少一种语言非空 / Localized event title; at least one language must be non-empty.",
+  );
+const timelineTitlePatchSchema = z
+  .object({
+    zh: z.string().max(500).optional().describe("中文标题 / Chinese title."),
+    en: z.string().max(500).optional().describe("英文标题 / English title."),
+  })
+  .strict()
+  .describe(
+    "双语标题补丁；省略的语言保持原值 / Localized title patch; omitted languages keep their value.",
+  );
+const timelineStoryTimeSchema = z
+  .string()
+  .max(500)
+  .describe(
+    "故事内时间标签；无章节时必须非空 / In-story time label; must be non-empty when no chapter is given.",
+  );
+const timelineOrderSchema = z
+  .number()
+  .int()
+  .min(0)
+  .describe("同一故事时间内的排序序号 / Order within the same story time.");
+const timelineRelatedIdsSchema = z
+  .array(z.string().trim().min(1))
+  .max(100)
+  .describe("关联 ID 列表 / Related IDs.");
+const timelineSceneIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .describe(
+    "场景 ID；给出时必须同时给出章节 / Scene ID; requires a chapter when present.",
+  );
+const timelineChapterPatchSchema = z
+  .union([z.string().trim().min(1), z.null()])
+  .optional()
+  .describe(
+    "新章节 ID；传 null 清除章节并同时清除场景；省略时保持原值 / New chapter ID; pass null to clear it along with any scene; omit to keep the stored chapter.",
+  );
+const timelineScenePatchSchema = z
+  .union([z.string().trim().min(1), z.null()])
+  .optional()
+  .describe(
+    "新场景 ID；传 null 清除场景；省略时保持原值 / New scene ID; pass null to clear it; omit to keep the stored scene.",
+  );
 
 function pageLimitSchema(defaultLimit: number, maxLimit: number) {
   return z
@@ -989,6 +1071,148 @@ function findStandard(
   return standard;
 }
 
+function invalidTimelineEvent(error: unknown): ToolError {
+  if (error instanceof z.ZodError) {
+    const issues = error.issues
+      .slice(0, 5)
+      .map((issue) => `${issue.path.join(".") || "event"}: ${issue.message}`);
+    return new ToolError(
+      "invalid_arguments",
+      `Invalid story timeline event: ${issues.join("; ") || "validation failed"}`,
+      issues,
+    );
+  }
+  return new ToolError("invalid_arguments", errorMessage(error));
+}
+
+function parseTimelineEvent(value: unknown): TimelineEvent {
+  try {
+    return timelineEventSchema.parse(value) as TimelineEvent;
+  } catch (error) {
+    throw invalidTimelineEvent(error);
+  }
+}
+
+/**
+ * Checks that a timeline event's references resolve inside the workspace, the
+ * same rules `validateWorkspace` applies on save. Running them inside the
+ * update mutator turns an invalid reference into a readable tool error instead
+ * of a workspace validation failure with no field context.
+ */
+function assertTimelineReferences(
+  workspace: StudioWorkspace,
+  event: TimelineEvent,
+): void {
+  findWorld(workspace, event.universeId);
+  const novel = findNovel(workspace, event.workId);
+  if (novel.universeId !== event.universeId)
+    throw new ToolError(
+      "invalid_arguments",
+      `Novel ${event.workId} belongs to story world ${novel.universeId}, not ${event.universeId}.`,
+    );
+  let chapter: Chapter | undefined;
+  if (event.chapterId) {
+    chapter = novel.chapters.find((item) => item.id === event.chapterId);
+    if (!chapter)
+      throw new ToolError(
+        "not_found",
+        `Chapter not found in novel ${event.workId}: ${event.chapterId}`,
+      );
+  }
+  if (event.sceneId) {
+    if (!chapter)
+      throw new ToolError(
+        "invalid_arguments",
+        "A timeline event with a scene must also name its chapter.",
+      );
+    if (!chapter.scenes.some((scene) => scene.id === event.sceneId))
+      throw new ToolError(
+        "not_found",
+        `Scene not found in chapter ${chapter.id}: ${event.sceneId}`,
+      );
+  }
+  if (event.subjectKind === "character") {
+    const character = workspace.characters.find(
+      (item) => item.id === event.subjectId,
+    );
+    if (!character)
+      throw new ToolError("not_found", `Unknown character: ${event.subjectId}`);
+    if (!character.universeIds.includes(event.universeId))
+      throw new ToolError(
+        "invalid_arguments",
+        `Character ${event.subjectId} does not belong to story world ${event.universeId}.`,
+      );
+  } else if (event.subjectKind === "location") {
+    const location = workspace.locations.find(
+      (item) => item.id === event.subjectId,
+    );
+    if (!location)
+      throw new ToolError("not_found", `Unknown location: ${event.subjectId}`);
+    if (location.universeId !== event.universeId)
+      throw new ToolError(
+        "invalid_arguments",
+        `Location ${event.subjectId} belongs to another story world.`,
+      );
+  } else if (event.subjectKind === "object") {
+    const object = workspace.storyObjects.find(
+      (item) => item.id === event.subjectId,
+    );
+    if (!object)
+      throw new ToolError(
+        "not_found",
+        `Unknown story object: ${event.subjectId}`,
+      );
+    if (object.universeId !== event.universeId)
+      throw new ToolError(
+        "invalid_arguments",
+        `Story object ${event.subjectId} belongs to another story world.`,
+      );
+  } else {
+    if (!chapter)
+      throw new ToolError(
+        "invalid_arguments",
+        "A scene subject requires the event's chapter.",
+      );
+    if (!chapter.scenes.some((scene) => scene.id === event.subjectId))
+      throw new ToolError(
+        "not_found",
+        `Scene not found in chapter ${chapter.id}: ${event.subjectId}`,
+      );
+  }
+  for (const characterId of event.relatedCharacterIds) {
+    const character = workspace.characters.find(
+      (item) => item.id === characterId,
+    );
+    if (!character)
+      throw new ToolError("not_found", `Unknown character: ${characterId}`);
+    if (!character.universeIds.includes(event.universeId))
+      throw new ToolError(
+        "invalid_arguments",
+        `Related character ${characterId} does not belong to story world ${event.universeId}.`,
+      );
+  }
+  for (const locationId of event.relatedLocationIds) {
+    const location = workspace.locations.find((item) => item.id === locationId);
+    if (!location)
+      throw new ToolError("not_found", `Unknown location: ${locationId}`);
+    if (location.universeId !== event.universeId)
+      throw new ToolError(
+        "invalid_arguments",
+        `Related location ${locationId} belongs to another story world.`,
+      );
+  }
+  for (const objectId of event.relatedObjectIds) {
+    const object = workspace.storyObjects.find((item) => item.id === objectId);
+    if (!object)
+      throw new ToolError("not_found", `Unknown story object: ${objectId}`);
+    if (object.universeId !== event.universeId)
+      throw new ToolError(
+        "invalid_arguments",
+        `Related story object ${objectId} belongs to another story world.`,
+      );
+  }
+}
+
 function errorMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);
   const message = raw
@@ -1101,8 +1325,8 @@ export function createStudioMcpServer(
     { name: "IPloom Studio", version: APP_VERSION },
     {
       instructions:
-        `IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节、关系、AI 工作流与项目基础规则；search_ip 支持中英双语子串检索。共 ${total} 个工具：前 ${read} 个只读查询、${write} 个基础规则写入、${exportCount} 个本地导出。列表类工具统一返回分页对象 { total, offset, count, next_offset, truncated, items }，next_offset 为 null 表示已到末页，默认单次结果不超过 50 KB。create_standard 与 update_standard 只修改工作区内的基础规则；export_arcreel_bundle 是唯一写盘导出工具，只能写入工作区同目录的 exports，或服务端启动时用 --export-root 显式允许的目录。\n` +
-        `IPloom Studio local IP memory: list story worlds before reading novels, chapters, relationships, AI workflow and foundation standards. ${total} tools: the first ${read} are read-only queries, ${write} write foundation standards, ${exportCount} writes a local export. Every list tool returns a page object { total, offset, count, next_offset, truncated, items }; next_offset === null ends paging, and a default response stays under 50 KB. create_standard and update_standard only change foundation standards inside the workspace; export_arcreel_bundle is the only tool that writes files and may only write inside the exports directory beside workspace.json or a directory enabled with --export-root at server start.`,
+        `IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节、关系、AI 工作流与项目基础规则；search_ip 支持中英双语子串检索。共 ${total} 个工具：前 ${read} 个只读查询、${write} 个工作区写入、${exportCount} 个本地导出。列表类工具统一返回分页对象 { total, offset, count, next_offset, truncated, items }，next_offset 为 null 表示已到末页，默认单次结果不超过 50 KB。create_standard 与 update_standard 修改基础规则；create_timeline_event 与 update_timeline_event 新建或修订故事时间线事件，canon_status 默认为 proposed，只有显式传 canon 才标记为正典；export_arcreel_bundle 是唯一写盘导出工具，只能写入工作区同目录的 exports，或服务端启动时用 --export-root 显式允许的目录。\n` +
+        `IPloom Studio local IP memory: list story worlds before reading novels, chapters, relationships, AI workflow and foundation standards. ${total} tools: the first ${read} are read-only queries, ${write} write workspace records, ${exportCount} writes a local export. Every list tool returns a page object { total, offset, count, next_offset, truncated, items }; next_offset === null ends paging, and a default response stays under 50 KB. create_standard and update_standard change foundation standards; create_timeline_event and update_timeline_event create or revise story timeline events, with canon_status defaulting to proposed unless canon is explicit; export_arcreel_bundle is the only tool that writes files and may only write inside the exports directory beside workspace.json or a directory enabled with --export-root at server start.`,
     },
   );
 
@@ -1974,7 +2198,7 @@ export function createStudioMcpServer(
       title: "新建基础规则 / Create foundation standard",
       description:
         "登记一条项目基础规则，默认保存为草稿；标题和正文至少一种语言必须非空，且故事世界必须已存在。Register a project foundation standard, saved as a draft by default; title and body need at least one non-empty language and any story world must already exist.",
-      annotations: STANDARD_WRITE_ANNOTATIONS,
+      annotations: WORKSPACE_WRITE_ANNOTATIONS,
     },
     z.object({
       kind: standardWriteKindSchema,
@@ -2023,7 +2247,7 @@ export function createStudioMcpServer(
       title: "更新基础规则 / Update foundation standard",
       description:
         "更新一条基础规则；标题、正文、类型或适用范围变化时版本号加一，仅修改状态不改版本。Update a foundation standard; title, body, kind or scope changes bump the version, while a status-only change does not.",
-      annotations: STANDARD_WRITE_ANNOTATIONS,
+      annotations: WORKSPACE_WRITE_ANNOTATIONS,
     },
     z.object({
       standard_id: standardIdSchema,
@@ -2099,6 +2323,219 @@ export function createStudioMcpServer(
         revision: workspace.revision,
         standard: standardListView(updated),
         version_bumped: versionBumped,
+      };
+    },
+  );
+
+  register(
+    "create_timeline_event",
+    {
+      title: "新建时间线事件 / Create timeline event",
+      description:
+        "新建一条故事时间线事件并写入工作区；默认保存为 proposed，只有显式传 canon 才标记为正典；世界、小说、章节、场景、主体与关联 ID 必须存在且属于同一故事世界。Create a story timeline event in the workspace, saved as proposed unless canon is explicit; every world, novel, chapter, scene, subject and related ID must exist and belong to the same story world.",
+      annotations: WORKSPACE_WRITE_ANNOTATIONS,
+    },
+    z.object({
+      world_id: worldIdSchema,
+      novel_id: novelIdSchema,
+      chapter_id: chapterIdSchema.optional(),
+      scene_id: timelineSceneIdSchema.optional(),
+      story_time: timelineStoryTimeSchema.default(""),
+      order: timelineOrderSchema.default(0),
+      subject_kind: timelineSubjectKindSchema,
+      subject_id: timelineSubjectIdSchema,
+      event_kind: timelineEventKindSchema,
+      title: timelineTitleSchema,
+      state_before: z
+        .string()
+        .max(20_000)
+        .default("")
+        .describe("事件前状态 / State before the event."),
+      state_after: z
+        .string()
+        .max(20_000)
+        .default("")
+        .describe("事件后状态 / State after the event."),
+      canon_status: timelineCanonStatusSchema
+        .default("proposed")
+        .describe("省略时保存为 proposed / Defaults to proposed."),
+      related_character_ids: timelineRelatedIdsSchema.default([]),
+      related_location_ids: timelineRelatedIdsSchema.default([]),
+      related_object_ids: timelineRelatedIdsSchema.default([]),
+      evidence: z
+        .string()
+        .max(100_000)
+        .default("")
+        .describe("原文依据或来源 / Evidence or source."),
+      production_prompt: z
+        .string()
+        .max(20_000)
+        .default("")
+        .describe("制作提示 / Production prompt."),
+      locale: localeSchema,
+    }),
+    async (args) => {
+      const now = new Date().toISOString();
+      let created: TimelineEvent | undefined;
+      const workspace = await store.update((current) => {
+        const event = parseTimelineEvent({
+          id: createId("timeline"),
+          universeId: args.world_id,
+          workId: args.novel_id,
+          ...(args.chapter_id ? { chapterId: args.chapter_id } : {}),
+          ...(args.scene_id ? { sceneId: args.scene_id } : {}),
+          storyTime: args.story_time,
+          order: args.order,
+          subjectKind: args.subject_kind,
+          subjectId: args.subject_id,
+          eventKind: args.event_kind,
+          title: args.title,
+          stateBefore: args.state_before,
+          stateAfter: args.state_after,
+          canonStatus: args.canon_status,
+          relatedCharacterIds: args.related_character_ids,
+          relatedLocationIds: args.related_location_ids,
+          relatedObjectIds: args.related_object_ids,
+          evidence: args.evidence,
+          productionPrompt: args.production_prompt,
+          createdAt: now,
+          updatedAt: now,
+        });
+        assertTimelineReferences(current, event);
+        current.timelineEvents.push(event);
+        current.updatedAt = now;
+        created = event;
+      });
+      if (!created)
+        throw new ToolError(
+          "tool_error",
+          "Story timeline event creation did not run.",
+        );
+      const locale: UiLocale = args.locale ?? workspace.settings.locale;
+      return {
+        schema: MCP_SCHEMA,
+        revision: workspace.revision,
+        event: compactRecord(timelineEventView(workspace, created, locale)),
+      };
+    },
+  );
+
+  register(
+    "update_timeline_event",
+    {
+      title: "更新时间线事件 / Update timeline event",
+      description:
+        "按 event_id 修订一条时间线事件；省略的字段保持原值，章节或场景可传 null 清除，修改后重新校验全部引用并递增工作区修订号。Revise a story timeline event by event_id; omitted fields keep their stored values, chapter or scene can be cleared with null, and every reference is re-validated before the workspace revision is bumped.",
+      annotations: WORKSPACE_WRITE_ANNOTATIONS,
+    },
+    z.object({
+      event_id: timelineEventIdSchema,
+      chapter_id: timelineChapterPatchSchema,
+      scene_id: timelineScenePatchSchema,
+      story_time: timelineStoryTimeSchema.optional(),
+      order: timelineOrderSchema.optional(),
+      subject_kind: timelineSubjectKindSchema.optional(),
+      subject_id: timelineSubjectIdSchema.optional(),
+      event_kind: timelineEventKindSchema.optional(),
+      title: timelineTitlePatchSchema.optional(),
+      state_before: z
+        .string()
+        .max(20_000)
+        .optional()
+        .describe("事件前状态 / State before the event."),
+      state_after: z
+        .string()
+        .max(20_000)
+        .optional()
+        .describe("事件后状态 / State after the event."),
+      canon_status: timelineCanonStatusSchema.optional(),
+      related_character_ids: timelineRelatedIdsSchema.optional(),
+      related_location_ids: timelineRelatedIdsSchema.optional(),
+      related_object_ids: timelineRelatedIdsSchema.optional(),
+      evidence: z
+        .string()
+        .max(100_000)
+        .optional()
+        .describe("原文依据或来源 / Evidence or source."),
+      production_prompt: z
+        .string()
+        .max(20_000)
+        .optional()
+        .describe("制作提示 / Production prompt."),
+      locale: localeSchema,
+    }),
+    async (args) => {
+      const now = new Date().toISOString();
+      let updated: TimelineEvent | undefined;
+      const workspace = await store.update((current) => {
+        const index = current.timelineEvents.findIndex(
+          (item) => item.id === args.event_id,
+        );
+        if (index < 0)
+          throw new ToolError(
+            "not_found",
+            `Story timeline event not found: ${args.event_id}`,
+          );
+        const existing = current.timelineEvents[index] as TimelineEvent;
+        const chapterId =
+          args.chapter_id === undefined
+            ? existing.chapterId
+            : (args.chapter_id ?? undefined);
+        const sceneId =
+          args.scene_id === undefined
+            ? existing.sceneId
+            : (args.scene_id ?? undefined);
+        const nextInput: Record<string, unknown> = {
+          ...existing,
+          storyTime: args.story_time ?? existing.storyTime,
+          order: args.order ?? existing.order,
+          subjectKind: args.subject_kind ?? existing.subjectKind,
+          subjectId: args.subject_id ?? existing.subjectId,
+          eventKind: args.event_kind ?? existing.eventKind,
+          title: {
+            zh: args.title?.zh ?? existing.title.zh,
+            en: args.title?.en ?? existing.title.en,
+          },
+          stateBefore: args.state_before ?? existing.stateBefore,
+          stateAfter: args.state_after ?? existing.stateAfter,
+          canonStatus: args.canon_status ?? existing.canonStatus,
+          relatedCharacterIds:
+            args.related_character_ids ?? existing.relatedCharacterIds,
+          relatedLocationIds:
+            args.related_location_ids ?? existing.relatedLocationIds,
+          relatedObjectIds:
+            args.related_object_ids ?? existing.relatedObjectIds,
+          evidence: args.evidence ?? existing.evidence,
+          productionPrompt: args.production_prompt ?? existing.productionPrompt,
+          updatedAt: now,
+        };
+        if (args.scene_id && !chapterId)
+          throw new ToolError(
+            "invalid_arguments",
+            "A timeline event with a scene must also name its chapter.",
+          );
+        if (chapterId) nextInput.chapterId = chapterId;
+        else delete nextInput.chapterId;
+        // A scene only exists inside a chapter, so clearing the chapter clears
+        // the scene with it rather than leaving a dangling reference.
+        if (chapterId && sceneId) nextInput.sceneId = sceneId;
+        else delete nextInput.sceneId;
+        const next = parseTimelineEvent(nextInput);
+        assertTimelineReferences(current, next);
+        current.timelineEvents[index] = next;
+        current.updatedAt = now;
+        updated = next;
+      });
+      if (!updated)
+        throw new ToolError(
+          "tool_error",
+          "Story timeline event update did not run.",
+        );
+      const locale: UiLocale = args.locale ?? workspace.settings.locale;
+      return {
+        schema: MCP_SCHEMA,
+        revision: workspace.revision,
+        event: compactRecord(timelineEventView(workspace, updated, locale)),
       };
     },
   );

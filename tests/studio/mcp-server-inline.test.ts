@@ -191,6 +191,83 @@ test("inline MCP server exposes every tool and answers reads, writes and exports
     expect(statusEdit.isError).toBe(false);
     expect(statusEdit.body.version_bumped).toBe(false);
 
+    const timelineCreated = await call(inline, "create_timeline_event", {
+      world_id: "uni_mist_harbor",
+      novel_id: "work_tide_clock",
+      chapter_id: "chapter_tide_002",
+      story_time: "第二夜 / Night two",
+      subject_kind: "character",
+      subject_id: "char_lin",
+      event_kind: "state-change",
+      title: { zh: "林接下守夜", en: "Lin takes the night watch" },
+      state_before: "Lin avoids the tower.",
+      state_after: "Lin keeps the night watch.",
+      related_character_ids: ["char_shen"],
+      related_location_ids: ["loc_old_tower"],
+      related_object_ids: ["object_brass_key"],
+      evidence: "Chapter two draft.",
+    });
+    expect(timelineCreated.isError).toBe(false);
+    const createdEvent = timelineCreated.body.event as {
+      id: string;
+      chapter_id: string | null;
+      canon_status: string;
+      subject: { kind: string; id: string; label: string };
+      related_character_id_count: number;
+      created_at: string;
+    };
+    expect(createdEvent.id.startsWith("timeline_")).toBe(true);
+    expect(createdEvent.chapter_id).toBe("chapter_tide_002");
+    expect(createdEvent.canon_status).toBe("proposed");
+    expect(createdEvent.subject.kind).toBe("character");
+    expect(createdEvent.subject.id).toBe("char_lin");
+    expect(createdEvent.related_character_id_count).toBe(1);
+
+    const timelineRevised = await call(inline, "update_timeline_event", {
+      event_id: createdEvent.id,
+      canon_status: "canon",
+      title: { en: "Lin keeps the night watch alone" },
+      chapter_id: null,
+    });
+    expect(timelineRevised.isError).toBe(false);
+    const revisedEvent = timelineRevised.body.event as {
+      chapter_id: string | null;
+      story_time: string;
+      canon_status: string;
+      title: { zh: string; en: string };
+      state_before: string;
+      created_at: string;
+    };
+    expect(revisedEvent.chapter_id).toBeNull();
+    expect(revisedEvent.story_time).toBe("第二夜 / Night two");
+    expect(revisedEvent.canon_status).toBe("canon");
+    expect(revisedEvent.title.zh).toBe("林接下守夜");
+    expect(revisedEvent.title.en).toBe("Lin keeps the night watch alone");
+    expect(revisedEvent.state_before).toBe("Lin avoids the tower.");
+    expect(revisedEvent.created_at).toBe(createdEvent.created_at);
+
+    const missingEvent = await call(inline, "update_timeline_event", {
+      event_id: "timeline_missing",
+      canon_status: "canon",
+    });
+    expect(missingEvent.isError).toBe(true);
+    expect((missingEvent.body.error as { code: string }).code).toBe(
+      "not_found",
+    );
+
+    const unanchoredEvent = await call(inline, "create_timeline_event", {
+      world_id: "uni_mist_harbor",
+      novel_id: "work_tide_clock",
+      subject_kind: "character",
+      subject_id: "char_lin",
+      event_kind: "state-change",
+      title: { zh: "没有锚点的事件", en: "Event without an anchor" },
+    });
+    expect(unanchoredEvent.isError).toBe(true);
+    expect((unanchoredEvent.body.error as { code: string }).code).toBe(
+      "invalid_arguments",
+    );
+
     const exported = await call(inline, "export_arcreel_bundle", {
       novel_id: "work_tide_clock",
       chapter_ids: ["chapter_tide_001"],

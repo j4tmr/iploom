@@ -28,6 +28,8 @@ export const MCP_TOOLS = [
   { name: "get_standard", access: "read" },
   { name: "create_standard", access: "write" },
   { name: "update_standard", access: "write" },
+  { name: "create_timeline_event", access: "write" },
+  { name: "update_timeline_event", access: "write" },
   { name: "export_arcreel_bundle", access: "export" },
 ] as const satisfies readonly McpToolDefinition[];
 
@@ -44,22 +46,22 @@ function namesWithAccess(access: McpToolAccess): readonly McpToolName[] {
 }
 
 export const MCP_READ_TOOL_NAMES = namesWithAccess("read");
-export const MCP_STANDARD_WRITE_TOOL_NAMES = namesWithAccess("write");
+export const MCP_WRITE_TOOL_NAMES = namesWithAccess("write");
 export const MCP_EXPORT_TOOL_NAMES = namesWithAccess("export");
 
 export const MCP_TOOL_COUNTS = {
   total: MCP_TOOL_NAMES.length,
   read: MCP_READ_TOOL_NAMES.length,
-  write: MCP_STANDARD_WRITE_TOOL_NAMES.length,
+  write: MCP_WRITE_TOOL_NAMES.length,
   export: MCP_EXPORT_TOOL_NAMES.length,
 } as const;
 
 export function mcpToolsNote(locale: UiLocale): string {
   const { read, write, export: exports } = MCP_TOOL_COUNTS;
   if (locale === "en") {
-    return `${read} read-only query tools + ${write} foundation-standard ${
+    return `${read} read-only query tools + ${write} workspace ${
       write === 1 ? "writer" : "writers"
     } + ${exports} local export tool${exports === 1 ? "" : "s"}.`;
   }
-  return `${read} 个只读查询工具 + ${write} 个基础规则写入工具 + ${exports} 个本地导出工具。`;
+  return `${read} 个只读查询工具 + ${write} 个工作区写入工具 + ${exports} 个本地导出工具。`;
 }
