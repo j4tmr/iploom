@@ -454,7 +454,6 @@ export const workspaceSchema = z
       workspace.standards.map((item) => [item.id, item]),
     );
     const characters = new Set(workspace.characters.map((item) => item.id));
-    const locations = new Set(workspace.locations.map((item) => item.id));
     const charactersById = new Map(
       workspace.characters.map((item) => [item.id, item]),
     );
@@ -522,13 +521,7 @@ export const workspaceSchema = z
             );
           else if (!character.universeIds.includes(work.universeId))
             issue(
-              [
-                "works",
-                workIndex,
-                "chapters",
-                chapterIndex,
-                "characterIds",
-              ],
+              ["works", workIndex, "chapters", chapterIndex, "characterIds"],
               "character belongs to another universe",
             );
         }

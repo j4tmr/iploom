@@ -872,6 +872,17 @@ select.input {
   grid-column: 1 / -1;
 }
 
+/* The group form of `.field` is a <fieldset>; reset its native chrome. */
+fieldset.field {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+fieldset.field > legend {
+  padding: 0;
+}
+
 .field-label {
   color: var(--ink-soft);
   font-size: 10.5px;

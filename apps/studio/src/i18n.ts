@@ -1014,7 +1014,8 @@ const en: Record<MessageKey, string> = {
   exportCanceled: "Export canceled",
   exportPath: "Export location",
   openFolder: "Show in folder",
-  openFolderFailed: "Could not open the export folder. It may have moved or be outside the locations this app can reveal.",
+  openFolderFailed:
+    "Could not open the export folder. It may have moved or be outside the locations this app can reveal.",
   files: "Files",
   bundleWarnings: "Director-draft warnings",
   noWarnings: "No structural warnings found.",

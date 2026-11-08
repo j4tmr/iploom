@@ -26,7 +26,10 @@ coveragePathIgnorePatterns = [
   "apps/studio/src/components/search-overlay.tsx",
   "apps/studio/src/components/ui.tsx",
   "apps/studio/src/components/scene-editor.tsx",
+  "apps/studio/src/components/ai-settings.tsx",
+  "apps/studio/src/components/update-settings.tsx",
   "apps/studio/src/views/cast-library.tsx",
+  "apps/studio/src/views/settings-view.tsx",
   "apps/studio/src/views/work-view.tsx",
   "apps/studio/src/views/workflow-view.tsx",
 ]

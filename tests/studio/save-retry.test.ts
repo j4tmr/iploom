@@ -119,7 +119,9 @@ test("the transport marker can be stripped from any user-facing message", () => 
 });
 
 test("ordinary IPC errors keep the transient retry behavior", async () => {
-  const transient = new Error("Error invoking remote method 'iploom:save': EPIPE");
+  const transient = new Error(
+    "Error invoking remote method 'iploom:save': EPIPE",
+  );
   expect(mapSaveErrorFromIpc(transient)).toBe(transient);
 
   let calls = 0;

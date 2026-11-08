@@ -1,11 +1,6 @@
 import "./dom-setup";
 import { afterEach, expect, mock, test } from "bun:test";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  within,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import { Field } from "../../apps/studio/src/components/ui.tsx";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import type {
@@ -75,12 +70,20 @@ function renderWorkView(work: StoryWork, workspace?: StudioWorkspace) {
 }
 
 /** The demo novel's chapters, reordered as if they had been created 1, 3, 2. */
-function workWithChaptersStored132(
-  workspace: StudioWorkspace,
-): { work: StoryWork; one: Chapter; two: Chapter; three: Chapter } {
+function workWithChaptersStored132(workspace: StudioWorkspace): {
+  work: StoryWork;
+  one: Chapter;
+  two: Chapter;
+  three: Chapter;
+} {
   const tide = workspace.works.find((item) => item.id === "work_tide_clock")!;
   const [one, two, three] = tide.chapters;
-  return { work: { ...tide, chapters: [one!, three!, two!] }, one: one!, two: two!, three: three! };
+  return {
+    work: { ...tide, chapters: [one!, three!, two!] },
+    one: one!,
+    two: two!,
+    three: three!,
+  };
 }
 
 test("Field renders a group whose text labels no checkbox", () => {
@@ -99,8 +102,10 @@ test("Field renders a group whose text labels no checkbox", () => {
     </Field>,
   );
   const group = view.getByRole("group", { name: "Scene cast" });
-  expect(group.tagName).toBe("DIV");
-  const [lin, shen] = within(group).getAllByRole("checkbox") as HTMLInputElement[];
+  expect(group.tagName).toBe("FIELDSET");
+  const [lin, shen] = within(group).getAllByRole(
+    "checkbox",
+  ) as HTMLInputElement[];
   expect(lin!.checked).toBe(false);
   expect(shen!.checked).toBe(false);
 
@@ -161,7 +166,9 @@ test("clicking the chapter cast group text autosaves nothing; rows still toggle"
     />,
   );
   const group = view.getByRole("group", { name: t("sceneCast") });
-  const checkboxes = within(group).getAllByRole("checkbox") as HTMLInputElement[];
+  const checkboxes = within(group).getAllByRole(
+    "checkbox",
+  ) as HTMLInputElement[];
   const before = checkboxes.map((box) => box.checked);
 
   fireEvent.click(within(group).getByText(t("sceneCast")));
@@ -180,7 +187,12 @@ test("clicking the chapter cast group text autosaves nothing; rows still toggle"
   expect(onChangeChapter).toHaveBeenCalledTimes(1);
   expect(applied!.characterIds).toContain("char_gu");
   // The untouched rows keep their state in the applied draft.
-  expect(applied!.characterIds).toEqual(["char_lin", "char_shen", "char_echo", "char_gu"]);
+  expect(applied!.characterIds).toEqual([
+    "char_lin",
+    "char_shen",
+    "char_echo",
+    "char_gu",
+  ]);
 });
 
 test("the world filter select exposes an accessible name and the all-worlds option", () => {

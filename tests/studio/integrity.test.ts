@@ -903,18 +903,17 @@ describe("workspace integrity", () => {
 
   test("chapter and scene references from another universe are rejected", () => {
     const foreignChapterCast = demo();
-    workById(foreignChapterCast, "work_last_train").chapters[0]!.characterIds.push(
-      "char_lin",
-    );
+    workById(
+      foreignChapterCast,
+      "work_last_train",
+    ).chapters[0]!.characterIds.push("char_lin");
     expect(() => validateWorkspace(foreignChapterCast)).toThrow(
       /character belongs to another universe/,
     );
 
     const foreignChapterLocation = demo();
-    workById(
-      foreignChapterLocation,
-      "work_last_train",
-    ).chapters[0]!.locationId = "loc_old_tower";
+    workById(foreignChapterLocation, "work_last_train")
+      .chapters[0]!.locationId = "loc_old_tower";
     expect(() => validateWorkspace(foreignChapterLocation)).toThrow(
       /location belongs to another universe/,
     );
@@ -932,10 +931,7 @@ describe("workspace integrity", () => {
     );
 
     const foreignSceneLocation = demo();
-    workById(
-      foreignSceneLocation,
-      "work_last_train",
-    ).chapters[0]!.scenes.push({
+    workById(foreignSceneLocation, "work_last_train").chapters[0]!.scenes.push({
       id: "scene_foreign_location",
       title: "Foreign location",
       summary: "",

@@ -27,8 +27,10 @@ test("a newer-schema reset failure maps to the dedicated message, not the generi
 });
 
 test("other reset failures are wrapped with the failed action", () => {
-  expect(describeResetFailure(new Error("disk is read-only"), translator("en")))
-    .toBe("Could not load the demo workspace: disk is read-only");
-  expect(describeResetFailure("offline", translator("zh-CN")))
-    .toBe("无法载入演示工作区：offline");
+  expect(
+    describeResetFailure(new Error("disk is read-only"), translator("en")),
+  ).toBe("Could not load the demo workspace: disk is read-only");
+  expect(describeResetFailure("offline", translator("zh-CN"))).toBe(
+    "无法载入演示工作区：offline",
+  );
 });

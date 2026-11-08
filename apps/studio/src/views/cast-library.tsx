@@ -33,9 +33,7 @@ export function CastLibrary({
   const [reusableOnly, setReusableOnly] = useState(false);
   const characters = workspace.characters
     .filter((character) =>
-      universeId === "all"
-        ? true
-        : character.universeIds.includes(universeId),
+      universeId === "all" ? true : character.universeIds.includes(universeId),
     )
     .filter((character) => !reusableOnly || character.reusable)
     .filter((character) => {
@@ -92,7 +90,9 @@ export function CastLibrary({
           />
           {t("reusableBadge")}
         </label>
-        <Button variant="primary" icon="plus" onClick={onNewCharacter}>{t("new")}</Button>
+        <Button variant="primary" icon="plus" onClick={onNewCharacter}>
+          {t("new")}
+        </Button>
       </div>
       <SectionTitle
         eyebrow="REUSABLE CHARACTER SYSTEM"
@@ -102,25 +102,41 @@ export function CastLibrary({
         <div className="cast-library-grid">
           {characters.map((character) => (
             <article className="cast-library-card" key={character.id}>
-              <div className="cast-library-color" style={{ background: character.color }} />
+              <div
+                className="cast-library-color"
+                style={{ background: character.color }}
+              />
               <div className="cast-library-head">
-                <span className="avatar avatar-xl" style={{ background: character.color }}>
+                <span
+                  className="avatar avatar-xl"
+                  style={{ background: character.color }}
+                >
                   {displayText(character.name, locale).slice(0, 1)}
                 </span>
                 <div>
                   <h3>{displayText(character.name, locale)}</h3>
                   <p>{displayText(character.role, locale)}</p>
                 </div>
-                {character.reusable ? <Badge tone="amber">{t("reusableBadge")}</Badge> : null}
+                {character.reusable ? (
+                  <Badge tone="amber">{t("reusableBadge")}</Badge>
+                ) : null}
               </div>
-              <p className="cast-library-summary">{displayText(character.summary, locale)}</p>
+              <p className="cast-library-summary">
+                {displayText(character.summary, locale)}
+              </p>
               <TagList values={character.tags} max={5} />
               <div className="cast-world-links">
                 <small>{t("linkedWorlds")}</small>
                 {character.universeIds.map((id) => {
-                  const universe = workspace.universes.find((item) => item.id === id);
+                  const universe = workspace.universes.find(
+                    (item) => item.id === id,
+                  );
                   return universe ? (
-                    <button type="button" key={id} onClick={() => onOpenUniverse(id)}>
+                    <button
+                      type="button"
+                      key={id}
+                      onClick={() => onOpenUniverse(id)}
+                    >
                       <span style={{ background: universe.accent }} />
                       {displayText(universe.name, locale)}
                     </button>
@@ -128,8 +144,16 @@ export function CastLibrary({
                 })}
               </div>
               <div className="cast-library-foot">
-                <span>{character.personality.slice(0, 54) || t("worldDetails")}</span>
-                <Button variant="ghost" icon="edit" onClick={() => onEditCharacter(character)}>{t("edit")}</Button>
+                <span>
+                  {character.personality.slice(0, 54) || t("worldDetails")}
+                </span>
+                <Button
+                  variant="ghost"
+                  icon="edit"
+                  onClick={() => onEditCharacter(character)}
+                >
+                  {t("edit")}
+                </Button>
               </div>
             </article>
           ))}
@@ -138,7 +162,11 @@ export function CastLibrary({
         <EmptyState
           icon="users"
           title={t("noCharacters")}
-          action={<Button variant="primary" icon="plus" onClick={onNewCharacter}>{t("new")}</Button>}
+          action={
+            <Button variant="primary" icon="plus" onClick={onNewCharacter}>
+              {t("new")}
+            </Button>
+          }
         />
       )}
     </div>

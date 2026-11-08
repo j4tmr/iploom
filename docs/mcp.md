@@ -77,7 +77,13 @@ Responses echo the fields a client needs for the next call, not every nested lis
 Failures return `isError: true` with a JSON text block that clients can parse:
 
 ```json
-{ "error": { "code": "invalid_arguments", "message": "...", "issues": ["query: ..."] } }
+{
+  "error": {
+    "code": "invalid_arguments",
+    "message": "...",
+    "issues": ["query: ..."]
+  }
+}
 ```
 
 `issues` is present when the failure carries field-level details: argument parsing and foundation-standard validation. Unknown ids — including a story world referenced by `create_standard` or `update_standard` — and unknown task references return `not_found`. Both keep the connection alive so a client can correct the call without reconnecting.

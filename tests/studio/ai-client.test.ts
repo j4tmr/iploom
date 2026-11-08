@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import { ZodError } from "zod";
 import { aiConfigSchema } from "../../apps/studio/src/node/ai-client.ts";
 
-const config = { endpoint: "https://api.example.com/v1", model: "gpt-4o-mini", apiKey: "" };
+const config = {
+  endpoint: "https://api.example.com/v1",
+  model: "gpt-4o-mini",
+  apiKey: "",
+};
 
 test("rejects empty, whitespace-only and scheme-less endpoints without throwing", () => {
   for (const endpoint of ["", "   ", "api.openai.com/v1"]) {
@@ -10,17 +14,24 @@ test("rejects empty, whitespace-only and scheme-less endpoints without throwing"
     const result = aiConfigSchema.safeParse({ ...config, endpoint });
     expect(result.success).toBe(false);
     if (result.success) continue;
-    expect(result.error.issues.some((issue) => issue.message.includes("valid URL"))).toBe(true);
+    expect(
+      result.error.issues.some((issue) => issue.message.includes("valid URL")),
+    ).toBe(true);
   }
 
   // The IPC handler uses parse(), so the same inputs must surface as a readable ZodError.
   for (const endpoint of ["", "   ", "api.openai.com/v1"]) {
-    expect(() => aiConfigSchema.parse({ ...config, endpoint })).toThrow(ZodError);
+    expect(() => aiConfigSchema.parse({ ...config, endpoint })).toThrow(
+      ZodError,
+    );
   }
 });
 
 test("accepts a valid https endpoint and trims surrounding whitespace", () => {
-  const result = aiConfigSchema.safeParse({ ...config, endpoint: "  https://api.example.com/v1  " });
+  const result = aiConfigSchema.safeParse({
+    ...config,
+    endpoint: "  https://api.example.com/v1  ",
+  });
   expect(result.success).toBe(true);
   if (!result.success) return;
   expect(result.data.endpoint).toBe("https://api.example.com/v1");
@@ -49,6 +60,8 @@ test("keeps the existing transport rules for parsed URLs", () => {
     "http://127.0.0.1:1234/v1",
     "http://[::1]:11434/v1",
   ]) {
-    expect(aiConfigSchema.safeParse({ ...config, endpoint }).success).toBe(true);
+    expect(aiConfigSchema.safeParse({ ...config, endpoint }).success).toBe(
+      true,
+    );
   }
 });

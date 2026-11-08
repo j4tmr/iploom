@@ -63,9 +63,7 @@ test("a rejected reveal reports a localized error instead of failing silently", 
   await settle();
 
   expect(onNotify).toHaveBeenCalledTimes(1);
-  expect(onNotify).toHaveBeenCalledWith(
-    translator("en")("openFolderFailed"),
-  );
+  expect(onNotify).toHaveBeenCalledWith(translator("en")("openFolderFailed"));
 });
 
 test("a successful reveal does not report an error", async () => {

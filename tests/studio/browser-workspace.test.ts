@@ -293,9 +293,8 @@ test("browser never replaces a healthy snapshot with corrupt data", () => {
 
 test("legacy cross-universe references are repaired on browser load and stay saveable", () => {
   const legacy = createDemoWorkspace("en");
-  const chapter = legacy.works.find(
-    (work) => work.id === "work_last_train",
-  )!.chapters[0]!;
+  const chapter = legacy.works.find((work) => work.id === "work_last_train")!
+    .chapters[0]!;
   chapter.characterIds = ["char_echo", "char_lin"];
   chapter.locationId = "loc_old_tower";
   const raw = JSON.stringify(legacy);

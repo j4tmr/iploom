@@ -298,9 +298,12 @@ test("a rejected workspace replacement re-arms the dirty edit's autosave", async
   expect(result.current.workspace!.name).toBe("edited before a failed reset");
 
   // The re-armed debounce persists the edit itself, not an older snapshot.
-  await waitFor(() => expect(savedNames).toEqual(["edited before a failed reset"]), {
-    timeout: 3000,
-  });
+  await waitFor(
+    () => expect(savedNames).toEqual(["edited before a failed reset"]),
+    {
+      timeout: 3000,
+    },
+  );
   expect(savedRevisions).toEqual([editedRevision]);
 
   // Exactly one save: a failed replacement must not start a retry storm.

@@ -64,7 +64,9 @@ export function repairCrossUniverseReferences(value: unknown): unknown {
       characterUniverses.set(
         id,
         new Set(
-          universeIds.filter((item): item is string => typeof item === "string"),
+          universeIds.filter(
+            (item): item is string => typeof item === "string",
+          ),
         ),
       );
     }

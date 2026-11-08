@@ -279,9 +279,10 @@ test("the import button is disabled while the import is pending", async () => {
   let finishImport: (accepted: boolean) => void = () => {};
   const onClose = mock(() => {});
   const onImport = mock(
-    () => new Promise<boolean>((resolve) => {
-      finishImport = resolve;
-    }),
+    () =>
+      new Promise<boolean>((resolve) => {
+        finishImport = resolve;
+      }),
   );
   const view = render(
     <ManuscriptImport
@@ -575,9 +576,7 @@ function PaletteToDialogHarness({
 
 test("a palette result that opens a dialog restores focus to the palette opener", () => {
   const onDialogClose = mock(() => {});
-  const view = render(
-    <PaletteToDialogHarness onDialogClose={onDialogClose} />,
-  );
+  const view = render(<PaletteToDialogHarness onDialogClose={onDialogClose} />);
   const trigger = view.getByRole("button", { name: "open palette" });
   trigger.focus();
   fireEvent.click(trigger);
@@ -604,6 +603,7 @@ function SvgOpenerHarness({ onClose }: { onClose: () => void }) {
   return (
     <>
       <svg role="img" aria-label="relationship graph">
+        {/* biome-ignore-start lint/a11y/useSemanticElements: an SVG graph node is a <g>, which cannot become a <button>; the fixture exercises its ARIA/keyboard contract */}
         <g
           role="button"
           tabIndex={0}
@@ -612,6 +612,7 @@ function SvgOpenerHarness({ onClose }: { onClose: () => void }) {
             setOpen(true);
           }}
         />
+        {/* biome-ignore-end lint/a11y/useSemanticElements: end of graph-node fixture */}
       </svg>
       <Modal
         open={open}

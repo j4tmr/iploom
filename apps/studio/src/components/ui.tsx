@@ -79,20 +79,13 @@ export function Field({
    */
   group?: boolean;
 }) {
-  const labelId = useId();
   if (group) {
     return (
-      <div
-        className={`field ${wide ? "field-wide" : ""}`}
-        role="group"
-        aria-labelledby={labelId}
-      >
-        <span className="field-label" id={labelId}>
-          {label}
-        </span>
+      <fieldset className={`field ${wide ? "field-wide" : ""}`}>
+        <legend className="field-label">{label}</legend>
         {children}
         {hint ? <span className="field-hint">{hint}</span> : null}
-      </div>
+      </fieldset>
     );
   }
   return (

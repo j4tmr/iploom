@@ -44,8 +44,11 @@ test("a failed demo reset surfaces an error toast and re-enables the button", as
     expect(toast.className).toContain("toast-error");
     await waitFor(() =>
       expect(
-        (view.getByRole("button", { name: t("resetDemo") }) as HTMLButtonElement)
-          .disabled,
+        (
+          view.getByRole("button", {
+            name: t("resetDemo"),
+          }) as HTMLButtonElement
+        ).disabled,
       ).toBe(false),
     );
   } finally {

@@ -46,9 +46,7 @@ export function stripStaleWorkspaceMarker(message: string): string {
 export function mapSaveErrorFromIpc(error: unknown): unknown {
   if (!(error instanceof Error) || !isStaleWorkspaceMessage(error.message))
     return error;
-  return new StaleWorkspaceSaveError(
-    stripStaleWorkspaceMarker(error.message),
-  );
+  return new StaleWorkspaceSaveError(stripStaleWorkspaceMarker(error.message));
 }
 
 /** True for the stale-save error on either side of the IPC boundary. */

@@ -8,7 +8,10 @@ import {
   type RenderResult,
 } from "@testing-library/react";
 import { ProductionPanel } from "../../apps/studio/src/components/production-panel.tsx";
-import type { AiCompletion, AiConfigInfo } from "../../apps/studio/src/core/ai.ts";
+import type {
+  AiCompletion,
+  AiConfigInfo,
+} from "../../apps/studio/src/core/ai.ts";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import type { WorkflowTask } from "../../apps/studio/src/core/types.ts";
 import { translator } from "../../apps/studio/src/i18n.ts";

@@ -292,7 +292,7 @@ export function FoundationView({
       <section className="workflow-stats" aria-label={t("foundationTitle")}>
         {stats.map((stat) => (
           <article className="workflow-stat" key={stat.key}>
-            <span className={"workflow-stat-mark " + stat.tone} />
+            <span className={`workflow-stat-mark ${stat.tone}`} />
             <strong>{stat.value}</strong>
             <small>{stat.label}</small>
           </article>
@@ -407,9 +407,7 @@ export function FoundationView({
                   return (
                     <label
                       key={`${candidate.kind}-${candidate.title.zh || candidate.title.en}`}
-                      className={
-                        "foundation-candidate " + (checked ? "selected" : "")
-                      }
+                      className={`foundation-candidate ${checked ? "selected" : ""}`}
                     >
                       <input
                         type="checkbox"

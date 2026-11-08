@@ -6,11 +6,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import {
-  bridge,
-  browserFallback,
-  type LoadedWorkspace,
-} from "./platform.ts";
+import { bridge, browserFallback, type LoadedWorkspace } from "./platform.ts";
 import {
   applyWorkspaceChange,
   type WorkspaceChangeResult,
@@ -267,20 +263,23 @@ export function useStudioWorkspace(): StudioWorkspaceState {
     [invalidatePendingSaves, scheduleSaveIfDirty],
   );
 
-  const replaceWorkspace = useCallback((next: StudioWorkspace) => {
-    // Callers only replace the workspace after it has been written to disk
-    // (demo reset, snapshot restore). They invalidate before dispatching that
-    // write as well; this post-load bump covers replacements that arrive
-    // without one.
-    invalidatePendingSaves();
-    workspaceRef.current = next;
-    setWorkspace(next);
-    // Marking it saved avoids a redundant autosave ~450ms later that would
-    // rotate the user's only `.bak` away.
-    savedRevision.current = next.revision;
-    setSaveState("saved");
-    setError(null);
-  }, [invalidatePendingSaves]);
+  const replaceWorkspace = useCallback(
+    (next: StudioWorkspace) => {
+      // Callers only replace the workspace after it has been written to disk
+      // (demo reset, snapshot restore). They invalidate before dispatching that
+      // write as well; this post-load bump covers replacements that arrive
+      // without one.
+      invalidatePendingSaves();
+      workspaceRef.current = next;
+      setWorkspace(next);
+      // Marking it saved avoids a redundant autosave ~450ms later that would
+      // rotate the user's only `.bak` away.
+      savedRevision.current = next.revision;
+      setSaveState("saved");
+      setError(null);
+    },
+    [invalidatePendingSaves],
+  );
 
   const saveNow = useCallback(async () => {
     const current = workspaceRef.current;

@@ -268,7 +268,7 @@ export function WorkflowView({
       <section className="workflow-stats" aria-label={t("workflowTitle")}>
         {stats.map((stat) => (
           <article className="workflow-stat" key={stat.key}>
-            <span className={"workflow-stat-mark " + stat.tone} />
+            <span className={`workflow-stat-mark ${stat.tone}`} />
             <strong>{stat.value}</strong>
             <small>{stat.label}</small>
           </article>
@@ -325,7 +325,7 @@ export function WorkflowView({
                     }
                     style={
                       {
-                        "--task-depth": Math.min(depth, 4) * 15 + "px",
+                        "--task-depth": `${Math.min(depth, 4) * 15}px`,
                       } as React.CSSProperties
                     }
                     onClick={() => switchTo(task.id)}
