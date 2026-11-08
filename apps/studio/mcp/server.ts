@@ -21,6 +21,11 @@ import { standardSchema } from "../src/core/schemas.ts";
 import { searchWorkspace } from "../src/core/search.ts";
 import { applicableStandards, STANDARD_KINDS } from "../src/core/standards.ts";
 import {
+  sortTimelineEvents,
+  timelineAnchorLabel,
+  timelineSubjectLabel,
+} from "../src/core/timeline.ts";
+import {
   buildWorkflowBrief,
   workflowSummary,
   workflowTaskReadiness,
@@ -38,6 +43,7 @@ import type {
   StoryUniverse,
   StoryWork,
   StudioWorkspace,
+  TimelineEvent,
   UiLocale,
   WorkspaceStandard,
   WorkflowTask,
@@ -667,6 +673,55 @@ function sceneView(scene: StoryScene) {
       duration_ms: shot.durationMs,
       visual_prompt: shot.visualPrompt,
     })),
+  };
+}
+
+/**
+ * One timeline event as MCP clients read it. The default list view is run
+ * through `compactRecord`, which clips the long state, evidence and prompt
+ * fields and names them in `truncated_fields`; `include_details` returns the
+ * record untouched.
+ */
+function timelineEventView(
+  workspace: StudioWorkspace,
+  event: TimelineEvent,
+  locale: UiLocale,
+) {
+  return {
+    id: event.id,
+    world_id: event.universeId,
+    novel_id: event.workId,
+    chapter_id: event.chapterId ?? null,
+    scene_id: event.sceneId ?? null,
+    story_time: event.storyTime,
+    order: event.order,
+    anchor: timelineAnchorLabel(workspace, event, locale),
+    subject: {
+      kind: event.subjectKind,
+      id: event.subjectId,
+      label: timelineSubjectLabel(workspace, event, locale),
+    },
+    event_kind: event.eventKind,
+    title: event.title,
+    canon_status: event.canonStatus,
+    state_before: event.stateBefore,
+    state_after: event.stateAfter,
+    related_character_ids: event.relatedCharacterIds.slice(
+      0,
+      COMPACT_ARRAY_ITEMS,
+    ),
+    related_character_id_count: event.relatedCharacterIds.length,
+    related_location_ids: event.relatedLocationIds.slice(
+      0,
+      COMPACT_ARRAY_ITEMS,
+    ),
+    related_location_id_count: event.relatedLocationIds.length,
+    related_object_ids: event.relatedObjectIds.slice(0, COMPACT_ARRAY_ITEMS),
+    related_object_id_count: event.relatedObjectIds.length,
+    evidence: event.evidence,
+    production_prompt: event.productionPrompt,
+    created_at: event.createdAt,
+    updated_at: event.updatedAt,
   };
 }
 
@@ -1568,6 +1623,96 @@ export function createStudioMcpServer(
         warning_count: graph.warnings.length,
         nodes,
         edges,
+      };
+    },
+  );
+
+  register(
+    "list_timeline_events",
+    {
+      title: "故事时间线 / Story timeline",
+      description:
+        "按章节号、故事时间与顺序稳定排序，分页列出故事时间线事件；可按世界、小说、章节、主体类型/ID 与 canon 状态过滤，默认返回精简视图，include_details 返回完整状态、依据与制作提示。List story timeline events in deterministic chapter/story-time/order order, optionally filtered by world, novel, chapter, subject kind/id and canon status; the default view is compact, while include_details returns full states, evidence and production prompts.",
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    z.object({
+      world_id: worldIdSchema.optional(),
+      novel_id: novelIdSchema.optional(),
+      chapter_id: chapterIdSchema.optional(),
+      subject_kind: z
+        .enum(["character", "scene", "location", "object"])
+        .optional()
+        .describe("事件主体类型 / Timeline subject kind."),
+      subject_id: z
+        .string()
+        .trim()
+        .min(1)
+        .optional()
+        .describe("事件主体 ID / Timeline subject ID."),
+      canon_status: z
+        .enum(["proposed", "canon"])
+        .optional()
+        .describe("设定状态 / Canon status."),
+      offset: pageOffsetSchema,
+      limit: pageLimit,
+      include_details: detailSchema,
+      locale: localeSchema,
+    }),
+    async (args) => {
+      const loaded = await store.load();
+      const { workspace } = loaded;
+      if (args.world_id) findWorld(workspace, args.world_id);
+      if (args.novel_id) findNovel(workspace, args.novel_id);
+      if (args.chapter_id) {
+        const known = workspace.works.some((work) =>
+          work.chapters.some((chapter) => chapter.id === args.chapter_id),
+        );
+        if (!known)
+          throw new ToolError(
+            "not_found",
+            `Chapter not found: ${args.chapter_id}`,
+          );
+      }
+      const locale: UiLocale = args.locale ?? workspace.settings.locale;
+      // The shared sorter keeps list order identical to the app's timeline
+      // view, so paging is stable while the workspace revision is unchanged.
+      const events = sortTimelineEvents(
+        workspace,
+        workspace.timelineEvents.filter(
+          (event) =>
+            (!args.world_id || event.universeId === args.world_id) &&
+            (!args.novel_id || event.workId === args.novel_id) &&
+            (!args.chapter_id || event.chapterId === args.chapter_id) &&
+            (!args.subject_kind || event.subjectKind === args.subject_kind) &&
+            (!args.subject_id || event.subjectId === args.subject_id) &&
+            (!args.canon_status || event.canonStatus === args.canon_status),
+        ),
+      );
+      const meta = workspaceMeta(loaded);
+      const filters = {
+        world_id: args.world_id ?? null,
+        novel_id: args.novel_id ?? null,
+        chapter_id: args.chapter_id ?? null,
+        subject_kind: args.subject_kind ?? null,
+        subject_id: args.subject_id ?? null,
+        canon_status: args.canon_status ?? null,
+      };
+      return {
+        schema: MCP_SCHEMA,
+        workspace: meta,
+        locale,
+        filters,
+        events: pageOf(
+          events.map((event) => {
+            const view = timelineEventView(workspace, event, locale);
+            return args.include_details ? view : compactRecord(view);
+          }),
+          {
+            offset: args.offset,
+            limit: args.limit,
+            budget: remainingBudget(meta, filters),
+          },
+        ),
       };
     },
   );

@@ -75,6 +75,9 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
   trainTask.dependsOnIds = [];
   trainTask.standardRefs = [{ id: "std_baseline_language", version: 1 }];
   workspace.workflowTasks.push(trainTask);
+  // Guarantee one long free-text field so the compact timeline view clips it.
+  workspace.timelineEvents[0]!.productionPrompt =
+    `${workspace.timelineEvents[0]!.productionPrompt} Keep the notch identical in every shot.`;
   await new WorkspaceStore(workspacePath).save(workspace);
   const before = readFileSync(workspacePath, "utf8");
   const serverPath = resolve(
@@ -224,6 +227,104 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     const nodes = pageOf<{ id: string; degree: number }>(graph.body, "nodes");
     expect(nodes.items.find((node) => node.id === "char_lin")?.degree).toBe(3);
     expect(graph.body.warnings).toEqual([]);
+
+    const timeline = await call(client, "list_timeline_events", {
+      novel_id: "work_tide_clock",
+      locale: "en",
+    });
+    expect(timeline.isError).toBe(false);
+    const timelinePage = pageOf<{
+      id: string;
+      canon_status: string;
+      anchor: string;
+      subject: { kind: string; id: string; label: string };
+      production_prompt: string;
+      truncated_fields?: string[];
+    }>(timeline.body, "events");
+    expect(timelinePage.total).toBe(4);
+    expect(timelinePage.items.map((event) => event.id)).toEqual([
+      "timeline_rain_key_handoff",
+      "timeline_lin_rain_costume",
+      "timeline_key_notch_reveal",
+      "timeline_tower_interior",
+    ]);
+    expect(timelinePage.items[0]?.anchor).toContain("Chapter 1");
+    expect(timelinePage.items[0]?.subject).toEqual({
+      kind: "object",
+      id: "object_brass_key",
+      label: "Notched Brass Key",
+    });
+    // The default view clips long state/prompt fields and names them, so a
+    // caller can ask for the full record only when it needs one.
+    expect(timelinePage.items[0]?.production_prompt.endsWith("…")).toBe(true);
+    expect(timelinePage.items[0]?.truncated_fields).toContain(
+      "production_prompt",
+    );
+
+    const firstChapterTimeline = await call(client, "list_timeline_events", {
+      chapter_id: "chapter_tide_001",
+    });
+    expect(firstChapterTimeline.isError).toBe(false);
+    expect(pageOf(firstChapterTimeline.body, "events").total).toBe(2);
+
+    const proposedOnly = await call(client, "list_timeline_events", {
+      novel_id: "work_tide_clock",
+      canon_status: "proposed",
+    });
+    expect(proposedOnly.isError).toBe(false);
+    const proposedPage = pageOf<{ id: string }>(proposedOnly.body, "events");
+    expect(proposedPage.total).toBe(1);
+    expect(proposedPage.items[0]?.id).toBe("timeline_tower_interior");
+
+    const detailedTimeline = await call(client, "list_timeline_events", {
+      novel_id: "work_tide_clock",
+      limit: 1,
+      include_details: true,
+    });
+    expect(detailedTimeline.isError).toBe(false);
+    const detailedPage = pageOf<{
+      production_prompt: string;
+      truncated_fields?: string[];
+    }>(detailedTimeline.body, "events");
+    expect(detailedPage.items[0]?.truncated_fields).toBeUndefined();
+    expect(detailedPage.items[0]?.production_prompt.length).toBeGreaterThan(
+      240,
+    );
+    expect(
+      detailedPage.items[0]?.production_prompt.endsWith(
+        "Keep the notch identical in every shot.",
+      ),
+    ).toBe(true);
+
+    const firstTimelinePage = await call(client, "list_timeline_events", {
+      novel_id: "work_tide_clock",
+      limit: 2,
+    });
+    expect(pageOf(firstTimelinePage.body, "events").next_offset).toBe(2);
+    const secondTimelinePage = await call(client, "list_timeline_events", {
+      novel_id: "work_tide_clock",
+      offset: 2,
+      limit: 2,
+    });
+    const secondPage = pageOf<{ id: string }>(
+      secondTimelinePage.body,
+      "events",
+    );
+    expect(secondPage.count).toBe(2);
+    expect(secondPage.next_offset).toBeNull();
+
+    const missingChapterTimeline = await call(client, "list_timeline_events", {
+      chapter_id: "chapter_missing",
+    });
+    expect(missingChapterTimeline.isError).toBe(true);
+    expect(
+      (
+        missingChapterTimeline.body.error as {
+          code: string;
+          message: string;
+        }
+      ).code,
+    ).toBe("not_found");
 
     const tasks = await call(client, "list_workflow_tasks", {
       novel_id: "work_tide_clock",

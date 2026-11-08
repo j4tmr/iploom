@@ -21,6 +21,7 @@ export const MCP_TOOLS = [
   { name: "get_chapter", access: "read" },
   { name: "search_ip", access: "read" },
   { name: "get_relationship_graph", access: "read" },
+  { name: "list_timeline_events", access: "read" },
   { name: "list_workflow_tasks", access: "read" },
   { name: "get_workflow_brief", access: "read" },
   { name: "list_standards", access: "read" },
