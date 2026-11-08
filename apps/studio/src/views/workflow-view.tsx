@@ -115,6 +115,12 @@ export function WorkflowView({
     const base = baseRef.current;
     const selectionChanged = (selected?.id ?? "") !== base.id;
     if (incoming === base.text && !selectionChanged) {
+      // The saved result is back at the baseline this editor synced with
+      // (e.g. an edit modal saved the pre-run value it had captured). Any
+      // conflict candidate collected from an intermediate write is now stale:
+      // loading it would rebase the baseline onto a version that no longer
+      // exists and let Save overwrite the real one.
+      setConflictText(null);
       setBriefCopied(false);
       return;
     }
