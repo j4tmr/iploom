@@ -418,6 +418,7 @@ export function TimelineView({
               <button
                 type="button"
                 className="timeline-object-empty"
+                disabled={!universeId}
                 onClick={() => onNewObject(universeId)}
               >
                 <Icon name="package" size={24} />
