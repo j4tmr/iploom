@@ -32,6 +32,9 @@ const RESPONSE_BUDGET_BYTES = 50_000;
 const BULK_CHAPTERS = 240;
 const BULK_WORLDS = 24;
 const BULK_LORE = 60;
+const BULK_OBJECTS = 30;
+const DENSE_WORLD_ID = "uni_dense_budget";
+const DENSE_THEMES = 7;
 const LONG_CHAPTER_ID = "chapter_bulk_000";
 const BULK_STANDARD_ID = "std_bulk_body";
 const BULK_STANDARD_BODY = "潮".repeat(20_000);
@@ -130,6 +133,162 @@ function buildLargeWorkspace(): StudioWorkspace {
       updatedAt: NOW,
     });
   }
+
+  for (let index = 0; index < BULK_OBJECTS; index += 1) {
+    const suffix = index.toString().padStart(2, "0");
+    workspace.storyObjects.push({
+      id: `object_bulk_${suffix}`,
+      universeId: "uni_bulk_00",
+      name: {
+        zh: `批量物件 ${suffix} ${CJK_FILLER}`.slice(0, 500),
+        en: `Bulk object ${suffix} ${ASCII_FILLER}`.slice(0, 500),
+      },
+      category: { zh: "批量道具", en: "Bulk prop" },
+      summary: {
+        zh: CJK_FILLER,
+        en: `Summary ${suffix} ${ASCII_FILLER}`.slice(0, 500),
+      },
+      visualPrompt: `Visual ${suffix} ${ASCII_FILLER}`.slice(0, 1_000),
+      sourceNotes: `Evidence ${suffix} ${ASCII_FILLER}`.slice(0, 1_000),
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+  }
+
+  // One dense world that populates all seven `get_story_world` collections at
+  // once, with every view field long enough to be clipped. The seventh
+  // collection must not push the whole response past the shared budget; this
+  // fixture is the regression guard for that.
+  const denseFiller = CJK_FILLER.repeat(4);
+  workspace.universes.push({
+    id: DENSE_WORLD_ID,
+    name: { zh: CJK_FILLER, en: ASCII_FILLER },
+    tagline: { zh: CJK_FILLER, en: ASCII_FILLER },
+    summary: { zh: CJK_FILLER, en: ASCII_FILLER },
+    genres: Array.from({ length: DENSE_THEMES }, (_, index) =>
+      `类型 ${index} ${CJK_FILLER}`.slice(0, 100),
+    ),
+    themes: Array.from({ length: DENSE_THEMES }, (_, index) =>
+      `主题 ${index} ${CJK_FILLER}`.slice(0, 100),
+    ),
+    accent: "#2f7567",
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  workspace.works.push({
+    id: "work_dense_budget",
+    universeId: DENSE_WORLD_ID,
+    title: { zh: CJK_FILLER, en: ASCII_FILLER },
+    logline: { zh: CJK_FILLER, en: ASCII_FILLER },
+    synopsis: "",
+    status: "drafting",
+    language: "zh-CN",
+    genre: CJK_FILLER.repeat(2).slice(0, 200),
+    themes: Array.from({ length: 50 }, (_, index) =>
+      `主题${index}${CJK_FILLER}`.slice(0, 100),
+    ),
+    targetWords: 100_000,
+    coverColor: "#2f7567",
+    chapters: [],
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  workspace.characters.push({
+    id: "char_dense_budget",
+    universeIds: [DENSE_WORLD_ID],
+    name: { zh: CJK_FILLER, en: ASCII_FILLER },
+    role: { zh: CJK_FILLER, en: ASCII_FILLER },
+    summary: { zh: CJK_FILLER, en: ASCII_FILLER },
+    appearance: denseFiller,
+    visualPrompt: denseFiller,
+    personality: denseFiller,
+    motivation: denseFiller,
+    flaw: denseFiller,
+    secret: denseFiller,
+    voice: denseFiller,
+    tags: Array.from({ length: 50 }, (_, index) =>
+      `${index}${CJK_FILLER}`.slice(0, 100),
+    ),
+    color: "#2f7567",
+    reusable: false,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  // Relationships cannot be self-referential, so the dense relationship points
+  // from a second, small character to the dense one.
+  workspace.characters.push({
+    id: "char_dense_target",
+    universeIds: [DENSE_WORLD_ID],
+    name: { zh: "目标角色", en: "Target" },
+    role: { zh: "配角", en: "Supporting" },
+    summary: { zh: "", en: "" },
+    appearance: "",
+    visualPrompt: "",
+    personality: "",
+    motivation: "",
+    flaw: "",
+    secret: "",
+    voice: "",
+    tags: [],
+    color: "#2f7567",
+    reusable: false,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  workspace.locations.push({
+    id: "loc_dense_budget",
+    universeId: DENSE_WORLD_ID,
+    name: { zh: CJK_FILLER, en: ASCII_FILLER },
+    summary: { zh: CJK_FILLER, en: ASCII_FILLER },
+    atmosphere: denseFiller,
+    visualPrompt: denseFiller,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  workspace.storyObjects.push({
+    id: "object_dense_budget",
+    universeId: DENSE_WORLD_ID,
+    name: { zh: CJK_FILLER, en: ASCII_FILLER },
+    category: { zh: CJK_FILLER, en: ASCII_FILLER },
+    summary: { zh: CJK_FILLER, en: ASCII_FILLER },
+    visualPrompt: denseFiller,
+    sourceNotes: denseFiller,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  workspace.factions.push({
+    id: "faction_dense_budget",
+    universeId: DENSE_WORLD_ID,
+    name: { zh: CJK_FILLER, en: ASCII_FILLER },
+    summary: { zh: CJK_FILLER, en: ASCII_FILLER },
+    goal: denseFiller,
+    visualMotif: denseFiller,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  workspace.lore.push({
+    id: "lore_dense_budget",
+    universeId: DENSE_WORLD_ID,
+    category: "mystery",
+    title: { zh: CJK_FILLER, en: ASCII_FILLER },
+    body: denseFiller,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  workspace.relationships.push({
+    id: "rel_dense_budget",
+    universeId: DENSE_WORLD_ID,
+    sourceId: "char_dense_target",
+    targetId: "char_dense_budget",
+    type: "ally",
+    label: { zh: CJK_FILLER, en: ASCII_FILLER },
+    strength: 3,
+    status: "active",
+    mutual: true,
+    notes: denseFiller,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
 
   // A compacted field whose 240-code-unit cut would land inside a surrogate
   // pair pins `compactValue` to whole code points.
@@ -488,10 +647,11 @@ describe("MCP paging, scoping and bounded responses", () => {
       {},
       "worlds",
     );
-    expect(worlds).toHaveLength(2 + BULK_WORLDS);
+    expect(worlds).toHaveLength(3 + BULK_WORLDS);
     const worldIds = new Set(worlds.map((world) => world.id));
     expect(worldIds.size).toBe(worlds.length);
     expect(worldIds.has("uni_mist_harbor")).toBe(true);
+    expect(worldIds.has(DENSE_WORLD_ID)).toBe(true);
     expect(worldIds.has("uni_bulk_00")).toBe(true);
     expect(
       worldIds.has(`uni_bulk_${String(BULK_WORLDS - 1).padStart(2, "0")}`),
@@ -771,6 +931,140 @@ describe("MCP paging, scoping and bounded responses", () => {
     // Untouched collections keep their own first page instead of skipping.
     expect(secondNovels.offset).toBe(0);
     expect(secondNovels.items[0]?.id).toBe(firstNovels.items[0]?.id);
+  });
+
+  test("pages story objects through next_offset without a search keyword", async () => {
+    const seen: string[] = [];
+    let offset = 0;
+    for (let guard = 0; guard < 200; guard += 1) {
+      const result = await call(inline, "get_story_world", {
+        world_id: "uni_bulk_00",
+        limit: 200,
+        offsets: { objects: offset },
+      });
+      expect(result.isError).toBe(false);
+      expectWithinBudget(result, `get_story_world objects at ${offset}`);
+      const page = readPage<{
+        id: string;
+        world_id: string;
+        visual_prompt: string;
+        source_notes: string;
+        truncated_fields?: string[];
+      }>(result.body, "objects");
+      expect(page.total).toBe(BULK_OBJECTS);
+      expect(page.offset).toBe(offset);
+      expect(page.count).toBe(page.items.length);
+      expect(page.truncated).toBe(page.next_offset !== null);
+      // Objects share the response budget with the other six collections, so
+      // a page is sliced well below what `limit: 200` would otherwise allow.
+      // These objects are ~3.8 KB each; ignoring the shared budget would put
+      // more than ten on a page.
+      expect(page.count).toBeLessThanOrEqual(8);
+      for (const item of page.items) {
+        expect(item.world_id).toBe("uni_bulk_00");
+        expect(item.truncated_fields).toEqual(
+          expect.arrayContaining([
+            "name.zh",
+            "name.en",
+            "summary.zh",
+            "summary.en",
+            "visual_prompt",
+            "source_notes",
+          ]),
+        );
+        expect(item.visual_prompt.endsWith("…")).toBe(true);
+        expect(item.source_notes.endsWith("…")).toBe(true);
+      }
+      seen.push(...page.items.map((item) => item.id));
+      if (page.next_offset === null) break;
+      expect(page.next_offset).toBeGreaterThan(offset);
+      offset = page.next_offset;
+    }
+    expect(seen).toHaveLength(BULK_OBJECTS);
+    expect(new Set(seen).size).toBe(BULK_OBJECTS);
+    expect(seen).toContain("object_bulk_00");
+    expect(seen).toContain(
+      `object_bulk_${String(BULK_OBJECTS - 1).padStart(2, "0")}`,
+    );
+
+    // `include_details` is the documented escape hatch: the same object comes
+    // back with its stored text untouched.
+    const detailed = await call(inline, "get_story_world", {
+      world_id: "uni_bulk_00",
+      limit: 1,
+      include_details: true,
+    });
+    expect(detailed.isError).toBe(false);
+    const detailedPage = readPage<{
+      id: string;
+      visual_prompt: string;
+      source_notes: string;
+      truncated_fields?: string[];
+    }>(detailed.body, "objects");
+    expect(detailedPage.items[0]?.id).toBe("object_bulk_00");
+    expect(detailedPage.items[0]?.visual_prompt).toBe(
+      `Visual 00 ${ASCII_FILLER}`.slice(0, 1_000),
+    );
+    expect(detailedPage.items[0]?.source_notes).toBe(
+      `Evidence 00 ${ASCII_FILLER}`.slice(0, 1_000),
+    );
+    expect(detailedPage.items[0]?.truncated_fields).toBeUndefined();
+  });
+
+  test("keeps a dense seven-collection world inside the response budget", async () => {
+    const result = await call(inline, "get_story_world", {
+      world_id: DENSE_WORLD_ID,
+    });
+    expect(result.isError).toBe(false);
+    expectWithinBudget(result, "get_story_world dense world");
+    // The fixture only guards the budget if it actually fills it; shrinking
+    // the fillers should fail here instead of silently weakening the test.
+    expect(bytesOf(result)).toBeGreaterThan(RESPONSE_BUDGET_BYTES * 0.8);
+
+    const world = result.body.world as {
+      stats: { objects: number };
+      truncated_fields?: string[];
+    };
+    expect(world.stats.objects).toBe(1);
+    // The world record is clipped too, so one verbose world cannot eat the
+    // budget its seven collections share.
+    expect(world.truncated_fields).toEqual(
+      expect.arrayContaining([
+        "name.zh",
+        "name.en",
+        "tagline.zh",
+        "tagline.en",
+        "summary.zh",
+        "summary.en",
+      ]),
+    );
+
+    // Every collection still gets at least its first item: the shared budget
+    // shrinks each page rather than starving the collections taken last.
+    for (const key of [
+      "novels",
+      "characters",
+      "locations",
+      "objects",
+      "factions",
+      "lore",
+      "relationships",
+    ]) {
+      const page = readPage(result.body, key);
+      expect(page.total).toBeGreaterThanOrEqual(1);
+      expect(page.count).toBeGreaterThanOrEqual(1);
+      expect(page.items).toHaveLength(page.count);
+    }
+    // The last collection taken still gets its item, which is the starvation
+    // this test exists to rule out.
+    expect(readPage(result.body, "relationships").count).toBe(1);
+    const objects = readPage<{ truncated_fields?: string[] }>(
+      result.body,
+      "objects",
+    );
+    expect(objects.items[0]?.truncated_fields).toEqual(
+      expect.arrayContaining(["visual_prompt", "source_notes"]),
+    );
   });
 
   test("pages graph nodes and edges independently", async () => {
