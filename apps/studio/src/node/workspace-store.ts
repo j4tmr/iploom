@@ -22,9 +22,14 @@ import {
   WORKSPACE_SCHEMA_VERSION,
   type ArcReelBundle,
   type StudioWorkspace,
+  type UiLocale,
 } from "../core/types.ts";
 import { parseArcReelBundle } from "./desktop-guards.ts";
-import { englishMainMessages, type MainMessages } from "./messages.ts";
+import {
+  englishMainMessages,
+  mainMessagesFor,
+  type MainMessages,
+} from "./messages.ts";
 
 export interface LoadedWorkspace {
   workspace: StudioWorkspace;
@@ -251,7 +256,7 @@ function safeBundlePath(
 export class WorkspaceStore {
   readonly filePath: string;
   readonly snapshotDirectory: string;
-  private readonly messages: MainMessages["store"];
+  private messages: MainMessages["store"];
   private saveQueue: Promise<void> = Promise.resolve();
   private updateQueue: Promise<void> = Promise.resolve();
 
@@ -259,6 +264,14 @@ export class WorkspaceStore {
     this.filePath = resolve(filePath);
     this.snapshotDirectory = join(dirname(this.filePath), "snapshots");
     this.messages = messages.store;
+  }
+
+  /**
+   * Follows the workspace locale when the UI language changes at runtime;
+   * main.ts re-derives its own module catalog alongside this call.
+   */
+  setLocale(locale: UiLocale): void {
+    this.messages = mainMessagesFor(locale).store;
   }
 
   async ensure(): Promise<LoadedWorkspace> {
