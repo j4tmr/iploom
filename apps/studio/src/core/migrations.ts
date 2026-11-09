@@ -79,13 +79,26 @@ export function migrateWorkspace(value: unknown): unknown {
   }
   if (value.schema_version === 6) {
     const repaired = inferWorkflowTaskTemplates(value);
-    return {
+    return migrateWorkspace({
       ...repaired,
-      schema_version: WORKSPACE_SCHEMA_VERSION,
+      schema_version: 7,
       revision:
         typeof repaired.revision === "number"
           ? repaired.revision + 1
           : repaired.revision,
+    });
+  }
+  if (value.schema_version === 7) {
+    return {
+      ...value,
+      schema_version: WORKSPACE_SCHEMA_VERSION,
+      ruleSystems: [],
+      abilityTemplates: [],
+      itemStatTemplates: [],
+      revision:
+        typeof value.revision === "number"
+          ? value.revision + 1
+          : value.revision,
     };
   }
   return value;

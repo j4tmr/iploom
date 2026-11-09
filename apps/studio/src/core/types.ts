@@ -1,4 +1,4 @@
-export const WORKSPACE_SCHEMA_VERSION = 7 as const;
+export const WORKSPACE_SCHEMA_VERSION = 8 as const;
 export const ARC_REEL_SCHEMA = "iploom.arcreel/v1" as const;
 /** Longest result text the workspace stores per language. */
 export const MAX_WORKFLOW_RESULT_LENGTH = 200_000 as const;
@@ -294,6 +294,88 @@ export interface StandardRef {
   version: number;
 }
 
+export type RuleSystemKind = "power" | "attribute" | "custom";
+export type RuleAttributeType = "integer" | "decimal" | "enum" | "text";
+export type RuleEffectOperation = "add" | "set" | "multiply";
+/** Rule-layer records follow the same review lifecycle as prose standards. */
+export type RuleStatus = StandardStatus;
+
+/** One typed value the rule system defines once and every entity cites by key. */
+export interface RuleAttribute {
+  key: string;
+  label: LocalizedText;
+  type: RuleAttributeType;
+  unit: string;
+  min?: number;
+  max?: number;
+  enumValues: string[];
+  defaultValue?: number | string;
+  description: string;
+}
+
+/** One rung of an ordered ladder, from rank 1 upward with no gaps. */
+export interface RuleTier {
+  id: string;
+  name: LocalizedText;
+  rank: number;
+  minValue?: number;
+  maxValue?: number;
+  summary: string;
+}
+
+/**
+ * A universe-scoped structured rule set: an ordered tier ladder, typed
+ * attributes, and the unit conventions that give their numbers meaning.
+ * Prose stays in `WorkspaceStandard`; this record is the machine-readable half.
+ */
+export interface RuleSystem {
+  id: string;
+  universeId: string;
+  title: LocalizedText;
+  kind: RuleSystemKind;
+  summary: string;
+  unit: string;
+  tiers: RuleTier[];
+  attributes: RuleAttribute[];
+  status: RuleStatus;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A numeric change an ability or item applies through an attribute key. */
+export interface RuleEffect {
+  attributeKey: string;
+  operation: RuleEffectOperation;
+  value: number;
+}
+
+export interface AbilityTemplate {
+  id: string;
+  universeId: string;
+  ruleSystemId: string;
+  name: LocalizedText;
+  summary: LocalizedText;
+  tierId?: string;
+  effects: RuleEffect[];
+  cost: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ItemStatTemplate {
+  id: string;
+  universeId: string;
+  ruleSystemId: string;
+  name: LocalizedText;
+  category: LocalizedText;
+  tierId?: string;
+  stats: RuleEffect[];
+  summary: LocalizedText;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** Metadata about the model run that produced a task's current result. */
 export interface WorkflowTaskRunMeta {
   model: string;
@@ -358,6 +440,9 @@ export interface StudioWorkspace {
   lastOpenedWorkId?: string;
   settings: WorkspaceSettings;
   standards: WorkspaceStandard[];
+  ruleSystems: RuleSystem[];
+  abilityTemplates: AbilityTemplate[];
+  itemStatTemplates: ItemStatTemplate[];
   universes: StoryUniverse[];
   characters: Character[];
   locations: StoryLocation[];

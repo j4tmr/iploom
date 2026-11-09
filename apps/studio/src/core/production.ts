@@ -1,4 +1,5 @@
 import { createId, displayText } from "./factory.ts";
+import { ruleLayerPromptSection } from "./rule-layer.ts";
 import { standardsPromptSection, standardRefsFor } from "./standards.ts";
 import { timelinePromptContext } from "./timeline.ts";
 import { buildWorkflowBrief } from "./workflow.ts";
@@ -149,7 +150,10 @@ export function buildProductionPrompt(
   const standards =
     options.includeStandards === false
       ? []
-      : standardsPromptSection(workspace, universeId, locale);
+      : [
+          ...standardsPromptSection(workspace, universeId, locale),
+          ...ruleLayerPromptSection(workspace, universeId, locale),
+        ];
   let sourceData = "";
   if (options.includeContext !== false) {
     const characters = workspace.characters.filter(

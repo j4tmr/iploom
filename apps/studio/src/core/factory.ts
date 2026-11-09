@@ -168,6 +168,9 @@ export function createEmptyWorkspace(
       exportApprovedOnly: false,
     },
     standards: createBaselineStandards(now),
+    ruleSystems: [],
+    abilityTemplates: [],
+    itemStatTemplates: [],
     universes: [],
     characters: [],
     locations: [],
@@ -207,6 +210,9 @@ export function createDemoWorkspace(
       exportApprovedOnly: false,
     },
     standards: baselineStandards,
+    ruleSystems: [],
+    abilityTemplates: [],
+    itemStatTemplates: [],
     universes: [
       {
         id: "uni_mist_harbor",
