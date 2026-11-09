@@ -6,6 +6,7 @@ import {
   parseStandardCandidates,
   standardBody,
   standardKindLabel,
+  standardRefDrift,
   standardRefLabel,
   standardStatusLabel,
   standardTitle,
@@ -496,7 +497,7 @@ export function FoundationView({
                 </span>
                 <span>
                   <Icon name="link" size={14} />
-                  {t("foundationPinnedCount", {
+                  {t("foundationReferencedCount", {
                     count: workspace.workflowTasks.filter((task) =>
                       task.standardRefs.some((ref) => ref.id === selected.id),
                     ).length,
@@ -519,7 +520,9 @@ export function FoundationView({
               </section>
 
               <section className="foundation-pinned-tasks">
-                <span className="eyebrow">{t("foundationPinnedByTasks")}</span>
+                <span className="eyebrow">
+                  {t("foundationReferencedByTasks")}
+                </span>
                 {workspace.workflowTasks.filter((task) =>
                   task.standardRefs.some((ref) => ref.id === selected.id),
                 ).length ? (
@@ -533,6 +536,9 @@ export function FoundationView({
                         const ref = task.standardRefs.find(
                           (item) => item.id === selected.id,
                         )!;
+                        const drift = standardRefDrift(workspace, task).find(
+                          (item) => item.ref.id === selected.id,
+                        );
                         return (
                           <button
                             type="button"
@@ -542,12 +548,17 @@ export function FoundationView({
                             <Icon name="link" size={13} />
                             {displayText(task.title, locale)}
                             <code>{standardRefLabel(ref)}</code>
+                            {drift ? (
+                              <Badge tone="amber">
+                                {t("foundationStaleRef")}
+                              </Badge>
+                            ) : null}
                           </button>
                         );
                       })}
                   </div>
                 ) : (
-                  <p>{t("foundationNoPins")}</p>
+                  <p>{t("foundationNoReferences")}</p>
                 )}
               </section>
 

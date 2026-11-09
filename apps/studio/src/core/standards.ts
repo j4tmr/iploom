@@ -5,6 +5,7 @@ import type {
   StandardStatus,
   StudioWorkspace,
   UiLocale,
+  WorkflowTask,
   WorkspaceStandard,
 } from "./types.ts";
 
@@ -197,6 +198,100 @@ export function standardRefsFor(
 
 export function standardRefLabel(ref: StandardRef): string {
   return `${ref.id} · v${ref.version}`;
+}
+
+export type StandardRefDriftKind =
+  | "version"
+  | "inactive"
+  | "out-of-scope"
+  | "missing";
+
+/** A recorded task reference that no longer matches the live registration. */
+export interface StandardRefDrift {
+  ref: StandardRef;
+  kind: StandardRefDriftKind;
+  /** The standard currently registered under the same id, when it still exists. */
+  current?: WorkspaceStandard;
+}
+
+/**
+ * Task `standardRefs` are informational records from task creation, not
+ * version pins: prompts resolve the active standards at composition time.
+ * Comparing the two surfaces where a reviewer may expect the old version.
+ */
+export function standardRefDrift(
+  workspace: Pick<StudioWorkspace, "standards">,
+  task: Pick<WorkflowTask, "standardRefs" | "universeId">,
+): StandardRefDrift[] {
+  const drifts: StandardRefDrift[] = [];
+  for (const ref of task.standardRefs) {
+    const current = workspace.standards.find(
+      (standard) => standard.id === ref.id,
+    );
+    if (!current) {
+      drifts.push({ ref, kind: "missing" });
+      continue;
+    }
+    if (current.status !== "active") {
+      drifts.push({ ref, kind: "inactive", current });
+      continue;
+    }
+    if (current.universeId && current.universeId !== task.universeId) {
+      drifts.push({ ref, kind: "out-of-scope", current });
+      continue;
+    }
+    if (current.version !== ref.version) {
+      drifts.push({ ref, kind: "version", current });
+    }
+  }
+  return drifts;
+}
+
+export function standardRefDriftLabel(
+  drift: StandardRefDrift,
+  locale: UiLocale,
+): string {
+  const zh = locale === "zh-CN";
+  const id = drift.ref.id;
+  switch (drift.kind) {
+    case "missing":
+      return zh ? `${id} · 已删除` : `${id} · removed`;
+    case "inactive":
+      return zh
+        ? `${id} · 已停用（记录 v${drift.ref.version}）`
+        : `${id} · disabled (recorded v${drift.ref.version})`;
+    case "out-of-scope":
+      return zh ? `${id} · 不适用于当前范围` : `${id} · out of scope`;
+    default:
+      return zh
+        ? `${id} · 记录 v${drift.ref.version} → 现行 v${drift.current?.version ?? "?"}`
+        : `${id} · recorded v${drift.ref.version} → current v${drift.current?.version ?? "?"}`;
+  }
+}
+
+/**
+ * Explains recorded refs that no longer match the live foundation. The
+ * standards section above already resolved the current rules; this notice is
+ * the record of what changed, not a request to replay an older version.
+ */
+export function standardRefNoticeSection(
+  workspace: Pick<StudioWorkspace, "standards">,
+  task: Pick<WorkflowTask, "standardRefs" | "universeId">,
+  locale: UiLocale,
+): string[] {
+  const drifts = standardRefDrift(workspace, task);
+  if (!drifts.length) return [];
+  const zh = locale === "zh-CN";
+  return [
+    "",
+    `## ${zh ? "基础规则引用说明" : "Foundation reference notice"}`,
+    "",
+    zh
+      ? "任务创建时记录的基础规则版本仅作追溯参考，不是版本锁定：上面的基础规则已按当前生效版本解析。以下引用与现行登记不一致，请按现行规则执行；如确需沿用旧版本，先向项目负责人确认。"
+      : "The standard versions recorded when this task was created are informational references, not version pins: the foundation standards above were resolved from the currently active standards. The references below no longer match the live registration; follow the current rules and confirm with the project owner before using an older version.",
+    "",
+    ...drifts.map((drift) => `- ${standardRefDriftLabel(drift, locale)}`),
+  ];
 }
 
 /**

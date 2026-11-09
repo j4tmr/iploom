@@ -1,6 +1,9 @@
 import { displayText } from "./factory.ts";
 import { ruleLayerPromptSection } from "./rule-layer.ts";
-import { standardsPromptSection } from "./standards.ts";
+import {
+  standardRefNoticeSection,
+  standardsPromptSection,
+} from "./standards.ts";
 import { relevantTimelineEvents, timelineAnchorLabel } from "./timeline.ts";
 import type {
   LocalizedText,
@@ -372,6 +375,7 @@ export function buildWorkflowBrief(
       ),
     ]),
     ...standardsPromptSection(workspace, task.universeId, locale),
+    ...standardRefNoticeSection(workspace, task, locale),
     ...ruleLayerPromptSection(workspace, task.universeId, locale),
   );
 
