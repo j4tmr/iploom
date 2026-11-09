@@ -28,6 +28,7 @@ import {
 import {
   englishMainMessages,
   mainMessagesFor,
+  normalizeUiLocale,
   zhMainMessages,
   type MainMessages,
 } from "../../apps/studio/src/node/messages.ts";
@@ -108,6 +109,16 @@ describe("message catalog", () => {
     expect(mainMessagesFor("en")).toBe(englishMainMessages);
   });
 
+  test("normalizeUiLocale accepts supported locales and falls back otherwise", () => {
+    expect(normalizeUiLocale("zh-CN", "en")).toBe("zh-CN");
+    expect(normalizeUiLocale("en", "zh-CN")).toBe("en");
+    expect(normalizeUiLocale("fr", "en")).toBe("en");
+    expect(normalizeUiLocale("zh", "en")).toBe("en");
+    expect(normalizeUiLocale("zh-cn", "en")).toBe("en");
+    expect(normalizeUiLocale(undefined, "zh-CN")).toBe("zh-CN");
+    expect(normalizeUiLocale(42, "en")).toBe("en");
+  });
+
   test("every catalog entry produces non-empty copy in both presets", () => {
     exerciseCatalog(englishMainMessages);
     exerciseCatalog(zhMainMessages);
@@ -164,6 +175,24 @@ describe("localized workspace store", () => {
     writeFileSync(file, "{ not json", "utf8");
     const store = new WorkspaceStore(file, zhMainMessages);
     await expect(store.load()).rejects.toThrow("工作区缺失或无效");
+  });
+
+  test("setLocale re-derives the store copy without reconstructing", async () => {
+    // Regression for the main-process locale sync: the store captures its
+    // copy at construction, so a runtime language switch must re-derive it.
+    const root = mkdtempSync(join(tmpdir(), "iploom-messages-"));
+    const file = join(root, "workspace.json");
+    writeFileSync(file, "{ not json", "utf8");
+    const store = new WorkspaceStore(file);
+    await expect(store.load()).rejects.toThrow(
+      "Workspace is missing or invalid",
+    );
+    store.setLocale("zh-CN");
+    await expect(store.load()).rejects.toThrow("工作区缺失或无效");
+    store.setLocale("en");
+    await expect(store.load()).rejects.toThrow(
+      "Workspace is missing or invalid",
+    );
   });
 
   test("zh store localizes snapshot-restore failures", async () => {

@@ -72,6 +72,7 @@ import {
 import {
   englishMainMessages,
   mainMessagesFor,
+  normalizeUiLocale,
   type MainMessages,
 } from "../src/node/messages.ts";
 import type { AiConfig } from "../src/core/ai.ts";
@@ -88,7 +89,8 @@ let mainWindow: BrowserWindow | null = null;
 let workspaceStore: WorkspaceStore | null = null;
 // User-visible main-process copy lives in a bilingual catalog. English until
 // `bootstrap` learns the real locale (app.getLocale needs the ready event),
-// which also keeps every early failure English.
+// which also keeps every early failure English; afterwards `applyMainLocale`
+// re-derives it from the workspace locale on every load and save.
 let mainMessages: MainMessages = englishMainMessages;
 let devUrl: URL | null = null;
 const smokeMode = process.env.IPLOOM_STUDIO_SMOKE === "1";
@@ -392,6 +394,16 @@ function defaultLocale(): UiLocale {
   return app.getLocale().toLocaleLowerCase().startsWith("zh") ? "zh-CN" : "en";
 }
 
+/**
+ * Re-derives every main-process catalog from the workspace locale. Dialogs
+ * and IPC/AI error copy read the module variable at call time, while the
+ * workspace store captures its copy at construction and needs this update.
+ */
+function applyMainLocale(locale: UiLocale): void {
+  mainMessages = mainMessagesFor(locale);
+  workspaceStore?.setLocale(locale);
+}
+
 async function exists(path: string): Promise<boolean> {
   try {
     await access(path, constants.F_OK);
@@ -417,11 +429,15 @@ async function loadWorkspace(): Promise<LoadedWorkspace> {
   const store = requireStore();
   try {
     const loaded = await store.load();
+    applyMainLocale(
+      normalizeUiLocale(loaded.workspace.settings.locale, defaultLocale()),
+    );
     rememberFolders();
     return loaded;
   } catch (error) {
     if (await exists(store.filePath)) throw error;
     const workspace = createDemoWorkspace(defaultLocale());
+    applyMainLocale(workspace.settings.locale);
     try {
       await store.save(workspace);
     } catch {
@@ -558,6 +574,11 @@ function registerIpcHandlers(): void {
           throw new Error(markStaleWorkspaceMessage(error.message));
         throw error;
       }
+      // The save passed the store's schema validation, so the locale is a
+      // known value; a failed save must not move the catalog.
+      applyMainLocale(
+        normalizeUiLocale(workspace?.settings?.locale, defaultLocale()),
+      );
       return { savedAt: new Date().toISOString() };
     },
   );
@@ -670,6 +691,9 @@ function registerIpcHandlers(): void {
         throw new Error(mainMessages.shell.snapshotPathMustBeString);
       }
       const loaded = await requireStore().restoreSnapshot(snapshotPath);
+      applyMainLocale(
+        normalizeUiLocale(loaded.workspace.settings.locale, defaultLocale()),
+      );
       rememberFolders();
       return loaded;
     },
@@ -687,6 +711,7 @@ function registerIpcHandlers(): void {
     const workspace = createDemoWorkspace(locale);
     // The demo starts at a lower revision than the user workspace it replaces.
     await store.save(workspace, { allowRollback: true });
+    applyMainLocale(locale);
     rememberFolders();
     return {
       workspace,
@@ -1055,7 +1080,7 @@ function focusMainWindow(): void {
 async function bootstrap(): Promise<void> {
   app.setAppUserModelId(APP_ID);
   devUrl = parseDevUrl();
-  mainMessages = mainMessagesFor(defaultLocale());
+  applyMainLocale(defaultLocale());
   const workspacePath = process.env.IPLOOM_STUDIO_WORKSPACE
     ? resolve(process.env.IPLOOM_STUDIO_WORKSPACE)
     : join(app.getPath("userData"), "workspace.json");

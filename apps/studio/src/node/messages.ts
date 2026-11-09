@@ -403,3 +403,23 @@ export const zhMainMessages: MainMessages = {
 export function mainMessagesFor(locale: UiLocale): MainMessages {
   return locale === "zh-CN" ? zhMainMessages : englishMainMessages;
 }
+
+/** Locales the desktop app can switch between at runtime. */
+export const UI_LOCALES = [
+  "zh-CN",
+  "en",
+] as const satisfies readonly UiLocale[];
+
+/**
+ * The catalog follows the workspace locale, which reaches the main process
+ * over IPC; payloads are untrusted even when typed, so the value is checked
+ * before any catalog is re-derived.
+ */
+export function normalizeUiLocale(
+  value: unknown,
+  fallback: UiLocale,
+): UiLocale {
+  return (UI_LOCALES as readonly string[]).includes(value as string)
+    ? (value as UiLocale)
+    : fallback;
+}
