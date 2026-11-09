@@ -33,8 +33,8 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 | `list_workflow_tasks`    | yes       | List AI authoring tasks with readiness, blockers and optional world/novel/status filters                  |
 | `get_workflow_brief`     | yes       | Generate a deterministic, task-scoped bilingual Markdown brief, optionally with approved upstream outputs |
 | `get_workflow_result`    | yes       | Read a workflow task's bilingual result (full or windowed) and first pre-change snapshot                  |
-| `list_standards`         | yes       | List foundation standards with kind, status, scope and pinned task count                                  |
-| `get_standard`           | yes       | Read one standard, its applied scope and the tasks that pin its version                                   |
+| `list_standards`         | yes       | List foundation standards with kind, status, scope and in-scope active standard count                     |
+| `get_standard`           | yes       | Read one standard, its scope, body windows and workflow tasks that reference its id                       |
 | `create_standard`        | no        | Register a foundation standard as a draft (or active) with schema validation                              |
 | `update_standard`        | no        | Update a standard; content changes bump its version, status-only changes do not                           |
 | `create_timeline_event`  | no        | Create a story timeline event; defaults to `proposed` and validates every reference                       |
@@ -74,7 +74,7 @@ Every collection response is a page rather than a bare array:
 
 Responses echo the fields a client needs for the next call, not every nested list:
 
-- Entity views cap repeated identifiers at 20 items and add the true size alongside: `character_ids`/`character_id_count`, `depends_on_ids`/`depends_on_id_count`, `pinned_by_task_ids`/`pinned_by_task_count`.
+- Entity views cap repeated identifiers at 20 items and add the true size alongside: `character_ids`/`character_id_count`, `depends_on_ids`/`depends_on_id_count`, `pinned_by_task_ids`/`pinned_by_task_count`. The last pair belongs to `get_standard`: it counts workflow tasks whose `standardRefs` mention that standard's `id`, not tasks pinned to its exact `version`.
 - `get_story_world` returns every stored story-object field: `id`, `world_id`, `name`, `category`, `summary`, `visual_prompt`, `source_notes`, `created_at` and `updated_at`. The default compact view clips long values and names them in `truncated_fields`; `include_details` returns them in full. Story objects are enumerable with `next_offset` alone, without a search keyword.
 - The world record in `get_story_world` follows the same rule: the default view clips long `name`, `tagline` and `summary` values and names them in `truncated_fields`, so one verbose world cannot consume the budget its seven collections share; `include_details` returns the world in full.
 - `list_timeline_events` orders events by chapter, in-world time, order and creation time; its default view clips long state, evidence and prompt fields and names them in `truncated_fields`, while `include_details` returns the full record.
