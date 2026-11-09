@@ -41,24 +41,24 @@ The result is a small, inspectable IP graph instead of a folder of files whose r
 - **Novel shelf** — cross-universe filtering, search, status filters and word-count sorting.
 - **Local persistence** — atomic `workspace.json` writes, a `.bak` recovery copy, schema migration, a save-before-close handshake and visible save state.
 - **ArcReel-style handoff** — selected chapters become a directory of world, episode and storyboard JSON plus a Markdown handoff.
-- **Foundation standards** — project-wide language, format, naming, numeric, entity-prompt and continuity rules, optionally AI-drafted, injected into every prompt and workflow brief with pinned versions.
+- **Foundation standards** — project-wide language, format, naming, numeric, entity-prompt and continuity rules, optionally AI-drafted. Active standards and their current id/version are resolved when prompts and workflow briefs are composed; new tasks record the ids and versions present at creation as informational references.
 - **Local MCP server** — nineteen tools for IP queries, story timeline events, foundation rules, workflow briefs, full workflow results and handoff export; thirteen are read-only and five write workspace records.
 - **Desktop security baseline** — context isolation, sandboxed renderer, strict CSP, validated IPC and an explicit export boundary.
 - **No account and no telemetry** — the app does not require a cloud service.
 
 ## New AI production desk
 
-Import existing manuscripts, analyze world/cast/relationships/scenes through a configurable model API, and use nine editable prompt templates with dependent tasks, streamed output and author review. See the [AI production guide](docs/ai-production.md). These features ship in the 0.10.2 installers below.
+Import existing manuscripts, analyze world/cast/relationships/scenes through a configurable model API, and use nine editable prompt templates with dependent tasks, streamed output and author review. See the [AI production guide](docs/ai-production.md). These features ship in the 0.11.0 installers below.
 
 ## Download
 
-Current release **0.10.2** — direct downloads:
+Current release **0.11.0** — direct downloads:
 
 | macOS (Apple silicon + Intel)                                                                                                                                                                                                         | Windows x64                                                                                                |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| [DMG](https://github.com/j4tmr/iploom/releases/download/studio-v0.10.2/IPloom-Studio-0.10.2-darwin-universal.dmg) · [ZIP](https://github.com/j4tmr/iploom/releases/download/studio-v0.10.2/IPloom-Studio-0.10.2-darwin-universal.zip) | [EXE](https://github.com/j4tmr/iploom/releases/download/studio-v0.10.2/IPloom-Studio-0.10.2-win32-x64.exe) |
+| [DMG](https://github.com/j4tmr/iploom/releases/download/studio-v0.11.0/IPloom-Studio-0.11.0-darwin-universal.dmg) · [ZIP](https://github.com/j4tmr/iploom/releases/download/studio-v0.11.0/IPloom-Studio-0.11.0-darwin-universal.zip) | [EXE](https://github.com/j4tmr/iploom/releases/download/studio-v0.11.0/IPloom-Studio-0.11.0-win32-x64.exe) |
 
-[Releases](https://github.com/j4tmr/iploom/releases) · [SHA256SUMS.txt](https://github.com/j4tmr/iploom/releases/download/studio-v0.10.2/SHA256SUMS.txt)
+[Releases](https://github.com/j4tmr/iploom/releases) · [SHA256SUMS.txt](https://github.com/j4tmr/iploom/releases/download/studio-v0.11.0/SHA256SUMS.txt)
 
 - macOS: universal DMG and ZIP for Apple silicon and Intel.
 - Windows: x64 NSIS installer.
@@ -66,7 +66,7 @@ Current release **0.10.2** — direct downloads:
 - **Build provenance**: each `.dmg`, `.zip` and `.exe` is attested by the release workflow. Verify one with the GitHub CLI:
 
   ```sh
-  gh attestation verify IPloom-Studio-0.10.2-darwin-universal.dmg --repo j4tmr/iploom
+  gh attestation verify IPloom-Studio-0.11.0-darwin-universal.dmg --repo j4tmr/iploom
   ```
 
 The current release is **unsigned**. macOS Gatekeeper and Windows SmartScreen may show a warning. On macOS 15 and later, Control-click → Open no longer bypasses Gatekeeper: if the first launch is blocked, open **System Settings → Privacy & Security**, click **Open Anyway** next to the IPloom Studio message, authenticate, then choose **Open**. On Windows, use **More info → Run anyway**. Verify the checksum and attestation first, and continue only when you trust the source. Signed builds can be added later without changing the application format.
