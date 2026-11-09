@@ -73,10 +73,11 @@ test("retrySave stops when a newer save superseded it", async () => {
 });
 
 test("a marked stale save rejection stops retrying after the IPC round trip", async () => {
-  // The renderer main world sees a plain Error that keeps only the message
-  // (contextBridge drops the name and custom fields), wrapped by Electron's
-  // "Error invoking remote method ..." prefix. Mapping happens there, not in
-  // the preload world, and must strip both the prefix and the marker.
+  // The preload bridge unwraps Electron's "Error invoking remote method"
+  // prefix for every channel, so the renderer main world normally sees the
+  // raw marker in a plain Error that keeps only the message (contextBridge
+  // drops the name and custom fields). Mapping happens there, not in the
+  // preload world, and still tolerates the wrapped form as a fallback.
   const rejection = new Error(
     `Error invoking remote method 'iploom:save': Error: ${STALE_WORKSPACE_MARKER} ` +
       `Refusing to overwrite /tmp/workspace.json revision 13`,
