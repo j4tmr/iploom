@@ -588,6 +588,15 @@ export function deleteUniverseFromDraft(
   draft.standards = draft.standards.filter(
     (item) => !removedStandards.has(item.id),
   );
+  draft.ruleSystems = draft.ruleSystems.filter(
+    (item) => item.universeId !== universeId,
+  );
+  draft.abilityTemplates = draft.abilityTemplates.filter(
+    (item) => item.universeId !== universeId,
+  );
+  draft.itemStatTemplates = draft.itemStatTemplates.filter(
+    (item) => item.universeId !== universeId,
+  );
 
   const removedTasks = new Set(
     draft.workflowTasks

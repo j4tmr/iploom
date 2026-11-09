@@ -6,6 +6,14 @@ import {
   WORKFLOW_TASK_TEMPLATES,
   WORKSPACE_SCHEMA_VERSION,
 } from "./types.ts";
+import {
+  abilityTemplateSchema,
+  itemStatTemplateSchema,
+  MAX_ABILITY_TEMPLATES,
+  MAX_ITEM_STAT_TEMPLATES,
+  MAX_RULE_SYSTEMS,
+  ruleSystemSchema,
+} from "./rule-layer.ts";
 
 const identifier = z
   .string()
@@ -435,6 +443,11 @@ export const workspaceSchema = z
     lastOpenedWorkId: identifier.optional(),
     settings: settingsSchema,
     standards: z.array(standardSchema).max(1_000),
+    ruleSystems: z.array(ruleSystemSchema).max(MAX_RULE_SYSTEMS),
+    abilityTemplates: z.array(abilityTemplateSchema).max(MAX_ABILITY_TEMPLATES),
+    itemStatTemplates: z
+      .array(itemStatTemplateSchema)
+      .max(MAX_ITEM_STAT_TEMPLATES),
     universes: z.array(universeSchema).max(1_000),
     characters: z.array(characterSchema).max(20_000),
     locations: z.array(locationSchema).max(20_000),
@@ -463,6 +476,9 @@ export const workspaceSchema = z
     const storyObjectsById = new Map(
       workspace.storyObjects.map((item) => [item.id, item]),
     );
+    const ruleSystemsById = new Map(
+      workspace.ruleSystems.map((item) => [item.id, item]),
+    );
 
     const issue = (path: (string | number)[], message: string) =>
       ctx.addIssue({ code: "custom", path, message });
@@ -477,6 +493,9 @@ export const workspaceSchema = z
     };
     unique(workspace.universes, "universes", (item) => item.id);
     unique(workspace.standards, "standards", (item) => item.id);
+    unique(workspace.ruleSystems, "ruleSystems", (item) => item.id);
+    unique(workspace.abilityTemplates, "abilityTemplates", (item) => item.id);
+    unique(workspace.itemStatTemplates, "itemStatTemplates", (item) => item.id);
     unique(workspace.characters, "characters", (item) => item.id);
     unique(workspace.locations, "locations", (item) => item.id);
     unique(workspace.storyObjects, "storyObjects", (item) => item.id);
@@ -603,6 +622,82 @@ export const workspaceSchema = z
     for (const [index, standard] of workspace.standards.entries()) {
       if (standard.universeId && !universes.has(standard.universeId))
         issue(["standards", index, "universeId"], "unknown universe");
+    }
+    for (const [index, system] of workspace.ruleSystems.entries()) {
+      if (!universes.has(system.universeId))
+        issue(["ruleSystems", index, "universeId"], "unknown universe");
+    }
+    for (const [index, ability] of workspace.abilityTemplates.entries()) {
+      const system = ruleSystemsById.get(ability.ruleSystemId);
+      if (!universes.has(ability.universeId))
+        issue(["abilityTemplates", index, "universeId"], "unknown universe");
+      if (!system)
+        issue(
+          ["abilityTemplates", index, "ruleSystemId"],
+          "unknown rule system",
+        );
+      else {
+        if (system.universeId !== ability.universeId)
+          issue(
+            ["abilityTemplates", index, "ruleSystemId"],
+            "rule system belongs to another universe",
+          );
+        if (
+          ability.tierId &&
+          !system.tiers.some((tier) => tier.id === ability.tierId)
+        )
+          issue(["abilityTemplates", index, "tierId"], "unknown tier");
+        for (const [effectIndex, effect] of ability.effects.entries()) {
+          if (
+            !system.attributes.some(
+              (attribute) => attribute.key === effect.attributeKey,
+            )
+          )
+            issue(
+              [
+                "abilityTemplates",
+                index,
+                "effects",
+                effectIndex,
+                "attributeKey",
+              ],
+              `unknown attribute: ${effect.attributeKey}`,
+            );
+        }
+      }
+    }
+    for (const [index, item] of workspace.itemStatTemplates.entries()) {
+      const system = ruleSystemsById.get(item.ruleSystemId);
+      if (!universes.has(item.universeId))
+        issue(["itemStatTemplates", index, "universeId"], "unknown universe");
+      if (!system)
+        issue(
+          ["itemStatTemplates", index, "ruleSystemId"],
+          "unknown rule system",
+        );
+      else {
+        if (system.universeId !== item.universeId)
+          issue(
+            ["itemStatTemplates", index, "ruleSystemId"],
+            "rule system belongs to another universe",
+          );
+        if (
+          item.tierId &&
+          !system.tiers.some((tier) => tier.id === item.tierId)
+        )
+          issue(["itemStatTemplates", index, "tierId"], "unknown tier");
+        for (const [statIndex, stat] of item.stats.entries()) {
+          if (
+            !system.attributes.some(
+              (attribute) => attribute.key === stat.attributeKey,
+            )
+          )
+            issue(
+              ["itemStatTemplates", index, "stats", statIndex, "attributeKey"],
+              `unknown attribute: ${stat.attributeKey}`,
+            );
+        }
+      }
     }
     for (const [index, character] of workspace.characters.entries()) {
       if (!character.universeIds.length)
