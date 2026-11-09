@@ -4,22 +4,25 @@ import {
   createEmptyWorkspace,
 } from "../../apps/studio/src/core/factory.ts";
 import {
+  buildProductionPrompt,
+  createProductionTasks,
+  taskProductionPrompt,
+} from "../../apps/studio/src/core/production.ts";
+import {
   applicableStandards,
   buildStandardDraftPrompt,
   createBaselineStandards,
   MAX_STANDARD_CANDIDATES,
   parseStandardCandidates,
+  standardRefDrift,
+  standardRefDriftLabel,
+  standardRefNoticeSection,
   standardRefsFor,
   standardsPromptSection,
 } from "../../apps/studio/src/core/standards.ts";
-import {
-  buildProductionPrompt,
-  createProductionTasks,
-  taskProductionPrompt,
-} from "../../apps/studio/src/core/production.ts";
+import type { WorkspaceStandard } from "../../apps/studio/src/core/types.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 import { buildWorkflowBrief } from "../../apps/studio/src/core/workflow.ts";
-import type { WorkspaceStandard } from "../../apps/studio/src/core/types.ts";
 
 const NOW = "2026-11-06T00:00:00.000Z";
 
@@ -131,7 +134,7 @@ describe("foundation standards", () => {
     expect(composed.match(/## Foundation standards/g)).toHaveLength(1);
   });
 
-  test("new production tasks pin the active version of every applied rule", () => {
+  test("new production tasks record the active version of every applied rule", () => {
     const workspace = createDemoWorkspace("en", NOW);
     workspace.standards.push(
       customStandard("std_custom_draft", { status: "draft" }),
@@ -153,6 +156,83 @@ describe("foundation standards", () => {
       ),
     ).toBe(true);
     expect(expected.some((ref) => ref.id === "std_custom_draft")).toBe(false);
+  });
+
+  test("stored refs stay informational while briefs resolve the live version", () => {
+    const workspace = createDemoWorkspace("en", NOW);
+    workspace.standards.push(
+      customStandard("std_custom_style", { kind: "style" }),
+    );
+    const task = workspace.workflowTasks[0]!;
+    task.standardRefs = standardRefsFor(workspace, task.universeId);
+    expect(
+      task.standardRefs.find((ref) => ref.id === "std_custom_style")?.version,
+    ).toBe(1);
+    expect(standardRefNoticeSection(workspace, task, "en")).toEqual([]);
+
+    workspace.standards = workspace.standards.map((standard) =>
+      standard.id === "std_custom_style"
+        ? { ...standard, version: 2, body: { zh: "正文 v2", en: "Body v2" } }
+        : standard,
+    );
+
+    const drifts = standardRefDrift(workspace, task);
+    expect(drifts).toHaveLength(1);
+    expect(drifts[0]?.kind).toBe("version");
+    expect(drifts[0]?.ref).toEqual({ id: "std_custom_style", version: 1 });
+    expect(drifts[0]?.current?.version).toBe(2);
+
+    const brief = buildWorkflowBrief(workspace, task.id, "en");
+    expect(brief).toContain("`std_custom_style` · v2");
+    expect(brief).toContain("Body v2");
+    expect(brief).not.toContain("Body std_custom_style");
+    expect(brief).toContain("## Foundation reference notice");
+    expect(brief).toContain("recorded v1 → current v2");
+    expect(brief.indexOf("## Foundation standards")).toBeLessThan(
+      brief.indexOf("## Foundation reference notice"),
+    );
+
+    const composed = taskProductionPrompt(workspace, task, "en");
+    expect(composed.match(/## Foundation standards/g)).toHaveLength(1);
+    expect(composed.match(/## Foundation reference notice/g)).toHaveLength(1);
+
+    // Drift is derived for display; the task's own record stays untouched.
+    expect(
+      task.standardRefs.find((ref) => ref.id === "std_custom_style")?.version,
+    ).toBe(1);
+  });
+
+  test("ref drift classifies inactive, out-of-scope and removed rules", () => {
+    const workspace = createDemoWorkspace("en", NOW);
+    workspace.standards.push(
+      customStandard("std_custom_disabled", { status: "disabled" }),
+      customStandard("std_custom_other_world", {
+        universeId: "uni_ninth_station",
+      }),
+    );
+    const task = {
+      universeId: "uni_mist_harbor",
+      standardRefs: [
+        { id: "std_custom_disabled", version: 1 },
+        { id: "std_custom_other_world", version: 1 },
+        { id: "std_custom_removed", version: 4 },
+      ],
+    };
+    const drifts = standardRefDrift(workspace, task);
+    expect(drifts.map((drift) => drift.kind)).toEqual([
+      "inactive",
+      "out-of-scope",
+      "missing",
+    ]);
+    expect(drifts[0]?.current?.id).toBe("std_custom_disabled");
+    expect(drifts[1]?.current?.id).toBe("std_custom_other_world");
+    expect(drifts[2]?.current).toBeUndefined();
+    expect(standardRefDriftLabel(drifts[0]!, "zh-CN")).toContain("已停用");
+    expect(standardRefDriftLabel(drifts[1]!, "en")).toContain("out of scope");
+    expect(standardRefDriftLabel(drifts[2]!, "en")).toContain("removed");
+    expect(standardRefNoticeSection(workspace, task, "zh-CN")[1]).toBe(
+      "## 基础规则引用说明",
+    );
   });
 
   test("workspace validation rejects dangling or duplicated standard references", () => {

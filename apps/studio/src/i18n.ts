@@ -37,7 +37,6 @@ const zh = {
   foundationBodyZh: "中文规则正文",
   foundationBodyEn: "English rule body",
   foundationVersion: "版本",
-  foundationPinnedHint: "新建任务时会自动固定当时生效的规则版本。",
   foundationDraftNote:
     "规则会写入项目工作区；草稿与停用规则不会注入 AI 提示词，启用后才参与工作。",
   foundationRegistered: "已登记为草稿，启用后才会影响 AI 产出。",
@@ -609,6 +608,9 @@ const zh = {
   workflowBlocker: "依赖",
   workflowSuperseded:
     "上游任务的结果已更新，本任务通过审阅时的产出可能过期；重新审阅并保存后标记完成即可清除。",
+  workflowStandardDrift: "规则已更新",
+  workflowStandardDriftNote:
+    "任务记录的基础规则版本仅作追溯参考；简报与生成使用当前生效规则",
   workflowDependencyOpen: " · 未完成",
   workflowConflict:
     "这个结果的已保存版本在别处被更新了。你的修改仍保留在这里，未被覆盖。",
@@ -652,21 +654,21 @@ const zh = {
   foundationClearAll: "取消全选",
   foundationSelectAll: "全选",
   foundationDiscard: "丢弃候选",
-  foundationPinnedCount: "{count} 个任务引用",
+  foundationReferencedCount: "{count} 个任务引用",
   foundationBodyLabel: "规则正文",
   foundationAppliedScope: "生效范围",
   foundationActiveScope:
     "此规则会注入项目内所有匹配范围的 AI 提示词与工作简报。",
   foundationInactiveScope:
     "草稿与停用规则不会注入提示词；启用后才参与 AI 工作。",
-  foundationPinnedByTasks: "任务固定引用",
-  foundationNoPins:
-    "还没有任务固定引用此规则；新建任务时会自动固定当时生效的版本。",
+  foundationReferencedByTasks: "任务引用记录",
+  foundationStaleRef: "版本已更新",
+  foundationNoReferences:
+    "还没有任务引用此规则；新建任务时会记录当时生效的版本，仅作追溯参考，提示词始终使用当前生效规则。",
   foundationDisable: "停用",
   foundationActivate: "启用",
   foundationCopyBody: "复制正文",
-  foundationNoSelectionLead:
-    "选择一条规则查看正文、适用范围和被任务固定的版本。",
+  foundationNoSelectionLead: "选择一条规则查看正文、适用范围和任务引用记录。",
   timelineHeading: "每一次变化，都留下可追溯的状态。",
   timelineLead:
     "按章节或故事内时间追踪人物、场景、地点与物件。既定状态会进入制作提示词，提案状态保持明确标记。",
@@ -771,8 +773,6 @@ const en: Record<MessageKey, string> = {
   foundationBodyZh: "Chinese rule body",
   foundationBodyEn: "English rule body",
   foundationVersion: "Version",
-  foundationPinnedHint:
-    "New tasks pin the versions that were active when they were created.",
   foundationDraftNote:
     "Standards are saved to the project workspace. Draft and disabled standards are not injected into AI prompts; only active ones participate.",
   foundationRegistered:
@@ -1390,6 +1390,9 @@ const en: Record<MessageKey, string> = {
   workflowBlocker: "blocker",
   workflowSuperseded:
     "An upstream task's result changed, so the output from when you reviewed this task may be stale. Review again and save to clear this.",
+  workflowStandardDrift: "Standard updated",
+  workflowStandardDriftNote:
+    "Standard versions recorded on this task are traceable references only; briefs and runs use the currently active rules",
   workflowDependencyOpen: " · Open",
   workflowConflict:
     "A newer saved version of this result appeared elsewhere. Your edits are still here and were not overwritten.",
@@ -1435,21 +1438,22 @@ const en: Record<MessageKey, string> = {
   foundationClearAll: "Clear all",
   foundationSelectAll: "Select all",
   foundationDiscard: "Discard",
-  foundationPinnedCount: "{count} tasks pinned",
+  foundationReferencedCount: "{count} tasks reference",
   foundationBodyLabel: "Standard body",
   foundationAppliedScope: "Applied scope",
   foundationActiveScope:
     "This standard is injected into every matching AI prompt and workflow brief in the project.",
   foundationInactiveScope:
     "Draft and disabled standards are not injected. Activate one to include it in AI work.",
-  foundationPinnedByTasks: "Pinned by tasks",
-  foundationNoPins:
-    "No task pins this standard yet. New tasks pin the active version automatically.",
+  foundationReferencedByTasks: "Task references",
+  foundationStaleRef: "Version updated",
+  foundationNoReferences:
+    "No task references this standard yet. New tasks record the versions active at creation as traceable references; prompts always use the currently active rules.",
   foundationDisable: "Disable",
   foundationActivate: "Activate",
   foundationCopyBody: "Copy body",
   foundationNoSelectionLead:
-    "Select a standard to see its body, scope and pinned versions.",
+    "Select a standard to see its body, scope and referenced versions.",
   timelineHeading: "Every change leaves a trace.",
   timelineLead:
     "Track characters, scenes, locations and props by chapter or in-world time. Canon states feed production prompts; proposals stay clearly marked.",

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { displayText } from "../core/factory.ts";
+import { standardRefDrift, standardRefDriftLabel } from "../core/standards.ts";
 import { MAX_WORKFLOW_RESULT_LENGTH } from "../core/types.ts";
 import type {
   StudioWorkspace,
@@ -181,6 +182,16 @@ export function WorkflowView({
     });
   }, [filter, locale, query, workspace]);
 
+  const driftedTaskIds = useMemo(
+    () =>
+      new Set(
+        workspace.workflowTasks
+          .filter((task) => standardRefDrift(workspace, task).length > 0)
+          .map((task) => task.id),
+      ),
+    [workspace],
+  );
+
   const stats = [
     {
       key: "ready",
@@ -235,6 +246,9 @@ export function WorkflowView({
   const readiness = selected
     ? workflowTaskReadiness(workspace, selected)
     : null;
+  const selectedStandardDrift = selected
+    ? standardRefDrift(workspace, selected)
+    : [];
 
   const filters: { id: WorkflowFilter; label: string; count: number }[] = [
     { id: "all", label: t("all"), count: workspace.workflowTasks.length },
@@ -342,6 +356,11 @@ export function WorkflowView({
                         {task.resultSuperseded ? (
                           <Badge tone="amber">{t("workflowReReview")}</Badge>
                         ) : null}
+                        {driftedTaskIds.has(task.id) ? (
+                          <Badge tone="amber">
+                            {t("workflowStandardDrift")}
+                          </Badge>
+                        ) : null}
                       </span>
                       <small>
                         {taskWork
@@ -413,6 +432,19 @@ export function WorkflowView({
                 <div className="workflow-readiness waiting">
                   <Icon name="link" size={16} />
                   {t("workflowSuperseded")}
+                </div>
+              ) : null}
+
+              {selectedStandardDrift.length ? (
+                <div className="workflow-readiness waiting">
+                  <Icon name="layers" size={16} />
+                  <span>
+                    {t("workflowStandardDriftNote")}
+                    {" — "}
+                    {selectedStandardDrift
+                      .map((drift) => standardRefDriftLabel(drift, locale))
+                      .join("; ")}
+                  </span>
                 </div>
               ) : null}
 

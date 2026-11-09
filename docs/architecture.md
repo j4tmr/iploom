@@ -43,7 +43,7 @@ No renderer code receives Node.js primitives. IPC handlers validate the sender a
 - `works`: novels. A work references exactly one universe.
 - `chapters`: ordered content inside a work, with planning notes, prose, cast, location and optional scenes.
 - `workflowTasks`: hierarchical AI-authoring work items with explicit dependencies, readiness, scope references and reviewable results.
-- `standards`: project foundation rules (language, format, naming, numeric, entity-prompt and continuity). Active, in-scope standards and their current id/version are resolved when production prompts and workflow briefs are composed; new tasks record those ids and versions as informational `standardRefs`.
+- `standards`: project foundation rules (language, format, naming, numeric, entity-prompt and continuity). Active, in-scope standards and their current id/version are resolved when production prompts and workflow briefs are composed; new tasks record those ids and versions as informational `standardRefs`. A recorded ref that no longer matches the live registration (updated version, disabled, out of scope or removed) is derived at display and composition time, never stored: workflow and foundation views mark it, and the brief adds a "Foundation reference notice" listing each mismatch while still applying the current active rules.
 - `ruleSystems`, `abilityTemplates` and `itemStatTemplates`: universe-scoped structured rule systems with ordered tiers and typed attributes, plus their linked ability and item-stat templates. Active, in-scope systems and linked templates are serialized as prompt data, not instructions.
 - `exports`: local history of generated handoff packages.
 

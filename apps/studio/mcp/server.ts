@@ -2323,7 +2323,7 @@ export function createStudioMcpServer(
     {
       title: "读取基础规则 / Read foundation standard",
       description:
-        "读取一条基础规则，返回分窗的规则正文、适用范围与引用它的 AI 工作流任务；两种语言各自用 body_offsets 中对应的 next_offset 续读。Read one foundation standard with its scope and the workflow tasks that pin it by id; each language body continues from its own next_offset via body_offsets.",
+        "读取一条基础规则，返回分窗的规则正文、适用范围与引用它的 AI 工作流任务；两种语言各自用 body_offsets 中对应的 next_offset 续读。Read one foundation standard with its scope and the workflow tasks that reference its id; these refs are informational records from task creation, not version pins, because prompts resolve the currently active standards. Each language body continues from its own next_offset via body_offsets.",
       annotations: READ_ONLY_ANNOTATIONS,
     },
     z.object({
