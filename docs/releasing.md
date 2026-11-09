@@ -114,7 +114,7 @@ These settings are intentionally not modified by automation. Review them before 
 
 The current workflow supports unsigned artifacts and labels them explicitly. It does not pretend that an unsigned build passes Gatekeeper or SmartScreen.
 
-The packaged app keeps `RunAsNode` enabled because the bundled MCP server runs through the Electron binary. The remaining Electron fuses disable the `NODE_OPTIONS` and CLI inspect-argument escape hatches, load the application only from the ASAR archive, and remove extra file-protocol privileges. ASAR integrity validation stays off until the app is code signed.
+The packaged app keeps `RunAsNode` enabled because the bundled MCP server runs through the Electron binary. The remaining Electron fuses disable the `NODE_OPTIONS` and CLI inspect-argument escape hatches and load the application only from the ASAR archive. The file-protocol extra-privileges fuse stays at Electron's default (enabled): disabling it makes the packaged app's first `file://` load fail with `ERR_FILE_NOT_FOUND` on Electron 45. ASAR integrity validation stays off until the app is code signed.
 
 To add signing later:
 
@@ -128,9 +128,9 @@ Never commit certificates, passwords, API tokens or provisioning profiles.
 Use the GitHub API rather than the web UI for a reproducible receipt:
 
 ```sh
-gh release view studio-v0.6.0 --json tagName,isDraft,isPrerelease,assets,body
-gh release download studio-v0.6.0 --pattern SHA256SUMS.txt
-gh attestation verify IPloom-Studio-0.6.0-darwin-universal.dmg --repo j4tmr/iploom
+gh release view studio-v<version> --json tagName,isDraft,isPrerelease,assets,body
+gh release download studio-v<version> --pattern SHA256SUMS.txt
+gh attestation verify IPloom-Studio-<version>-darwin-universal.dmg --repo j4tmr/iploom
 ```
 
 Download at least one asset per platform, recompute its SHA-256, and compare it with the release checksum file. A tag, a green build or an uploaded artifact alone does not prove the downloaded file is intact.
