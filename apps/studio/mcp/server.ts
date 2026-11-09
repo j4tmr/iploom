@@ -48,6 +48,7 @@ import {
   type SearchHit,
   type StoryFaction,
   type StoryLocation,
+  type StoryObject,
   type StoryScene,
   type StoryUniverse,
   type StoryWork,
@@ -656,6 +657,9 @@ function worldStats(workspace: StudioWorkspace, worldId: string) {
     locations: workspace.locations.filter(
       (location) => location.universeId === worldId,
     ).length,
+    objects: workspace.storyObjects.filter(
+      (object) => object.universeId === worldId,
+    ).length,
     factions: workspace.factions.filter(
       (faction) => faction.universeId === worldId,
     ).length,
@@ -870,6 +874,20 @@ function locationView(location: StoryLocation) {
     summary: location.summary,
     atmosphere: location.atmosphere,
     visual_prompt: location.visualPrompt,
+  };
+}
+
+function storyObjectView(object: StoryObject) {
+  return {
+    id: object.id,
+    world_id: object.universeId,
+    name: object.name,
+    category: object.category,
+    summary: object.summary,
+    visual_prompt: object.visualPrompt,
+    source_notes: object.sourceNotes,
+    created_at: object.createdAt,
+    updated_at: object.updatedAt,
   };
 }
 
@@ -1418,7 +1436,7 @@ export function createStudioMcpServer(
     {
       title: "读取故事世界 / Read story world",
       description:
-        "读取一个故事世界的世界观，并分页返回其通用角色、地点、势力、传说、小说与关系；每一类都带 total 与 next_offset，且各自使用 offsets 中对应的分页起点。Read one story world and page through its reusable cast, locations, factions, lore, novels and relationships; every collection reports total and next_offset and uses its own offset from offsets.",
+        "读取一个故事世界的世界观，并分页返回其通用角色、地点、故事物件、势力、传说、小说与关系；每一类都带 total 与 next_offset，且各自使用 offsets 中对应的分页起点。Read one story world and page through its reusable cast, locations, story objects, factions, lore, novels and relationships; every collection reports total and next_offset and uses its own offset from offsets.",
       annotations: READ_ONLY_ANNOTATIONS,
     },
     z.object({
@@ -1428,6 +1446,7 @@ export function createStudioMcpServer(
           novels: pageOffsetSchema,
           characters: pageOffsetSchema,
           locations: pageOffsetSchema,
+          objects: pageOffsetSchema,
           factions: pageOffsetSchema,
           lore: pageOffsetSchema,
           relationships: pageOffsetSchema,
@@ -1437,6 +1456,7 @@ export function createStudioMcpServer(
           novels: 0,
           characters: 0,
           locations: 0,
+          objects: 0,
           factions: 0,
           lore: 0,
           relationships: 0,
@@ -1452,11 +1472,15 @@ export function createStudioMcpServer(
       const { workspace } = loaded;
       const world = findWorld(workspace, args.world_id);
       const meta = workspaceMeta(loaded);
-      const worldPayload = worldView(workspace, world);
       const compact = (value: object): Record<string, unknown> =>
         args.include_details
           ? (value as Record<string, unknown>)
           : compactRecord(value);
+      // The world payload shares the response budget with all seven
+      // collections. Clip its long text by default so one verbose world cannot
+      // push the whole response past the budget on its own; include_details
+      // returns every field in full.
+      const worldPayload = compact(worldView(workspace, world));
       let remaining = remainingBudget(meta, worldPayload);
       const take = <T>(
         items: readonly T[],
@@ -1486,7 +1510,7 @@ export function createStudioMcpServer(
           workspace.works.filter((novel) => novel.universeId === world.id),
           novelView,
           args.offsets.novels,
-          6,
+          7,
         ),
         characters: take(
           workspace.characters.filter((character) =>
@@ -1494,7 +1518,7 @@ export function createStudioMcpServer(
           ),
           characterView,
           args.offsets.characters,
-          5,
+          6,
         ),
         locations: take(
           workspace.locations.filter(
@@ -1502,6 +1526,14 @@ export function createStudioMcpServer(
           ),
           locationView,
           args.offsets.locations,
+          5,
+        ),
+        objects: take(
+          workspace.storyObjects.filter(
+            (object) => object.universeId === world.id,
+          ),
+          storyObjectView,
+          args.offsets.objects,
           4,
         ),
         factions: take(

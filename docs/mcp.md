@@ -23,7 +23,7 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 | Tool                     | Read-only | Purpose                                                                                                   |
 | ------------------------ | --------- | --------------------------------------------------------------------------------------------------------- |
 | `list_story_worlds`      | yes       | List universes and compact counts                                                                         |
-| `get_story_world`        | yes       | Read world rules, cast, places, factions, lore and relationships                                          |
+| `get_story_world`        | yes       | Read world rules, cast, places, story objects, factions, lore and relationships                           |
 | `list_novels`            | yes       | List novels, optionally filtered by universe                                                              |
 | `get_novel`              | yes       | Read novel metadata, chapter plans and statistics                                                         |
 | `get_chapter`            | yes       | Read a chapter's full prose, outline, beats and scenes                                                    |
@@ -60,9 +60,9 @@ Every collection response is a page rather than a bare array:
 ```
 
 - List tools accept `offset` and `limit` (default 20, maximum 200); `get_novel` also pages `chapters`, `list_standards` pages `standards`.
-- `get_story_world` pages six collections with one shared `limit` but independent offsets: pass `offsets` (for example `{"characters": 20, "lore": 40}`) so advancing one collection leaves the others on their own page. Omitted collections start at 0.
+- `get_story_world` pages seven collections (novels, characters, locations, story objects, factions, lore, relationships) with one shared `limit` but independent offsets: pass `offsets` (for example `{"characters": 20, "objects": 20, "lore": 40}`) so advancing one collection leaves the others on their own page. Omitted collections start at 0.
 - `get_relationship_graph` uses the same idea with top-level `nodes_offset` and `edges_offset`.
-- Default responses stay under a roughly 50 KB budget; a page carries fewer items when large entries would exceed it, so `count` can be below `limit`. Opt-ins that ask for a large payload — `list_standards` with `include_body`, or a `max_chars` far above the default — can push a single response past that budget.
+- Default responses stay under a roughly 50 KB budget; a page carries fewer items when large entries would exceed it, so `count` can be below `limit`. Opt-ins that ask for a large payload — `get_story_world` or `list_timeline_events` with `include_details`, `list_standards` with `include_body`, or a `max_chars` far above the default — can push a single response past that budget.
 - Follow `next_offset` until it is `null`; across all pages every item appears exactly once, and `total` does not change while the workspace revision does not change.
 - `search_ip` applies `world_id` and `kind` before ranking, so out-of-scope hits cannot crowd real matches out of the page.
 - `get_chapter` windows prose: pass `offset` and `max_chars` (default 6,000) and concatenate `content.text` until `content.next_offset` is `null` to rebuild the full chapter.
@@ -75,6 +75,8 @@ Every collection response is a page rather than a bare array:
 Responses echo the fields a client needs for the next call, not every nested list:
 
 - Entity views cap repeated identifiers at 20 items and add the true size alongside: `character_ids`/`character_id_count`, `depends_on_ids`/`depends_on_id_count`, `pinned_by_task_ids`/`pinned_by_task_count`.
+- `get_story_world` returns every stored story-object field: `id`, `world_id`, `name`, `category`, `summary`, `visual_prompt`, `source_notes`, `created_at` and `updated_at`. The default compact view clips long values and names them in `truncated_fields`; `include_details` returns them in full. Story objects are enumerable with `next_offset` alone, without a search keyword.
+- The world record in `get_story_world` follows the same rule: the default view clips long `name`, `tagline` and `summary` values and names them in `truncated_fields`, so one verbose world cannot consume the budget its seven collections share; `include_details` returns the world in full.
 - `list_timeline_events` orders events by chapter, in-world time, order and creation time; its default view clips long state, evidence and prompt fields and names them in `truncated_fields`, while `include_details` returns the full record.
 - `list_workflow_tasks` previews at most 10 unfinished prerequisites in `blockers` and reports the full number in `blocker_count`; the summary object counts all of them.
 - `get_workflow_result` is the one workflow read that returns stored text: without window arguments `result` (`{ zh, en }`) holds the current text in full and `previous_result` the first pre-change snapshot, or `null` when none exists. With `offset` / `result_offsets` and `max_chars`, each language becomes a surrogate-safe window (`text`, `total_chars`, `next_offset`, `truncated`) that continues per language, mirroring `get_standard`'s body windows. It never writes or bumps the revision, and each language is bounded by the stored 200,000-character cap.

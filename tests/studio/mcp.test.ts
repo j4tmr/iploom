@@ -133,7 +133,7 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     expect(world.isError).toBe(false);
     const worldData = world.body.world as {
       name: { zh: string; en: string };
-      stats: { characters: number; relationships: number };
+      stats: { characters: number; relationships: number; objects: number };
     };
     expect(worldData.name).toEqual({
       zh: "雾港",
@@ -142,7 +142,16 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     expect(worldData.stats).toMatchObject({
       characters: 4,
       relationships: 4,
+      objects: 3,
     });
+    // The stat is scoped to the requested world, not the whole workspace. Every
+    // demo object happens to live here, so a workspace-wide count would pass
+    // this assertion only by coincidence and would hide a per-world bug.
+    expect(worldData.stats.objects).toBe(
+      workspace.storyObjects.filter(
+        (object) => object.universeId === "uni_mist_harbor",
+      ).length,
+    );
     const worldCharacters = pageOf<{ reusable: boolean }>(
       world.body,
       "characters",
@@ -151,6 +160,65 @@ test("real stdio MCP exposes all Studio tools and writes readable ArcReel packag
     expect(
       worldCharacters.items.filter((character) => character.reusable),
     ).toHaveLength(2);
+
+    // Story objects are enumerable through their own offset alone, with every
+    // stored field readable and no search keyword involved.
+    interface WorldObjectView {
+      id: string;
+      world_id: string;
+      name: { zh: string; en: string };
+      category: { zh: string; en: string };
+      summary: { zh: string; en: string };
+      visual_prompt: string;
+      source_notes: string;
+      created_at: string;
+      updated_at: string;
+    }
+    const worldObjects: WorldObjectView[] = [];
+    let objectOffset = 0;
+    for (let guard = 0; guard < 10; guard += 1) {
+      const page = await call(client, "get_story_world", {
+        world_id: "uni_mist_harbor",
+        limit: 1,
+        offsets: { objects: objectOffset },
+      });
+      expect(page.isError).toBe(false);
+      const objects = pageOf<WorldObjectView>(page.body, "objects");
+      expect(objects.total).toBe(3);
+      worldObjects.push(...objects.items);
+      if (objects.next_offset === null) break;
+      objectOffset = objects.next_offset;
+    }
+    expect(worldObjects.map((object) => object.id)).toEqual([
+      "object_brass_key",
+      "object_archive_case",
+      "object_memory_ledger",
+    ]);
+    const brassKey = worldObjects[0]!;
+    expect(brassKey.world_id).toBe("uni_mist_harbor");
+    expect(brassKey.name).toEqual({
+      zh: "缺口铜钥匙",
+      en: "Notched Brass Key",
+    });
+    expect(brassKey.category.en).toBe("Clue / hand prop");
+    expect(brassKey.summary.en).toContain("tower key");
+    expect(brassKey.visual_prompt).toContain("old brass clock-tower key");
+    expect(brassKey.source_notes).toContain("Chapter 1");
+    expect(brassKey.created_at).toBe("2026-11-06T00:00:00.000Z");
+    expect(brassKey.updated_at).toBe("2026-11-06T00:00:00.000Z");
+
+    // A world with no story objects reports zero instead of leaking the
+    // workspace-wide count into its stats or its objects page.
+    const emptyWorld = await call(client, "get_story_world", {
+      world_id: "uni_ninth_station",
+    });
+    expect(emptyWorld.isError).toBe(false);
+    const emptyObjects = pageOf<WorldObjectView>(emptyWorld.body, "objects");
+    expect(emptyObjects.total).toBe(0);
+    expect(emptyObjects.items).toHaveLength(0);
+    expect(
+      (emptyWorld.body.world as { stats: { objects: number } }).stats.objects,
+    ).toBe(0);
 
     const novels = await call(client, "list_novels", {
       world_id: "uni_mist_harbor",
