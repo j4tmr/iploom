@@ -1,4 +1,4 @@
-export const WORKSPACE_SCHEMA_VERSION = 8 as const;
+export const WORKSPACE_SCHEMA_VERSION = 9 as const;
 export const ARC_REEL_SCHEMA = "iploom.arcreel/v1" as const;
 /** Longest result text the workspace stores per language. */
 export const MAX_WORKFLOW_RESULT_LENGTH = 200_000 as const;
@@ -376,6 +376,63 @@ export interface ItemStatTemplate {
   updatedAt: string;
 }
 
+export type CardFieldType = "integer" | "decimal" | "text" | "enum";
+
+/**
+ * One typed value a card type defines. Instances fill it by key, so the same
+ * set of fields can describe many cards without a new entity kind per shape.
+ */
+export interface CardField {
+  key: string;
+  label: LocalizedText;
+  type: CardFieldType;
+  unit: string;
+  min?: number;
+  max?: number;
+  enumValues: string[];
+  defaultValue?: number | string;
+}
+
+/** A user-defined card shape: a name plus the fields every card carries. */
+export interface CardType {
+  id: string;
+  name: LocalizedText;
+  summary: LocalizedText;
+  color: string;
+  fields: CardField[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** One instance of a card type, with a value per field key. */
+export interface Card {
+  id: string;
+  typeId: string;
+  title: LocalizedText;
+  values: Record<string, number | string>;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A labelled relation between two cards of any type. */
+export interface CardEdge {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  label: LocalizedText;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A quick construct this workspace has applied, newest last used first. */
+export interface AppliedConstruct {
+  id: string;
+  name: LocalizedText;
+  appliedAt: string;
+}
+
 /** Metadata about the model run that produced a task's current result. */
 export interface WorkflowTaskRunMeta {
   model: string;
@@ -443,6 +500,10 @@ export interface StudioWorkspace {
   ruleSystems: RuleSystem[];
   abilityTemplates: AbilityTemplate[];
   itemStatTemplates: ItemStatTemplate[];
+  cardTypes: CardType[];
+  cards: Card[];
+  cardEdges: CardEdge[];
+  constructs: AppliedConstruct[];
   universes: StoryUniverse[];
   characters: Character[];
   locations: StoryLocation[];

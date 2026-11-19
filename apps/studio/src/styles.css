@@ -5843,3 +5843,450 @@ fieldset.field > legend {
     display: none;
   }
 }
+
+/* Node cards ------------------------------------------------------------- */
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.color-input {
+  width: 100%;
+  max-width: 120px;
+  height: 38px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.cards-view {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.cards-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.cards-head h1 {
+  margin: 6px 0 8px;
+}
+
+.cards-head p {
+  max-width: 640px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.cards-head-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.empty-action-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.cards-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.card-type-rail {
+  position: sticky;
+  top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card-type-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.card-type-chip i {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+}
+
+.card-type-chip span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.card-type-chip small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.card-type-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-pale);
+}
+
+.card-type-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+}
+
+.card-type-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.card-type-mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 10px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.card-type-copy {
+  flex: 1;
+  min-width: 160px;
+}
+
+.card-type-copy h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.card-type-copy p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.card-type-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.card-field-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.card-field-strip-label {
+  margin-right: 4px;
+  color: var(--muted-2);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.card-field-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper-raised);
+  font-size: 10px;
+}
+
+.card-field-chip small {
+  margin-left: 4px;
+  color: var(--muted);
+}
+
+.card-field-chip.muted {
+  color: var(--muted-2);
+}
+
+.card-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-raised);
+}
+
+.card-row-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+}
+
+.card-row-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.card-row-values {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.card-value {
+  white-space: nowrap;
+}
+
+.card-value.muted {
+  color: var(--muted-2);
+}
+
+.card-row-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.card-row:hover .card-row-actions,
+.card-row:focus-within .card-row-actions {
+  opacity: 1;
+}
+
+.card-edge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card-edge-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 9px;
+  font-size: 11px;
+}
+
+.card-edge-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--copper);
+}
+
+.card-edge-card {
+  font-weight: 600;
+}
+
+.card-edge-row .icon-button {
+  margin-left: auto;
+}
+
+.card-field-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.card-field-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  align-items: end;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.card-field-row .field {
+  min-width: 0;
+}
+
+.card-field-row .field-wide {
+  grid-column: 1 / -1;
+}
+
+.construct-section .section-lead {
+  max-width: 720px;
+  margin: -2px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+.construct-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.construct-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 190px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+}
+
+.construct-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.construct-glyph {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.construct-card h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.construct-card p {
+  flex: 1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.construct-card .button {
+  align-self: flex-start;
+}
+
+.construct-card.used {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+
+.construct-card.custom {
+  border-style: dashed;
+  background: transparent;
+}
+
+.construct-used-on {
+  color: var(--muted-2);
+  font-size: 10px;
+}
+
+.construct-preview {
+  display: flex;
+  gap: 22px;
+  margin-bottom: 16px;
+}
+
+.construct-preview strong {
+  margin-right: 4px;
+  font-size: 20px;
+}
+
+.construct-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.construct-type-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.construct-type-list i {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  margin-top: 5px;
+  border-radius: 50%;
+}
+
+.construct-type-list span {
+  display: flex;
+  flex-direction: column;
+}
+
+.construct-type-list small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .cards-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .card-type-rail {
+    position: static;
+  }
+}

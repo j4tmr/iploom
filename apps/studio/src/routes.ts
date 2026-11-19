@@ -8,6 +8,7 @@ export type StudioRoute =
     }
   | { name: "work"; workId: string }
   | { name: "cast"; universeId?: string }
+  | { name: "cards" }
   | { name: "graph"; universeId?: string }
   | { name: "timeline"; universeId?: string }
   | { name: "workflow" }

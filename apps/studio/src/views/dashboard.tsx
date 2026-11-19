@@ -1,3 +1,4 @@
+import { appliedConstructs, BUILT_IN_CONSTRUCTS } from "../core/cards.ts";
 import { displayText, workWords, workspaceStats } from "../core/factory.ts";
 import type {
   StoryUniverse,
@@ -24,6 +25,9 @@ export function Dashboard({
   onOpenWork,
   onNewWorld,
   onNewNovel,
+  onApplyConstruct,
+  onOpenCards,
+  onNewCardType,
 }: {
   workspace: StudioWorkspace;
   locale: UiLocale;
@@ -32,8 +36,18 @@ export function Dashboard({
   onOpenWork: (workId: string) => void;
   onNewWorld: () => void;
   onNewNovel: () => void;
+  onApplyConstruct: (constructId: string) => void;
+  onOpenCards: () => void;
+  onNewCardType: () => void;
 }) {
   const stats = workspaceStats(workspace);
+  const usedConstructs = appliedConstructs(workspace).map((applied) => ({
+    applied,
+    builtIn: BUILT_IN_CONSTRUCTS.find((item) => item.id === applied.id),
+  }));
+  const unusedConstructs = BUILT_IN_CONSTRUCTS.filter(
+    (item) => !workspace.constructs.some((applied) => applied.id === item.id),
+  );
   const recentWorks = [...workspace.works]
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, 4);
@@ -128,6 +142,75 @@ export function Dashboard({
             </span>
           </article>
         ))}
+      </section>
+
+      <section className="construct-section">
+        <SectionTitle
+          eyebrow="CONSTRUCTS / 快速构造"
+          title={t("constructQuickStart")}
+        >
+          <Button variant="ghost" icon="layers" onClick={onOpenCards}>
+            {t("constructOpenCards")}
+          </Button>
+        </SectionTitle>
+        <p className="section-lead">{t("constructQuickStartLead")}</p>
+        <div className="construct-grid">
+          {usedConstructs.map(({ applied, builtIn }) => (
+            <article className="construct-card used" key={applied.id}>
+              <span className="construct-card-top">
+                <span className="construct-glyph">
+                  {displayText(applied.name, locale).slice(0, 1)}
+                </span>
+                <Badge tone="green" dot>
+                  {t("constructAlreadyApplied")}
+                </Badge>
+              </span>
+              <h3>{displayText(applied.name, locale)}</h3>
+              <p>
+                {builtIn
+                  ? displayText(builtIn.summary, locale)
+                  : t("cardsTitle")}
+              </p>
+              <span className="construct-used-on">
+                {t("constructUsedOn", {
+                  date: new Date(applied.appliedAt).toLocaleDateString(locale),
+                })}
+              </span>
+              <Button icon="arrow" onClick={onOpenCards}>
+                {t("constructOpenCards")}
+              </Button>
+            </article>
+          ))}
+          {unusedConstructs.map((construct) => (
+            <article className="construct-card" key={construct.id}>
+              <span className="construct-card-top">
+                <span className="construct-glyph">
+                  {displayText(construct.name, locale).slice(0, 1)}
+                </span>
+                <Badge tone="violet">NEW</Badge>
+              </span>
+              <h3>{displayText(construct.name, locale)}</h3>
+              <p>{displayText(construct.summary, locale)}</p>
+              <Button
+                variant="primary"
+                icon="sparkles"
+                onClick={() => onApplyConstruct(construct.id)}
+              >
+                {t("constructApply")}
+              </Button>
+            </article>
+          ))}
+          <article className="construct-card custom">
+            <span className="construct-card-top">
+              <span className="construct-glyph">+</span>
+            </span>
+            <h3>{t("cardsNewType")}</h3>
+            <p>{t("constructCustomHint")}</p>
+            <Button icon="plus" onClick={onNewCardType}>
+              {t("cardsNewType")}
+            </Button>
+          </article>
+        </div>
       </section>
 
       {!workspace.universes.length ? (
