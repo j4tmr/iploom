@@ -64,6 +64,10 @@ import {
 } from "./core/overlay-stack.ts";
 import type { StandardCandidate } from "./core/standards.ts";
 import { removeSceneReferences } from "./core/timeline.ts";
+import {
+  applyWorldTemplate,
+  findWorldTemplate,
+} from "./core/world-templates.ts";
 import type {
   ArcReelBundle,
   Card,
@@ -100,18 +104,14 @@ import {
   translator,
 } from "./i18n.ts";
 import { type AppInfo, bridge } from "./platform.ts";
-import type { StudioRoute } from "./routes.ts";
+import type { StudioRoute, UniverseTab } from "./routes.ts";
 import { prepareSnapshot } from "./snapshot-guard.ts";
 import { applyTheme, useStudioWorkspace } from "./use-studio-workspace.ts";
 import { describeWorkspaceProblem } from "./validation-message.ts";
-import { CastLibrary } from "./views/cast-library.tsx";
 import { Dashboard } from "./views/dashboard.tsx";
 import { ExportsView } from "./views/exports-view.tsx";
-import { FoundationView } from "./views/foundation-view.tsx";
 import { LibraryView } from "./views/library-view.tsx";
-import { RelationshipsView } from "./views/relationships-view.tsx";
 import { SettingsView } from "./views/settings-view.tsx";
-import { TimelineView } from "./views/timeline-view.tsx";
 import { UniverseView } from "./views/universe-view.tsx";
 import { WorkView } from "./views/work-view.tsx";
 import { WorkflowView } from "./views/workflow-view.tsx";
@@ -119,7 +119,7 @@ import { describeResetFailure } from "./workspace-errors.ts";
 
 type ModalState =
   | { kind: "import" }
-  | { kind: "world"; initial?: StoryUniverse }
+  | { kind: "world"; initial?: StoryUniverse; templateId?: string }
   | { kind: "novel"; universeId?: string; initial?: StoryWork }
   | { kind: "character"; initial?: Character; universeId?: string }
   | { kind: "relationship"; universeId: string; initial?: Relationship }
@@ -146,7 +146,7 @@ type ModalState =
       workId?: string;
     }
   | { kind: "mcp" }
-  | { kind: "standard"; initial?: WorkspaceStandard }
+  | { kind: "standard"; initial?: WorkspaceStandard; universeId?: string }
   | { kind: "cardType"; universeId: string; initial?: CardType }
   | { kind: "card"; typeId: string; initial?: Card }
   | { kind: "cardBatch"; typeId: string }
@@ -227,7 +227,6 @@ export function App() {
         target.name === "dashboard" ||
         target.name === "library" ||
         target.name === "workflow" ||
-        target.name === "foundation" ||
         target.name === "exports" ||
         target.name === "settings"
       ) {
@@ -236,26 +235,10 @@ export function App() {
         navigate({
           name: "universe",
           id: target.params.id,
-          tab: target.params.tab as
-            | "overview"
-            | "cast"
-            | "atlas"
-            | "graph"
-            | "stories"
-            | "nodes"
-            | undefined,
+          tab: target.params.tab as UniverseTab | undefined,
         });
       } else if (target.name === "work" && target.params?.workId) {
         navigate({ name: "work", workId: target.params.workId });
-      } else if (
-        target.name === "cast" ||
-        target.name === "graph" ||
-        target.name === "timeline"
-      ) {
-        navigate({
-          name: target.name,
-          universeId: target.params?.universeId,
-        });
       }
     });
   }, [navigate]);
@@ -328,18 +311,10 @@ export function App() {
         eyebrow: "NOVEL / 小说",
         title: displayText(work.title, locale),
       };
-    if (route.name === "cast")
-      return { eyebrow: "CAST SYSTEM / 人物系统", title: t("cast") };
     if (route.name === "library")
       return { eyebrow: "LIBRARY / 小说书架", title: t("library") };
-    if (route.name === "graph")
-      return { eyebrow: "RELATION MAP / 关系图", title: t("relationships") };
-    if (route.name === "timeline")
-      return { eyebrow: "STORY STATE / 故事状态", title: t("timeline") };
     if (route.name === "workflow")
       return { eyebrow: "AI WORKFLOW / 创作流水线", title: t("workflow") };
-    if (route.name === "foundation")
-      return { eyebrow: "FOUNDATION / 基础规则", title: t("foundation") };
     if (route.name === "exports")
       return { eyebrow: "ARCREEL / 漫剧交付", title: t("exports") };
     if (route.name === "settings")
@@ -366,16 +341,30 @@ export function App() {
     return false;
   };
 
-  const saveUniverse = (next: StoryUniverse): boolean => {
+  const saveUniverse = (next: StoryUniverse, templateId?: string): boolean => {
     const exists = workspace.universes.some((item) => item.id === next.id);
+    let seeded = false;
     const applied = mutateChecked((draft) => {
       const index = draft.universes.findIndex((item) => item.id === next.id);
       if (index >= 0) draft.universes[index] = next;
-      else draft.universes.push(next);
+      else {
+        draft.universes.push(next);
+        // Seeding runs in the same mutation as the insert, so the workspace
+        // either takes the world and its template records together or not at
+        // all. Templates never touch a world that already exists.
+        if (templateId) seeded = applyWorldTemplate(draft, templateId, next.id);
+      }
     });
     if (!applied) return false;
     if (!exists) navigate({ name: "universe", id: next.id });
-    notify(t("saved"));
+    const template = seeded ? findWorldTemplate(templateId) : undefined;
+    notify(
+      template
+        ? t("worldCreatedFromTemplate", {
+            name: displayText(template.name, locale),
+          })
+        : t("saved"),
+    );
     return true;
   };
 
@@ -765,7 +754,10 @@ export function App() {
     });
   };
 
-  const registerStandardCandidates = (candidates: StandardCandidate[]) => {
+  const registerStandardCandidates = (
+    candidates: StandardCandidate[],
+    universeId?: string,
+  ) => {
     if (candidates.length === 0) return;
     const room = Math.max(0, 1_000 - workspace.standards.length);
     const accepted = candidates.slice(0, room);
@@ -786,6 +778,7 @@ export function App() {
           body: candidate.body,
           status: "draft",
           version: 1,
+          ...(universeId ? { universeId } : {}),
           createdAt: now,
           updatedAt: now,
         });
@@ -996,21 +989,17 @@ export function App() {
         });
     } else if (hit.kind === "object") {
       const object = workspace.storyObjects.find((item) => item.id === hit.id);
-      navigate({ name: "timeline", universeId: hit.universeId });
+      navigate({ name: "universe", id: hit.universeId, tab: "timeline" });
       if (object) setModal({ kind: "object", initial: object });
     } else if (hit.kind === "timeline") {
       const event = workspace.timelineEvents.find((item) => item.id === hit.id);
-      navigate({ name: "timeline", universeId: hit.universeId });
+      navigate({ name: "universe", id: hit.universeId, tab: "timeline" });
       if (event) setModal({ kind: "timeline", initial: event });
     }
   };
 
   const defaultUniverseId =
-    route.name === "universe"
-      ? route.id
-      : route.name === "timeline"
-        ? route.universeId
-        : work?.universeId;
+    route.name === "universe" ? route.id : work?.universeId;
   const chapterModalWork =
     modal?.kind === "chapter"
       ? workspace.works.find((item) => item.id === modal.workId)
@@ -1097,9 +1086,9 @@ export function App() {
               onOpenUniverse={(item) =>
                 navigate({ name: "universe", id: item.id })
               }
-              onOpenWork={(workId) => navigate({ name: "work", workId })}
-              onNewWorld={() => setModal({ kind: "world" })}
-              onNewNovel={() => setModal({ kind: "novel" })}
+              onNewWorld={(templateId) =>
+                setModal({ kind: "world", templateId })
+              }
             />
           ) : null}
 
@@ -1118,7 +1107,8 @@ export function App() {
             <UniverseView
               workspace={workspace}
               universe={universe}
-              initialTab={route.tab}
+              tab={route.tab ?? "overview"}
+              onTabChange={(tab) => replaceRoute({ ...route, tab })}
               locale={locale}
               t={t}
               onBack={back}
@@ -1161,6 +1151,13 @@ export function App() {
               onAddRelationship={() =>
                 setModal({ kind: "relationship", universeId: universe.id })
               }
+              onEditRelationship={(initial) =>
+                setModal({
+                  kind: "relationship",
+                  universeId: initial.universeId,
+                  initial,
+                })
+              }
               onDeleteRelationship={(id) => {
                 if (window.confirm(t("confirmDelete")))
                   mutate((draft) => {
@@ -1169,6 +1166,29 @@ export function App() {
                     );
                   });
               }}
+              onNewEvent={(universeId, workId) =>
+                setModal({ kind: "timeline", universeId, workId })
+              }
+              onEditEvent={(initial) => setModal({ kind: "timeline", initial })}
+              onDeleteEvent={deleteTimelineEvent}
+              onNewObject={() =>
+                setModal({ kind: "object", universeId: universe.id })
+              }
+              onEditObject={(initial) => setModal({ kind: "object", initial })}
+              onDeleteObject={deleteObject}
+              aiInfo={aiInfo}
+              onNewStandard={() =>
+                setModal({ kind: "standard", universeId: universe.id })
+              }
+              onEditStandard={(initial) =>
+                setModal({ kind: "standard", initial })
+              }
+              onStatusChange={changeStandardStatus}
+              onRegisterCandidates={(candidates) =>
+                registerStandardCandidates(candidates, universe.id)
+              }
+              onOpenWorkflow={() => navigate({ name: "workflow" })}
+              onOpenSettings={() => navigate({ name: "settings" })}
               onNewCardType={() =>
                 setModal({ kind: "cardType", universeId: universe.id })
               }
@@ -1227,8 +1247,9 @@ export function App() {
               }
               onOpenTimeline={(chapterId) => {
                 navigate({
-                  name: "timeline",
-                  universeId: work.universeId,
+                  name: "universe",
+                  id: work.universeId,
+                  tab: "timeline",
                 });
                 setModal({
                   kind: "timeline",
@@ -1245,71 +1266,6 @@ export function App() {
             />
           ) : null}
 
-          {route.name === "cast" ? (
-            <CastLibrary
-              workspace={workspace}
-              locale={locale}
-              t={t}
-              onNewCharacter={() =>
-                setModal({ kind: "character", universeId: defaultUniverseId })
-              }
-              onEditCharacter={(character) =>
-                setModal({ kind: "character", initial: character })
-              }
-              onOpenUniverse={(id) => navigate({ name: "universe", id })}
-            />
-          ) : null}
-
-          {route.name === "graph" ? (
-            <RelationshipsView
-              onEditRelationship={(initial) =>
-                setModal({
-                  kind: "relationship",
-                  universeId: initial.universeId,
-                  initial,
-                })
-              }
-              workspace={workspace}
-              locale={locale}
-              t={t}
-              initialUniverseId={route.universeId}
-              onAddRelationship={(universeId) =>
-                setModal({ kind: "relationship", universeId })
-              }
-              onDeleteRelationship={(id) => {
-                if (window.confirm(t("confirmDelete")))
-                  mutate((draft) => {
-                    draft.relationships = draft.relationships.filter(
-                      (item) => item.id !== id,
-                    );
-                  });
-              }}
-              onEditCharacter={(character) =>
-                setModal({ kind: "character", initial: character })
-              }
-            />
-          ) : null}
-
-          {route.name === "timeline" ? (
-            <TimelineView
-              workspace={workspace}
-              locale={locale}
-              t={t}
-              initialUniverseId={route.universeId ?? defaultUniverseId}
-              onNewEvent={(universeId, workId) =>
-                setModal({ kind: "timeline", universeId, workId })
-              }
-              onEditEvent={(initial) => setModal({ kind: "timeline", initial })}
-              onDeleteEvent={deleteTimelineEvent}
-              onNewObject={(universeId) =>
-                setModal({ kind: "object", universeId })
-              }
-              onEditObject={(initial) => setModal({ kind: "object", initial })}
-              onDeleteObject={deleteObject}
-              onOpenWork={(workId) => navigate({ name: "work", workId })}
-            />
-          ) : null}
-
           {route.name === "exports" ? (
             <ExportsView
               workspace={workspace}
@@ -1317,23 +1273,6 @@ export function App() {
               t={t}
               onNotify={(message) => notify(message, "error")}
               onOpenWork={(workId) => navigate({ name: "work", workId })}
-            />
-          ) : null}
-
-          {route.name === "foundation" ? (
-            <FoundationView
-              workspace={workspace}
-              locale={locale}
-              t={t}
-              aiInfo={aiInfo}
-              onNewStandard={() => setModal({ kind: "standard" })}
-              onEditStandard={(initial) =>
-                setModal({ kind: "standard", initial })
-              }
-              onStatusChange={changeStandardStatus}
-              onRegisterCandidates={registerStandardCandidates}
-              onOpenWorkflow={() => navigate({ name: "workflow" })}
-              onOpenSettings={() => navigate({ name: "settings" })}
             />
           ) : null}
 
@@ -1443,13 +1382,14 @@ export function App() {
       ) : null}
       {modal?.kind === "world" ? (
         <UniverseModal
-          key={`world-${modal.initial?.id ?? "new"}`}
+          key={`world-${modal.initial?.id ?? "new"}-${modal.templateId ?? ""}`}
           open
           onClose={() => setModal(null)}
           t={t}
           locale={locale}
           initial={modal.initial}
-          onSave={saveUniverse}
+          templateId={modal.templateId}
+          onSave={(next, templateId) => saveUniverse(next, templateId)}
         />
       ) : null}
       {modal?.kind === "novel" ? (
@@ -1560,6 +1500,7 @@ export function App() {
           locale={locale}
           workspace={workspace}
           initial={modal.initial}
+          defaultUniverseId={modal.universeId}
           onSave={saveStandard}
         />
       ) : null}

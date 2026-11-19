@@ -202,6 +202,51 @@ test("a changed initialUniverseId re-selects the universe and clears the novel f
   ).toBe("");
 });
 
+test("locked mode drops the universe picker and page heading but keeps creation on the world", () => {
+  const { view, onNewEvent } = renderTimeline(createDemoWorkspace("en"), {
+    lockedUniverseId: "uni_mist_harbor",
+  });
+  expect(
+    view.container.querySelector(".timeline-view.embedded"),
+  ).not.toBeNull();
+  expect(
+    view.container.querySelector(".timeline-embedded-head"),
+  ).not.toBeNull();
+  expect(
+    view.queryByRole("combobox", { name: t("timelineUniverseLabel") }),
+  ).toBeNull();
+  expect(
+    view.queryByRole("heading", { level: 1, name: t("timelineHeading") }),
+  ).toBeNull();
+  // The embedded timeline still shows the locked world's events.
+  expect(view.container.querySelectorAll(".timeline-event").length).toBe(4);
+
+  fireEvent.click(view.getByRole("button", { name: t("timelineAddEvent") }));
+  expect(onNewEvent).toHaveBeenCalledWith("uni_mist_harbor", undefined);
+});
+
+test("the locked universe wins over internal selection and follows changes", () => {
+  const { view, rerender, onNewEvent } = renderTimeline(
+    createDemoWorkspace("en"),
+    {
+      initialUniverseId: "uni_mist_harbor",
+      lockedUniverseId: "uni_mist_harbor",
+    },
+  );
+  const novel = () =>
+    view.getByRole("combobox", { name: t("novel") }) as HTMLSelectElement;
+  fireEvent.change(novel(), { target: { value: "work_tide_clock" } });
+  expect(novel().value).toBe("work_tide_clock");
+
+  rerender({ lockedUniverseId: "uni_ninth_station" });
+  expect(novel().value).toBe("");
+  expect(view.container.querySelectorAll(".timeline-event").length).toBe(0);
+  expect(view.getByText(t("timelineNoEvents"))).toBeDefined();
+
+  fireEvent.click(view.getByRole("button", { name: t("timelineAddEvent") }));
+  expect(onNewEvent).toHaveBeenCalledWith("uni_ninth_station", undefined);
+});
+
 test("event cards wire edit, delete and work anchors", () => {
   const { view, onEditEvent, onDeleteEvent, onOpenWork } = renderTimeline(
     createDemoWorkspace("en"),

@@ -31,13 +31,11 @@ export function Sidebar({
   t: Translate;
   onNavigate: (route: StudioRoute) => void;
 }) {
+  // Workspace-level tools only. Cast, relationships, timeline and foundation
+  // rules are world-scoped and live on the world detail tab bar instead.
   const nav: NavItem[] = [
     { route: "dashboard", label: t("dashboard"), icon: "grid" },
     { route: "library", label: t("library"), icon: "book" },
-    { route: "cast", label: t("cast"), icon: "users" },
-    { route: "graph", label: t("relationships"), icon: "graph" },
-    { route: "timeline", label: t("timeline"), icon: "timeline" },
-    { route: "foundation", label: t("foundation"), icon: "layers" },
     { route: "workflow", label: t("workflow"), icon: "sparkles" },
     { route: "exports", label: t("exports"), icon: "package" },
   ];

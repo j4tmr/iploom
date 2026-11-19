@@ -81,14 +81,16 @@ tests/studio/               domain, persistence and real stdio MCP tests
 
 ## UI
 
-The renderer uses React 19 and Vite. It has no router package; navigation is typed in `routes.ts`. The app supports light/dark/system themes and Chinese/English UI copy.
+The renderer uses React 19 and Vite. It has no router package; navigation is typed in `routes.ts`. The shell keeps only project-level destinations — worlds home, novels, AI workflow, handoff and settings — while cast, relationships, timeline and foundation standards live on a world's detail tabs. The app supports light/dark/system themes and Chinese/English UI copy.
 
 For a visual check:
 
 ```sh
-IPLOOM_STUDIO_SMOKE_SCREENSHOT="$PWD/docs/images/dashboard.png" \
+IPLOOM_STUDIO_SMOKE_SCREENSHOT="$PWD/docs/images/workflow.png" \
   bun run studio:smoke
 ```
+
+The smoke run finishes on the AI workflow view — after the production and import scenarios — so its screenshot captures that screen, not the worlds home. The images in `docs/images/` are captured at a 1440×888 content size with the Chinese UI in the light theme.
 
 ## Packaging
 

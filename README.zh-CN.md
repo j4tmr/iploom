@@ -9,7 +9,7 @@
 
 IPloom Studio 是一个本地优先的桌面创作工作区。它把故事世界、可复用人物、关系图谱、小说、章节和漫剧改编资料放在同一套可追溯结构里。支持 macOS 与 Windows；内容保存在本机；本地 MCP 客户端可以读取同一份事实来源。
 
-![IPloom Studio 总览](docs/images/dashboard.png)
+![IPloom Studio 世界主页](docs/images/dashboard.png)
 
 ![IPloom Studio AI 工作流](docs/images/workflow.png)
 

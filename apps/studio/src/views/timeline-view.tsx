@@ -39,6 +39,7 @@ export function TimelineView({
   locale,
   t,
   initialUniverseId,
+  lockedUniverseId,
   onNewEvent,
   onEditEvent,
   onDeleteEvent,
@@ -51,6 +52,12 @@ export function TimelineView({
   locale: UiLocale;
   t: Translate;
   initialUniverseId?: string;
+  /**
+   * Set when this view renders inside a world's detail tab: the world comes
+   * from the page, the universe picker disappears, and the timeline can never
+   * drift to a different world than the one the user opened.
+   */
+  lockedUniverseId?: string;
   onNewEvent: (universeId: string, workId?: string) => void;
   onEditEvent: (event: TimelineEvent) => void;
   onDeleteEvent: (event: TimelineEvent) => void;
@@ -81,19 +88,23 @@ export function TimelineView({
     setUniverseId(initialUniverseId);
     setWorkId("");
   }, [initialUniverseId]);
+  useEffect(() => {
+    if (lockedUniverseId) setWorkId("");
+  }, [lockedUniverseId]);
+  const activeUniverseId = lockedUniverseId ?? universeId;
 
   const works = workspace.works.filter(
-    (item) => item.universeId === universeId,
+    (item) => item.universeId === activeUniverseId,
   );
   const objects = workspace.storyObjects.filter(
-    (item) => item.universeId === universeId,
+    (item) => item.universeId === activeUniverseId,
   );
   const events = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     return sortTimelineEvents(
       workspace,
       workspace.timelineEvents.filter((event) => {
-        if (event.universeId !== universeId) return false;
+        if (event.universeId !== activeUniverseId) return false;
         if (workId && event.workId !== workId) return false;
         if (subjectKind !== "all" && event.subjectKind !== subjectKind)
           return false;
@@ -116,14 +127,22 @@ export function TimelineView({
           .includes(needle);
       }),
     );
-  }, [canonStatus, locale, query, subjectKind, universeId, workId, workspace]);
+  }, [
+    activeUniverseId,
+    canonStatus,
+    locale,
+    query,
+    subjectKind,
+    workId,
+    workspace,
+  ]);
 
   const canonCount = events.filter(
     (event) => event.canonStatus === "canon",
   ).length;
   const objectUsage = new Map<string, number>();
   for (const event of workspace.timelineEvents) {
-    if (event.universeId !== universeId) continue;
+    if (event.universeId !== activeUniverseId) continue;
     for (const id of event.relatedObjectIds) {
       objectUsage.set(id, (objectUsage.get(id) ?? 0) + 1);
     }
@@ -151,38 +170,62 @@ export function TimelineView({
   };
 
   return (
-    <div className="view timeline-view">
-      <header className="page-heading timeline-heading">
-        <div>
+    <div
+      className={
+        lockedUniverseId ? "timeline-view embedded" : "view timeline-view"
+      }
+    >
+      {lockedUniverseId ? (
+        <div className="timeline-embedded-head">
           <span className="eyebrow">STORY STATE ENGINE / 故事状态引擎</span>
-          <h1>{t("timelineHeading")}</h1>
-          <p>{t("timelineLead")}</p>
+          <Button
+            variant="primary"
+            icon="plus"
+            disabled={!activeUniverseId}
+            onClick={() => onNewEvent(activeUniverseId, workId || undefined)}
+          >
+            {t("timelineAddEvent")}
+          </Button>
         </div>
-        <Button
-          variant="primary"
-          icon="plus"
-          disabled={!universeId}
-          onClick={() => onNewEvent(universeId, workId || undefined)}
-        >
-          {t("timelineAddEvent")}
-        </Button>
-      </header>
+      ) : (
+        <header className="page-heading timeline-heading">
+          <div>
+            <span className="eyebrow">STORY STATE ENGINE / 故事状态引擎</span>
+            <h1>{t("timelineHeading")}</h1>
+            <p>{t("timelineLead")}</p>
+          </div>
+          <Button
+            variant="primary"
+            icon="plus"
+            disabled={!activeUniverseId}
+            onClick={() => onNewEvent(activeUniverseId, workId || undefined)}
+          >
+            {t("timelineAddEvent")}
+          </Button>
+        </header>
+      )}
 
-      <section className="timeline-toolbar">
-        <Select
-          aria-label={t("timelineUniverseLabel")}
-          value={universeId}
-          onChange={(event) => {
-            setUniverseId(event.target.value);
-            setWorkId("");
-          }}
-        >
-          {workspace.universes.map((item) => (
-            <option key={item.id} value={item.id}>
-              {displayText(item.name, locale)}
-            </option>
-          ))}
-        </Select>
+      <section
+        className={
+          lockedUniverseId ? "timeline-toolbar locked" : "timeline-toolbar"
+        }
+      >
+        {lockedUniverseId ? null : (
+          <Select
+            aria-label={t("timelineUniverseLabel")}
+            value={universeId}
+            onChange={(event) => {
+              setUniverseId(event.target.value);
+              setWorkId("");
+            }}
+          >
+            {workspace.universes.map((item) => (
+              <option key={item.id} value={item.id}>
+                {displayText(item.name, locale)}
+              </option>
+            ))}
+          </Select>
+        )}
         <Select
           aria-label={t("novel")}
           value={workId}
@@ -365,8 +408,10 @@ export function TimelineView({
                 <Button
                   variant="primary"
                   icon="plus"
-                  disabled={!universeId}
-                  onClick={() => onNewEvent(universeId, workId || undefined)}
+                  disabled={!activeUniverseId}
+                  onClick={() =>
+                    onNewEvent(activeUniverseId, workId || undefined)
+                  }
                 >
                   {t("timelineCreateFirst")}
                 </Button>
@@ -386,8 +431,8 @@ export function TimelineView({
             <IconButton
               label={t("timelineNewProp")}
               icon="plus"
-              disabled={!universeId}
-              onClick={() => onNewObject(universeId)}
+              disabled={!activeUniverseId}
+              onClick={() => onNewObject(activeUniverseId)}
             />
           </div>
           <p>{t("timelineObjectsLead")}</p>
@@ -418,8 +463,8 @@ export function TimelineView({
               <button
                 type="button"
                 className="timeline-object-empty"
-                disabled={!universeId}
-                onClick={() => onNewObject(universeId)}
+                disabled={!activeUniverseId}
+                onClick={() => onNewObject(activeUniverseId)}
               >
                 <Icon name="package" size={24} />
                 <span>{t("timelineAddFirstProp")}</span>

@@ -900,6 +900,67 @@ fieldset.field > legend {
   gap: 16px;
 }
 
+/* Starting-template picker inside the create-world dialog */
+.template-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--paper) 70%, transparent);
+}
+
+.template-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.template-options .template-chip {
+  position: relative;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--panel);
+  color: var(--ink-soft);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.template-options .template-chip:hover {
+  border-color: var(--line-strong);
+}
+
+.template-options .template-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-pale);
+  color: var(--accent-strong);
+  font-weight: 650;
+}
+
+.template-options .template-chip:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.template-options input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.template-picker-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9.5px;
+  line-height: 1.65;
+}
+
 .color-input {
   width: 100%;
   height: 36px;
@@ -1572,56 +1633,111 @@ fieldset.field > legend {
   stroke: none;
 }
 
-.stat-strip {
+/* Template gallery — the starting points a new world can be built from */
+.template-gallery-lead {
+  max-width: 720px;
+  margin: -6px 0 14px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.template-gallery {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  margin: 15px 0 31px;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: 12px;
+}
+
+.template-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 17px 17px 14px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel);
   box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    transform 140ms ease;
 }
 
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  min-width: 0;
-  padding: 14px 18px;
-  border-right: 1px solid var(--line);
+.template-card:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--accent-card, var(--accent)) 55%,
+    var(--line)
+  );
+  transform: translateY(-2px);
 }
 
-.stat-card:last-child {
-  border-right: 0;
+.template-card.blank {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--paper) 70%, transparent);
 }
 
-.stat-icon {
+.template-card-glyph {
   display: grid;
-  flex: none;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 34px;
+  height: 38px;
+  border-radius: 10px 3px 10px 3px;
+  background: color-mix(
+    in srgb,
+    var(--accent-card, var(--accent)) 16%,
+    var(--panel)
+  );
+  color: var(--accent-card, var(--accent));
+  font-family: var(--font-serif);
+  font-size: 17px;
+}
+
+.template-card.blank .template-card-glyph {
   background: var(--accent-pale);
   color: var(--accent);
 }
 
-.stat-card > span:last-child {
+.template-card-copy {
   display: flex;
   flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
-.stat-card strong {
+.template-card-copy strong {
   font-family: var(--font-serif);
-  font-size: 21px;
-  font-weight: 560;
-  line-height: 1;
+  font-size: 16px;
+  font-weight: 570;
 }
 
-.stat-card small {
-  margin-top: 4px;
+.template-card-copy small {
   color: var(--muted);
-  font-size: 8.5px;
+  font-size: 9.5px;
+  line-height: 1.65;
+}
+
+.template-card-tags {
+  margin-top: auto;
+}
+
+.template-card-go {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  color: var(--accent-card, var(--accent));
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.template-card-go svg {
+  margin-left: auto;
 }
 
 .world-grid {
@@ -1807,253 +1923,6 @@ fieldset.field > legend {
 .world-card-foot svg {
   margin-left: auto;
   color: var(--accent-card);
-}
-
-.dashboard-lower {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
-  gap: 28px;
-  margin-top: 8px;
-}
-
-.novel-list {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-  box-shadow: var(--shadow-sm);
-}
-
-.novel-row {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 118px 16px;
-  align-items: center;
-  gap: 13px;
-  min-height: 82px;
-  padding: 12px 15px;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  background: transparent;
-  color: var(--ink);
-  text-align: left;
-}
-
-.novel-row:first-child {
-  border-radius: 12px 12px 0 0;
-}
-
-.novel-row:last-child {
-  border-bottom: 0;
-  border-radius: 0 0 12px 12px;
-}
-
-.novel-row:hover {
-  background: var(--paper);
-}
-
-.novel-row-copy {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.novel-row-world {
-  color: var(--accent);
-  font-size: 8px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.novel-row-copy strong {
-  margin: 2px 0;
-  overflow: hidden;
-  font-family: var(--font-serif);
-  font-size: 15px;
-  font-weight: 570;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.novel-row-copy small {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 9.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.novel-row-progress {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.novel-row-progress > span:first-child {
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-.novel-row-progress b {
-  font-family: var(--font-serif);
-  font-size: 14px;
-  font-weight: 550;
-}
-
-.novel-row-progress small {
-  color: var(--muted);
-  font-size: 8px;
-}
-
-.novel-row > svg {
-  color: var(--muted-2);
-}
-
-.pipeline-card {
-  position: relative;
-  overflow: hidden;
-  padding: 22px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  background:
-    radial-gradient(circle at 90% 5%, rgb(73 130 104 / 12%), transparent 36%),
-    var(--panel);
-  box-shadow: var(--shadow-sm);
-}
-
-.pipeline-card h3 {
-  margin: 5px 0 19px;
-  font-family: var(--font-serif);
-  font-size: 23px;
-  font-weight: 540;
-}
-
-.pipeline-flow {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.pipeline-node {
-  display: grid;
-  grid-template-columns: 37px minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  column-gap: 11px;
-  align-items: center;
-  padding: 9px 0;
-}
-
-.pipeline-node i {
-  display: grid;
-  grid-row: 1 / 3;
-  place-items: center;
-  width: 37px;
-  height: 37px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--paper);
-  color: var(--accent);
-}
-
-.pipeline-node b {
-  font-family: var(--font-serif);
-  font-size: 14px;
-  font-weight: 560;
-}
-
-.pipeline-node small {
-  color: var(--muted);
-  font-size: 8.5px;
-}
-
-.pipeline-arrow {
-  display: flex;
-  align-items: center;
-  height: 15px;
-  margin-left: 10px;
-  color: var(--line-strong);
-  transform: rotate(90deg);
-}
-
-.pipeline-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 17px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 9px;
-  line-height: 1.65;
-}
-
-.pipeline-note svg {
-  flex: none;
-  margin-top: 1px;
-  color: var(--gold);
-}
-
-.recent-status {
-  margin-top: 4px;
-}
-
-.mini-novel-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.mini-novel {
-  display: grid;
-  grid-template-columns: 29px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--panel);
-  color: var(--ink);
-  text-align: left;
-}
-
-.mini-novel:hover {
-  border-color: var(--line-strong);
-  background: var(--paper);
-}
-
-.mini-cover {
-  display: grid;
-  place-items: center;
-  width: 29px;
-  height: 37px;
-  border-radius: 2px 6px 6px 2px;
-  color: #fff;
-  font-family: var(--font-serif);
-  font-size: 12px;
-}
-
-.mini-novel > span:nth-child(2) {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.mini-novel strong {
-  overflow: hidden;
-  font-family: var(--font-serif);
-  font-size: 12px;
-  font-weight: 560;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mini-novel small {
-  color: var(--muted);
-  font-size: 8px;
 }
 
 .boot-screen {
@@ -2659,10 +2528,6 @@ fieldset.field > legend {
   align-items: start;
 }
 
-.graph-layout.large {
-  grid-template-columns: minmax(0, 1fr) 380px;
-}
-
 .graph-main {
   min-width: 0;
 }
@@ -2831,11 +2696,16 @@ fieldset.field > legend {
 
 .relation-row {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) 30px;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: start;
   padding: 10px 0;
   border-top: 1px solid var(--line);
+}
+
+.relation-row-actions {
+  display: flex;
+  gap: 2px;
 }
 
 .relation-dot {
@@ -3708,110 +3578,6 @@ fieldset.field > legend {
   cursor: pointer;
 }
 
-.cast-library-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.cast-library-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  background: var(--panel);
-  box-shadow: var(--shadow-sm);
-}
-
-.cast-library-color {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-}
-
-.cast-library-head {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-}
-
-.cast-library-head > div {
-  flex: 1;
-  min-width: 0;
-}
-
-.cast-library-head h3 {
-  font-family: var(--font-serif);
-  font-size: 18px;
-  font-weight: 560;
-}
-
-.cast-library-head p {
-  color: var(--muted);
-  font-size: 8.5px;
-}
-
-.cast-library-summary {
-  margin: 14px 0 10px;
-  color: var(--ink-soft);
-  font-family: var(--font-serif);
-  font-size: 11px;
-  line-height: 1.75;
-}
-
-.cast-world-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  align-items: center;
-  margin-top: auto;
-  padding-top: 12px;
-}
-
-.cast-world-links small {
-  width: 100%;
-  color: var(--muted);
-  font-size: 8px;
-}
-
-.cast-world-links button {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 6px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--paper);
-  color: var(--ink-soft);
-  font-size: 8px;
-}
-
-.cast-world-links button > span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-}
-
-.cast-library-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  padding-top: 4px;
-  color: var(--muted);
-  font-size: 8.5px;
-}
-
-.cast-library-foot > span {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Settings */
 .settings-layout {
   display: grid;
@@ -4578,13 +4344,6 @@ fieldset.field > legend {
   .hero-world-b {
     right: 195px;
   }
-  .stat-card {
-    padding-right: 12px;
-    padding-left: 12px;
-  }
-  .cast-library-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .library-story-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4609,20 +4368,7 @@ fieldset.field > legend {
   .hero-world-a {
     right: 60px;
   }
-  .stat-strip {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .stat-card:nth-child(3) {
-    border-right: 0;
-  }
-  .stat-card:nth-child(n + 4) {
-    border-top: 1px solid var(--line);
-  }
-  .dashboard-lower {
-    grid-template-columns: 1fr;
-  }
-  .graph-layout,
-  .graph-layout.large {
+  .graph-layout {
     grid-template-columns: 1fr;
   }
   .relation-sidebar {
@@ -5159,6 +4905,27 @@ fieldset.field > legend {
   background: color-mix(in srgb, var(--paper) 78%, transparent);
 }
 
+/* The world detail tab renders the timeline without the page heading or the
+   universe picker: the world comes from the page it sits in. */
+.timeline-view.embedded {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.timeline-embedded-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.timeline-toolbar.locked {
+  grid-template-columns: 1.25fr 1fr 1.15fr 1.6fr;
+  margin-top: 0;
+}
+
 .timeline-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -5499,7 +5266,8 @@ fieldset.field > legend {
 }
 
 @media (max-width: 1180px) {
-  .timeline-toolbar {
+  .timeline-toolbar,
+  .timeline-toolbar.locked {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -5769,6 +5537,20 @@ fieldset.field > legend {
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 8px;
+}
+
+.foundation-view.embedded {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.foundation-embedded-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .foundation-model-note {

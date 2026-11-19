@@ -53,6 +53,7 @@ export function FoundationView({
   locale,
   t,
   aiInfo,
+  universeId,
   onNewStandard,
   onEditStandard,
   onStatusChange,
@@ -64,17 +65,36 @@ export function FoundationView({
   locale: UiLocale;
   t: Translate;
   aiInfo: AiConfigInfo | null;
+  /**
+   * Set when this view renders inside a world's detail tab. Only the
+   * standards that actually govern that world are listed — project-wide ones
+   * plus its own — and new drafts register against it.
+   */
+  universeId?: string;
   onNewStandard: () => void;
   onEditStandard: (standard: WorkspaceStandard) => void;
   onStatusChange: (standard: WorkspaceStandard, status: StandardStatus) => void;
-  onRegisterCandidates: (candidates: StandardCandidate[]) => void;
+  onRegisterCandidates: (
+    candidates: StandardCandidate[],
+    universeId?: string,
+  ) => void;
   onOpenWorkflow: () => void;
   onOpenSettings: () => void;
 }) {
+  const scopedStandards = useMemo(
+    () =>
+      universeId
+        ? workspace.standards.filter(
+            (standard) =>
+              !standard.universeId || standard.universeId === universeId,
+          )
+        : workspace.standards,
+    [universeId, workspace.standards],
+  );
   const [filter, setFilter] = useState<StandardFilter>("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(
-    workspace.standards[0]?.id ?? null,
+    scopedStandards[0]?.id ?? null,
   );
   const [drafting, setDrafting] = useState(false);
   const [draftMessage, setDraftMessage] = useState("");
@@ -83,18 +103,25 @@ export function FoundationView({
     new Set(),
   );
   const activeAi = useRef("");
+  /**
+   * The scope the current draft belongs to. Candidates were proposed from one
+   * world's premise; registering them against another world would silently
+   * scope rules to the wrong place, so a scope change cancels the run and
+   * drops its candidates.
+   */
+  const draftScope = useRef(universeId);
 
   const selected =
-    workspace.standards.find((standard) => standard.id === selectedId) ?? null;
+    scopedStandards.find((standard) => standard.id === selectedId) ?? null;
 
   useEffect(() => {
     if (
       selectedId &&
-      !workspace.standards.some((standard) => standard.id === selectedId)
+      !scopedStandards.some((standard) => standard.id === selectedId)
     ) {
-      setSelectedId(workspace.standards[0]?.id ?? null);
+      setSelectedId(scopedStandards[0]?.id ?? null);
     }
-  }, [selectedId, workspace.standards]);
+  }, [selectedId, scopedStandards]);
 
   useEffect(
     () => () => {
@@ -103,27 +130,40 @@ export function FoundationView({
     [],
   );
 
+  useEffect(() => {
+    if (draftScope.current === universeId) return;
+    draftScope.current = universeId;
+    if (activeAi.current) {
+      void bridge.cancelAi(activeAi.current);
+      activeAi.current = "";
+      setDrafting(false);
+    }
+    setCandidates([]);
+    setSelectedCandidates(new Set());
+    setDraftMessage("");
+  }, [universeId]);
+
   const counts = useMemo(() => {
     const next = {
-      total: workspace.standards.length,
+      total: scopedStandards.length,
       active: 0,
       draft: 0,
       disabled: 0,
     };
-    for (const standard of workspace.standards) next[standard.status] += 1;
+    for (const standard of scopedStandards) next[standard.status] += 1;
     return next;
-  }, [workspace.standards]);
+  }, [scopedStandards]);
 
-  const pinnedCount = useMemo(
-    () =>
-      workspace.workflowTasks.filter((task) => task.standardRefs.length > 0)
-        .length,
-    [workspace.workflowTasks],
-  );
+  const pinnedCount = useMemo(() => {
+    const ids = new Set(scopedStandards.map((standard) => standard.id));
+    return workspace.workflowTasks.filter((task) =>
+      task.standardRefs.some((ref) => ids.has(ref.id)),
+    ).length;
+  }, [scopedStandards, workspace.workflowTasks]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    return workspace.standards.filter((standard) => {
+    return scopedStandards.filter((standard) => {
       if (filter !== "all" && standard.status !== filter) return false;
       if (!needle) return true;
       return [
@@ -134,7 +174,7 @@ export function FoundationView({
         standardStatusLabel(standard.status, locale),
       ].some((value) => value.toLocaleLowerCase().includes(needle));
     });
-  }, [filter, locale, query, workspace.standards]);
+  }, [filter, locale, query, scopedStandards]);
 
   const stats = [
     {
@@ -194,9 +234,10 @@ export function FoundationView({
       setDraftMessage(t("foundationNeedModel"));
       return;
     }
+    const scope = universeId;
     if (
       !window.confirm(
-        t("foundationDraftConfirm", {
+        t(scope ? "foundationDraftConfirmWorld" : "foundationDraftConfirm", {
           endpoint: info.endpoint,
           model: info.model,
         }),
@@ -204,19 +245,27 @@ export function FoundationView({
     )
       return;
     const id = createId("ai");
+    draftScope.current = scope;
     activeAi.current = id;
     setDrafting(true);
     setCandidates([]);
     setSelectedCandidates(new Set());
-    setDraftMessage(t("foundationDraftingMessage"));
+    setDraftMessage(
+      t(scope ? "foundationDraftingMessageWorld" : "foundationDraftingMessage"),
+    );
     try {
       const raw = (
         await bridge.runAi({
           id,
-          prompt: buildStandardDraftPrompt(workspace, locale),
-          label: t("foundationDraftLabel"),
+          prompt: buildStandardDraftPrompt(workspace, locale, scope),
+          label: t(
+            scope ? "foundationDraftLabelWorld" : "foundationDraftLabel",
+          ),
         })
       ).text;
+      // A scope change cancels the run; never deliver one world's candidates
+      // into another world's review.
+      if (draftScope.current !== scope) return;
       const parsed = parseStandardCandidates(raw);
       if (!parsed.length) {
         setDraftMessage(t("foundationDraftEmpty"));
@@ -226,10 +275,12 @@ export function FoundationView({
       setSelectedCandidates(new Set(parsed.map((_, index) => index)));
       setDraftMessage(t("foundationDraftGenerated", { count: parsed.length }));
     } catch (error) {
-      setDraftMessage(String(error));
+      if (draftScope.current === scope) setDraftMessage(String(error));
     } finally {
-      activeAi.current = "";
-      setDrafting(false);
+      if (draftScope.current === scope) {
+        activeAi.current = "";
+        setDrafting(false);
+      }
     }
   };
 
@@ -245,29 +296,40 @@ export function FoundationView({
   const allCandidatesSelected =
     candidates.length > 0 && selectedCandidates.size === candidates.length;
 
+  const headingActions = (
+    <div className="foundation-heading-actions">
+      <Button icon="sparkles" disabled={drafting} onClick={() => void draft()}>
+        {drafting ? t("foundationDraftingShort") : t("foundationDraftAction")}
+      </Button>
+      <Button variant="primary" icon="plus" onClick={onNewStandard}>
+        {t("foundationNewStandardShort")}
+      </Button>
+    </div>
+  );
+
   return (
-    <div className="view workflow-view foundation-view">
-      <header className="page-heading workflow-heading">
-        <div>
+    <div
+      className={
+        universeId
+          ? "workflow-view foundation-view embedded"
+          : "view workflow-view foundation-view"
+      }
+    >
+      {universeId ? (
+        <div className="foundation-embedded-head">
           <span className="eyebrow">FOUNDATION / 基础规则</span>
-          <h1>{t("foundationTitle")}</h1>
-          <p>{t("foundationLead")}</p>
+          {headingActions}
         </div>
-        <div className="foundation-heading-actions">
-          <Button
-            icon="sparkles"
-            disabled={drafting}
-            onClick={() => void draft()}
-          >
-            {drafting
-              ? t("foundationDraftingShort")
-              : t("foundationDraftAction")}
-          </Button>
-          <Button variant="primary" icon="plus" onClick={onNewStandard}>
-            {t("foundationNewStandardShort")}
-          </Button>
-        </div>
-      </header>
+      ) : (
+        <header className="page-heading workflow-heading">
+          <div>
+            <span className="eyebrow">FOUNDATION / 基础规则</span>
+            <h1>{t("foundationTitle")}</h1>
+            <p>{t("foundationLead")}</p>
+          </div>
+          {headingActions}
+        </header>
+      )}
 
       {!aiInfo?.configured ? (
         <div className="foundation-model-note">
@@ -438,7 +500,7 @@ export function FoundationView({
                   icon="check"
                   disabled={!drafted.length}
                   onClick={() => {
-                    onRegisterCandidates(drafted);
+                    onRegisterCandidates(drafted, universeId);
                     setCandidates([]);
                     setSelectedCandidates(new Set());
                     setDraftMessage(

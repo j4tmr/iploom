@@ -282,6 +282,46 @@ describe("AI standard drafting", () => {
     expect(prompt).toContain("一个 JSON 数组");
   });
 
+  test("a world-scoped draft prompt narrows the premise and excludes other worlds' rules", () => {
+    const workspace = createDemoWorkspace("zh-CN", NOW);
+    workspace.standards.push(
+      customStandard("std_this_world", { universeId: "uni_mist_harbor" }),
+      customStandard("std_other_world", { universeId: "uni_ninth_station" }),
+    );
+    const thisWorld = workspace.universes.find(
+      (universe) => universe.id === "uni_mist_harbor",
+    )!;
+    const otherWorld = workspace.universes.find(
+      (universe) => universe.id === "uni_ninth_station",
+    )!;
+    const thisWork = workspace.works.find(
+      (work) => work.universeId === "uni_mist_harbor",
+    )!;
+    const otherWork = workspace.works.find(
+      (work) => work.universeId === "uni_ninth_station",
+    )!;
+
+    const scoped = buildStandardDraftPrompt(
+      workspace,
+      "zh-CN",
+      "uni_mist_harbor",
+    );
+    expect(scoped).toContain("# 起草这个世界的基础规则（候选）");
+    expect(scoped).toContain("规则 std_this_world");
+    expect(scoped).not.toContain("规则 std_other_world");
+    // The premise lists only this world and its works.
+    expect(scoped).toContain(thisWorld.name.zh);
+    expect(scoped).toContain(thisWork.title.zh);
+    expect(scoped).not.toContain(otherWorld.name.zh);
+    expect(scoped).not.toContain(otherWork.title.zh);
+
+    const projectWide = buildStandardDraftPrompt(workspace, "zh-CN");
+    expect(projectWide).toContain("# 起草项目基础规则（候选）");
+    expect(projectWide).toContain("规则 std_other_world");
+    expect(projectWide).toContain(otherWorld.name.zh);
+    expect(projectWide).toContain(otherWork.title.zh);
+  });
+
   test("accepts fenced JSON and drops malformed or duplicate candidates", () => {
     const raw = [
       "```json",

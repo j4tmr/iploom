@@ -9,7 +9,6 @@ import type {
   StudioWorkspace,
 } from "../../apps/studio/src/core/types.ts";
 import { translator } from "../../apps/studio/src/i18n.ts";
-import { CastLibrary } from "../../apps/studio/src/views/cast-library.tsx";
 import { WorkView } from "../../apps/studio/src/views/work-view.tsx";
 import { WorkflowView } from "../../apps/studio/src/views/workflow-view.tsx";
 
@@ -18,19 +17,6 @@ afterEach(cleanup);
 const t = translator("en");
 
 const noop = () => {};
-
-function renderCastLibrary(workspace: StudioWorkspace) {
-  return render(
-    <CastLibrary
-      workspace={workspace}
-      locale="en"
-      t={t}
-      onNewCharacter={noop}
-      onEditCharacter={noop}
-      onOpenUniverse={noop}
-    />,
-  );
-}
 
 function renderWorkflowView(workspace: StudioWorkspace) {
   return render(
@@ -193,17 +179,6 @@ test("clicking the chapter cast group text autosaves nothing; rows still toggle"
     "char_echo",
     "char_gu",
   ]);
-});
-
-test("the world filter select exposes an accessible name and the all-worlds option", () => {
-  const workspace = createDemoWorkspace("en");
-  const view = renderCastLibrary(workspace);
-  const filter = view.getByRole("combobox", {
-    name: t("filterWorld"),
-  }) as HTMLSelectElement;
-  expect(filter.value).toBe("all");
-  expect(filter.options[0]!.textContent).toBe(t("allWorlds"));
-  expect(filter.options.length).toBe(workspace.universes.length + 1);
 });
 
 test("the workflow detail eyebrow localizes the task kind", () => {
