@@ -329,6 +329,10 @@ const zh = {
   platform: "平台",
   projectHome: "开源项目",
   about: "关于",
+  aboutAndUpdates: "关于与更新",
+  appModeDesktop: "桌面版",
+  appModeBrowser: "浏览器版",
+  recheckUpdates: "重新检查",
   aboutBody:
     "IPloom Studio 是一个本地优先的开源 IP 创作工作台。内容不离开本机；MCP 与 ArcReel 交接包都由用户主动触发。",
   noResults: "没有找到结果。",
@@ -1160,6 +1164,10 @@ const en: Record<MessageKey, string> = {
   platform: "Platform",
   projectHome: "Open-source project",
   about: "About",
+  aboutAndUpdates: "About & updates",
+  appModeDesktop: "Desktop app",
+  appModeBrowser: "Browser preview",
+  recheckUpdates: "Check again",
   aboutBody:
     "IPloom Studio is a local-first, open-source workspace for building IP. Content stays on your machine; MCP reads and ArcReel handoffs are user-initiated.",
   noResults: "No results found.",

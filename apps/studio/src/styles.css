@@ -4149,6 +4149,58 @@ fieldset.field > legend {
   font-weight: 600;
 }
 
+.about-panel {
+  display: grid;
+  gap: 20px;
+}
+
+.about-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 19px;
+}
+
+.about-hero-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.about-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.about-title-row h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 23px;
+  font-weight: 550;
+}
+
+.about-hero-lead {
+  max-width: 560px;
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.about-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.about-update-section {
+  display: grid;
+  gap: 8px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
 /* Modal */
 .modal-backdrop {
   position: fixed;

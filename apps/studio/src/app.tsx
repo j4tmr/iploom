@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Sidebar, Topbar } from "./components/app-shell.tsx";
 import {
   CardBatchModal,
@@ -165,10 +165,12 @@ export function App() {
   const { toast, notify } = useToast();
   const [aiInfo, setAiInfo] = useState<AiConfigInfo | null>(null);
 
-  const navigate = (next: StudioRoute) => {
-    setHistory((current) => [...current, route].slice(-30));
-    setRoute(next);
-  };
+  const navigate = useCallback((next: StudioRoute) => {
+    setRoute((current) => {
+      setHistory((history) => [...history, current].slice(-30));
+      return next;
+    });
+  }, []);
 
   const replaceRoute = (next: StudioRoute) => setRoute(next);
 
@@ -216,6 +218,47 @@ export function App() {
       .then(setAiInfo)
       .catch(() => setAiInfo(null));
   }, []);
+
+  useEffect(() => {
+    if (!bridge.onNavigateRoute) return;
+    return bridge.onNavigateRoute((target) => {
+      if (!target || typeof target.name !== "string") return;
+      if (
+        target.name === "dashboard" ||
+        target.name === "library" ||
+        target.name === "workflow" ||
+        target.name === "foundation" ||
+        target.name === "exports" ||
+        target.name === "settings"
+      ) {
+        navigate({ name: target.name });
+      } else if (target.name === "universe" && target.params?.id) {
+        navigate({
+          name: "universe",
+          id: target.params.id,
+          tab: target.params.tab as
+            | "overview"
+            | "cast"
+            | "atlas"
+            | "graph"
+            | "stories"
+            | "nodes"
+            | undefined,
+        });
+      } else if (target.name === "work" && target.params?.workId) {
+        navigate({ name: "work", workId: target.params.workId });
+      } else if (
+        target.name === "cast" ||
+        target.name === "graph" ||
+        target.name === "timeline"
+      ) {
+        navigate({
+          name: target.name,
+          universeId: target.params?.universeId,
+        });
+      }
+    });
+  }, [navigate]);
 
   // One capture-phase Escape listener for every overlay. Overlays register in
   // open order, so Escape closes the palette before the dialog beneath it.

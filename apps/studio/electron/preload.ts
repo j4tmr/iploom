@@ -43,6 +43,16 @@ const api: StudioBridge = {
   exportArcReel: (bundle) => invoke("iploom:export-arc-reel", bundle),
   appInfo: () => invoke("iploom:app-info"),
   checkForUpdates: () => invoke("iploom:check-update"),
+  onNavigateRoute: (listener) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      route: { name: string; params?: Record<string, string> },
+    ) => {
+      if (route && typeof route.name === "string") listener(route);
+    };
+    ipcRenderer.on("iploom:navigate-route", handler);
+    return () => ipcRenderer.removeListener("iploom:navigate-route", handler);
+  },
   copyText: (value) => invoke("iploom:copy-text", value),
   openFolder: (path) => invoke("iploom:open-folder", path),
   openExternal: (url) => invoke("iploom:open-external", url),
