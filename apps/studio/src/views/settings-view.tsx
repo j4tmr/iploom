@@ -7,7 +7,6 @@ import type {
   UiLocale,
   WorkspaceSettings,
 } from "../core/types.ts";
-import { APP_VERSION } from "../core/version.ts";
 import type { Translate } from "../i18n.ts";
 import {
   bridge,
@@ -15,8 +14,8 @@ import {
   type WorkspaceSnapshotInfo,
 } from "../platform.ts";
 import { Icon } from "../components/icon.tsx";
+import { AboutSettings } from "../components/about-settings.tsx";
 import { AiSettings } from "../components/ai-settings.tsx";
-import { UpdateSettings } from "../components/update-settings.tsx";
 import { useToast } from "../components/use-toast.ts";
 import {
   Button,
@@ -328,32 +327,7 @@ export function SettingsView({
           </section>
         ) : null}
 
-        <section className="settings-panel about-card">
-          <div className="about-mark">界</div>
-          <div>
-            <h2>IPloom Studio</h2>
-            <p>{t("aboutBody")}</p>
-            <div className="about-meta">
-              <span>
-                {t("appVersion")} <b>{info?.version ?? APP_VERSION}</b>
-              </span>
-              <span>
-                {t("platform")} <b>{info?.platform ?? navigator.platform}</b>
-              </span>
-              <span>{workspace.settings.locale}</span>
-            </div>
-            <Button
-              icon="external"
-              onClick={() =>
-                void bridge.openExternal("https://github.com/j4tmr/iploom")
-              }
-            >
-              {t("projectHome")}
-            </Button>
-          </div>
-        </section>
-
-        <UpdateSettings locale={locale} t={t} />
+        <AboutSettings info={info} locale={locale} t={t} />
       </div>
       {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}
     </div>

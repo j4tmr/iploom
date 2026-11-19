@@ -68,6 +68,11 @@ export interface AppInfo {
   mcpBinary: string | null;
 }
 
+export interface NavigationRoutePayload {
+  name: string;
+  params?: Record<string, string>;
+}
+
 export interface StudioBridge {
   aiConfig(): Promise<AiConfigInfo>;
   configureAi(config: AiConfig): Promise<AiConfigInfo>;
@@ -92,6 +97,9 @@ export interface StudioBridge {
   exportArcReel(bundle: ArcReelBundle): Promise<WrittenBundle>;
   appInfo(): Promise<AppInfo>;
   checkForUpdates(): Promise<UpdateCheckResult>;
+  onNavigateRoute?(
+    listener: (route: NavigationRoutePayload) => void,
+  ): () => void;
   copyText(value: string): Promise<void>;
   openFolder(path: string): Promise<void>;
   openExternal(url: string): Promise<void>;
@@ -193,6 +201,9 @@ export const browserFallback: StudioBridge = {
       new Date().toISOString(),
       "desktop-only",
     );
+  },
+  onNavigateRoute() {
+    return () => {};
   },
   async copyText(value) {
     await navigator.clipboard.writeText(value);

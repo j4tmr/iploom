@@ -115,6 +115,12 @@ export interface MainMessages {
     crashMessage(reason: string): string;
     crashDetail: string;
   };
+  menu: {
+    about: string;
+    checkUpdates: string;
+    preferences: string;
+    help: string;
+  };
 }
 
 /** Byte-identical to the strings these modules threw before localization. */
@@ -268,6 +274,12 @@ export const englishMainMessages: MainMessages = {
       "Reloading restores the last saved workspace. Edits made since the " +
       "last successful save cannot be recovered.",
   },
+  menu: {
+    about: "About IPloom Studio",
+    checkUpdates: "Check for Updates…",
+    preferences: "Settings…",
+    help: "Help",
+  },
 };
 
 export const zhMainMessages: MainMessages = {
@@ -397,6 +409,12 @@ export const zhMainMessages: MainMessages = {
     crashMessage: (reason) => `编辑器进程意外关闭（${reason}）。`,
     crashDetail:
       "重新加载会恢复上次保存的工作区。上次成功保存之后的编辑无法恢复。",
+  },
+  menu: {
+    about: "关于 IPloom Studio",
+    checkUpdates: "检查更新…",
+    preferences: "设置…",
+    help: "帮助",
   },
 };
 

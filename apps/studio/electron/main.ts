@@ -20,9 +20,11 @@ import {
   RELEASES_API_URL,
   buildUpdateCheck,
   parseReleasePayload,
+  parseSemver,
   unavailableUpdateCheck,
   type UpdateCheckResult,
 } from "../src/core/updates.ts";
+import { APP_VERSION } from "../src/core/version.ts";
 import type { StudioWorkspace, UiLocale } from "../src/core/types.ts";
 import {
   StaleWorkspaceError,
@@ -159,10 +161,16 @@ async function openExternalSafely(value: string): Promise<void> {
   await shell.openExternal(url.toString());
 }
 
+function effectiveAppVersion(): string {
+  if (!app.isPackaged) return APP_VERSION;
+  const version = app.getVersion();
+  return parseSemver(version) ? version : APP_VERSION;
+}
+
 let updateCheckInFlight: Promise<UpdateCheckResult> | null = null;
 
 async function checkForUpdates(): Promise<UpdateCheckResult> {
-  const currentVersion = app.getVersion();
+  const currentVersion = effectiveAppVersion();
   const checkedAt = () => new Date().toISOString();
   try {
     const response = await net.fetch(RELEASES_API_URL, {
@@ -402,6 +410,9 @@ function defaultLocale(): UiLocale {
 function applyMainLocale(locale: UiLocale): void {
   mainMessages = mainMessagesFor(locale);
   workspaceStore?.setLocale(locale);
+  if (app.isReady()) {
+    configureApplicationMenu();
+  }
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -622,7 +633,7 @@ function registerIpcHandlers(): void {
     assertTrustedSender(event);
     const state = mcpConfigState();
     return {
-      version: app.getVersion(),
+      version: effectiveAppVersion(),
       platform: process.platform,
       workspacePath: requireStore().filePath,
       snapshotDirectory: requireStore().snapshotDirectory,
@@ -758,6 +769,12 @@ function configureSessionSecurity(): void {
   session.defaultSession.setPermissionCheckHandler(() => false);
 }
 
+function navigateToRoute(name: string): void {
+  if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+    mainWindow.webContents.send("iploom:navigate-route", { name });
+  }
+}
+
 /**
  * Electron's stock menu ships Reload and Force Reload (CmdOrCtrl+R), which
  * bypass the save handshake and drop unsaved edits. This menu keeps the roles
@@ -768,13 +785,65 @@ function configureSessionSecurity(): void {
 function configureApplicationMenu(): void {
   const devToolsAllowed = !app.isPackaged;
   const isMac = process.platform === "darwin";
+  const labels = mainMessages.menu;
+  const appMenu: Electron.MenuItemConstructorOptions = {
+    label: app.name,
+    submenu: [
+      {
+        label: labels.about,
+        click: () => navigateToRoute("settings"),
+      },
+      {
+        label: labels.checkUpdates,
+        click: () => navigateToRoute("settings"),
+      },
+      { type: "separator" },
+      {
+        label: labels.preferences,
+        accelerator: "CmdOrCtrl+,",
+        click: () => navigateToRoute("settings"),
+      },
+      { type: "separator" },
+      { role: "services" },
+      { type: "separator" },
+      { role: "hide" },
+      { role: "hideOthers" },
+      { role: "unhide" },
+      { type: "separator" },
+      { role: "quit" },
+    ],
+  };
+
+  const helpMenu: Electron.MenuItemConstructorOptions = {
+    role: "help",
+    label: labels.help,
+    submenu: [
+      {
+        label: labels.about,
+        click: () => navigateToRoute("settings"),
+      },
+      {
+        label: labels.checkUpdates,
+        click: () => navigateToRoute("settings"),
+      },
+      { type: "separator" },
+      {
+        label: "GitHub",
+        click: () => {
+          void openExternalSafely("https://github.com/j4tmr/iploom");
+        },
+      },
+    ],
+  };
+
   const template: Electron.MenuItemConstructorOptions[] = [
-    ...(isMac ? [{ role: "appMenu" as const }] : []),
+    ...(isMac ? [appMenu] : []),
     { role: "editMenu" },
     ...(devToolsAllowed
       ? [{ label: "View", submenu: [{ role: "toggleDevTools" as const }] }]
       : []),
     ...(isMac ? [{ role: "windowMenu" as const }] : []),
+    helpMenu,
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
