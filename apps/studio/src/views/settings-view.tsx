@@ -36,6 +36,7 @@ export function SettingsView({
   onUpdateSettings,
   onResetDemo,
   onRestoreSnapshot,
+  aboutFocus = 0,
 }: {
   workspace: StudioWorkspace;
   locale: UiLocale;
@@ -46,6 +47,7 @@ export function SettingsView({
   onUpdateSettings: (change: Partial<WorkspaceSettings>) => void;
   onResetDemo: () => Promise<void>;
   onRestoreSnapshot: (snapshotPath: string) => Promise<void>;
+  aboutFocus?: number;
 }) {
   const [info, setInfo] = useState<AppInfo | null>(null);
   const { toast, notify } = useToast(2400);
@@ -327,7 +329,12 @@ export function SettingsView({
           </section>
         ) : null}
 
-        <AboutSettings info={info} locale={locale} t={t} />
+        <AboutSettings
+          info={info}
+          locale={locale}
+          t={t}
+          focusSignal={aboutFocus}
+        />
       </div>
       {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}
     </div>
