@@ -156,6 +156,30 @@ function resolveEntity(
         | undefined;
       return named("entityExport", item?.workTitle);
     }
+    case "cardTypes": {
+      const item = at(workspace?.cardTypes) as
+        | StudioWorkspace["cardTypes"][number]
+        | undefined;
+      return named("entityCardType", item && displayText(item.name, locale));
+    }
+    case "cards": {
+      const item = at(workspace?.cards) as
+        | StudioWorkspace["cards"][number]
+        | undefined;
+      return named("entityCard", item && displayText(item.title, locale));
+    }
+    case "cardEdges": {
+      const item = at(workspace?.cardEdges) as
+        | StudioWorkspace["cardEdges"][number]
+        | undefined;
+      return named("entityCardEdge", item && displayText(item.label, locale));
+    }
+    case "constructs": {
+      const item = at(workspace?.constructs) as
+        | StudioWorkspace["constructs"][number]
+        | undefined;
+      return named("entityConstruct", item && displayText(item.name, locale));
+    }
     default:
       return { label: t("entityWorkspace") };
   }
@@ -323,6 +347,8 @@ function describeCustomReason(message: string, t: Translate): string {
   if (/cannot (parent|depend on) itself/.test(message))
     return t("issueSelfReference");
   if (/^workflow cycle: /.test(message)) return t("issueCycle");
+  if (/crosses universe boundaries/.test(message))
+    return t("issueCrossUniverseRelation");
   if (/belongs to another universe/.test(message)) return t("issueConflict");
   return message;
 }

@@ -30,6 +30,7 @@ import { useToast } from "./components/use-toast.ts";
 import type { AiConfigInfo } from "./core/ai.ts";
 import {
   applyConstruct,
+  type ApplyConstructResult,
   BUILT_IN_CONSTRUCTS,
   duplicateCardType as cloneCardType,
   deleteCardTypeFromDraft,
@@ -512,10 +513,17 @@ export function App() {
       notify(t("constructAlreadyApplied"));
       return false;
     }
+    let resultStatus: ApplyConstructResult["status"] | undefined;
     const applied = mutateChecked((draft) => {
-      applyConstruct(draft, constructId, universeId);
+      const result = applyConstruct(draft, constructId, universeId);
+      resultStatus = result.status;
     });
-    if (!applied) return false;
+    if (!applied || resultStatus !== "applied") {
+      if (resultStatus === "already-applied") {
+        notify(t("constructAlreadyApplied"));
+      }
+      return false;
+    }
     const construct = BUILT_IN_CONSTRUCTS.find(
       (item) => item.id === constructId,
     );

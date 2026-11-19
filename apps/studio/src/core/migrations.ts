@@ -117,7 +117,7 @@ export function migrateWorkspace(value: unknown): unknown {
   }
   if (value.schema_version === 9) {
     const scoped = scopeCardSystemToUniverse(value);
-    return {
+    return migrateWorkspace({
       ...value,
       ...scoped,
       schema_version: WORKSPACE_SCHEMA_VERSION,
@@ -125,7 +125,7 @@ export function migrateWorkspace(value: unknown): unknown {
         typeof value.revision === "number"
           ? value.revision + 1
           : value.revision,
-    };
+    });
   }
   return value;
 }

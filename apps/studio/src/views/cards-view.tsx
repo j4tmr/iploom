@@ -174,10 +174,16 @@ export function CardsView({
       ),
     [universeEdges, activeCardIds],
   );
+  const relationCountByCardId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const edge of universeEdges) {
+      counts.set(edge.sourceId, (counts.get(edge.sourceId) ?? 0) + 1);
+      counts.set(edge.targetId, (counts.get(edge.targetId) ?? 0) + 1);
+    }
+    return counts;
+  }, [universeEdges]);
   const relationCountFor = (cardId: string) =>
-    universeEdges.filter(
-      (edge) => edge.sourceId === cardId || edge.targetId === cardId,
-    ).length;
+    relationCountByCardId.get(cardId) ?? 0;
 
   return (
     <div className="cards-view">

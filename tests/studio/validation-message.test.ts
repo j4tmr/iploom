@@ -92,6 +92,19 @@ describe("validation messages", () => {
       );
       expect(text).toContain(expected);
     }
+    const crossUniverse = describeWorkspaceProblem(
+      [
+        detail({
+          path: "cardEdges.0",
+          code: "custom",
+          message: "card relation crosses universe boundaries",
+        }),
+      ],
+      workspace,
+      "zh-CN",
+      translator("zh-CN"),
+    );
+    expect(crossUniverse).toContain("关系不能跨越不同宇宙");
     const named = describeWorkspaceProblem(
       [
         detail({
@@ -136,6 +149,41 @@ describe("validation messages", () => {
 
   test("resolves entity labels for every collection the validator can point at", () => {
     const edited = structuredClone(workspace);
+    const universeId = edited.universes[0]!.id;
+    edited.cardTypes.push({
+      id: "ctype_msg",
+      universeId,
+      name: { zh: "怪物", en: "Monster" },
+      summary: { zh: "", en: "" },
+      color: "#336655",
+      fields: [],
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    edited.cards.push({
+      id: "card_msg",
+      typeId: "ctype_msg",
+      title: { zh: "骷髅兵", en: "Skeleton" },
+      values: {},
+      notes: "",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    edited.cardEdges.push({
+      id: "cardedge_msg",
+      sourceId: "card_msg",
+      targetId: "card_msg",
+      label: { zh: "掉落", en: "Drops" },
+      notes: "",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    edited.constructs.push({
+      id: "looter",
+      universeId,
+      name: { zh: "刷子游戏", en: "Looter game" },
+      appliedAt: NOW,
+    });
     const workIndex = edited.works.findIndex(
       (item) => item.id === "work_tide_clock",
     );
@@ -154,6 +202,10 @@ describe("validation messages", () => {
       ["factions.0.name.zh", "势力"],
       ["lore.0.title.zh", "世界设定"],
       ["exports.0.workTitle", "导出记录"],
+      ["cardTypes.0.name.zh", "节点类型"],
+      ["cards.0.title.zh", "节点卡片"],
+      ["cardEdges.0.label.zh", "节点关系"],
+      ["constructs.0.name.zh", "快速构造"],
       ["meta.elsewhere", "工作区"],
     ];
     for (const [path, label] of cases) {
