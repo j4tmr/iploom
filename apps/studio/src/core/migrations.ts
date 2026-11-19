@@ -89,12 +89,26 @@ export function migrateWorkspace(value: unknown): unknown {
     });
   }
   if (value.schema_version === 7) {
-    return {
+    return migrateWorkspace({
       ...value,
-      schema_version: WORKSPACE_SCHEMA_VERSION,
+      schema_version: 8,
       ruleSystems: [],
       abilityTemplates: [],
       itemStatTemplates: [],
+      revision:
+        typeof value.revision === "number"
+          ? value.revision + 1
+          : value.revision,
+    });
+  }
+  if (value.schema_version === 8) {
+    return {
+      ...value,
+      schema_version: WORKSPACE_SCHEMA_VERSION,
+      cardTypes: [],
+      cards: [],
+      cardEdges: [],
+      constructs: [],
       revision:
         typeof value.revision === "number"
           ? value.revision + 1

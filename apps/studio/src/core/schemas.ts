@@ -423,6 +423,122 @@ export const workflowTaskSchema = z
   })
   .strict();
 
+const cardFieldKey = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z][A-Za-z0-9_-]{0,39}$/, "invalid field key");
+const cardValueSchema = z.union([z.number(), z.string().max(10_000)]);
+
+export const cardFieldSchema = z
+  .object({
+    key: cardFieldKey,
+    label: localizedSchema,
+    type: z.enum(["integer", "decimal", "text", "enum"]),
+    unit: z.string().trim().max(40).default(""),
+    min: z.number().optional(),
+    max: z.number().optional(),
+    enumValues: z.array(z.string().trim().min(1).max(100)).max(50).default([]),
+    defaultValue: z.union([z.number(), z.string().trim().max(100)]).optional(),
+  })
+  .strict()
+  .superRefine((field, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: "custom", message });
+    if (
+      field.min !== undefined &&
+      field.max !== undefined &&
+      field.min > field.max
+    )
+      issue("field min is greater than max");
+    if (field.type === "enum") {
+      if (!field.enumValues.length)
+        issue("enum field needs at least one value");
+      else if (
+        typeof field.defaultValue === "string" &&
+        !field.enumValues.includes(field.defaultValue)
+      )
+        issue("enum default is not one of the enum values");
+      if (typeof field.defaultValue === "number")
+        issue("enum default must be text");
+    } else if (field.enumValues.length) {
+      issue("only enum fields may declare enum values");
+    }
+    if (field.type === "integer" || field.type === "decimal") {
+      if (typeof field.defaultValue === "string")
+        issue("numeric default must be a number");
+      else if (
+        field.type === "integer" &&
+        typeof field.defaultValue === "number" &&
+        !Number.isInteger(field.defaultValue)
+      )
+        issue("integer default must be an integer");
+    }
+    if (field.type === "text" && typeof field.defaultValue === "number")
+      issue("text default must be text");
+    if (typeof field.defaultValue === "number") {
+      if (field.min !== undefined && field.defaultValue < field.min)
+        issue("default is below min");
+      if (field.max !== undefined && field.defaultValue > field.max)
+        issue("default is above max");
+    }
+  });
+
+export const cardTypeSchema = z
+  .object({
+    id: identifier,
+    name: localizedSchema,
+    summary: localizedSchema,
+    color,
+    fields: z.array(cardFieldSchema).max(50),
+    createdAt: isoDate,
+    updatedAt: isoDate,
+  })
+  .strict()
+  .superRefine((type, ctx) => {
+    const seen = new Set<string>();
+    for (const [index, field] of type.fields.entries()) {
+      if (seen.has(field.key))
+        ctx.addIssue({
+          code: "custom",
+          path: ["fields", index, "key"],
+          message: `duplicate field key: ${field.key}`,
+        });
+      seen.add(field.key);
+    }
+  });
+
+export const cardSchema = z
+  .object({
+    id: identifier,
+    typeId: identifier,
+    title: localizedSchema,
+    values: z.record(cardFieldKey, cardValueSchema),
+    notes: z.string().max(20_000).default(""),
+    createdAt: isoDate,
+    updatedAt: isoDate,
+  })
+  .strict();
+
+export const cardEdgeSchema = z
+  .object({
+    id: identifier,
+    sourceId: identifier,
+    targetId: identifier,
+    label: localizedSchema,
+    notes: z.string().max(20_000).default(""),
+    createdAt: isoDate,
+    updatedAt: isoDate,
+  })
+  .strict();
+
+export const appliedConstructSchema = z
+  .object({
+    id: identifier,
+    name: localizedSchema,
+    appliedAt: isoDate,
+  })
+  .strict();
+
 export const settingsSchema = z
   .object({
     locale: uiLocaleSchema,
@@ -448,6 +564,10 @@ export const workspaceSchema = z
     itemStatTemplates: z
       .array(itemStatTemplateSchema)
       .max(MAX_ITEM_STAT_TEMPLATES),
+    cardTypes: z.array(cardTypeSchema).max(200),
+    cards: z.array(cardSchema).max(20_000),
+    cardEdges: z.array(cardEdgeSchema).max(100_000),
+    constructs: z.array(appliedConstructSchema).max(100),
     universes: z.array(universeSchema).max(1_000),
     characters: z.array(characterSchema).max(20_000),
     locations: z.array(locationSchema).max(20_000),
@@ -506,6 +626,69 @@ export const workspaceSchema = z
     unique(workspace.workflowTasks, "workflowTasks", (item) => item.id);
     unique(workspace.works, "works", (item) => item.id);
     unique(workspace.exports, "exports", (item) => item.id);
+    unique(workspace.cardTypes, "cardTypes", (item) => item.id);
+    unique(workspace.cards, "cards", (item) => item.id);
+    unique(workspace.cardEdges, "cardEdges", (item) => item.id);
+    unique(workspace.constructs, "constructs", (item) => item.id);
+
+    const cardTypesById = new Map(
+      workspace.cardTypes.map((item) => [item.id, item]),
+    );
+    const cardsById = new Map(workspace.cards.map((item) => [item.id, item]));
+    for (const [cardIndex, card] of workspace.cards.entries()) {
+      const type = cardTypesById.get(card.typeId);
+      if (!type) {
+        issue(
+          ["cards", cardIndex, "typeId"],
+          `unknown card type: ${card.typeId}`,
+        );
+        continue;
+      }
+      const fields = new Map(type.fields.map((field) => [field.key, field]));
+      for (const [key, value] of Object.entries(card.values)) {
+        const field = fields.get(key);
+        if (!field) {
+          issue(
+            ["cards", cardIndex, "values", key],
+            `unknown card field: ${key}`,
+          );
+          continue;
+        }
+        const path = ["cards", cardIndex, "values", key];
+        if (field.type === "text") {
+          if (typeof value !== "string")
+            issue(path, "text field needs a string value");
+          continue;
+        }
+        if (field.type === "enum") {
+          if (typeof value !== "string" || !field.enumValues.includes(value))
+            issue(path, "enum value is not one of the declared values");
+          continue;
+        }
+        if (typeof value !== "number") {
+          issue(path, "numeric field needs a number value");
+          continue;
+        }
+        if (field.type === "integer" && !Number.isInteger(value))
+          issue(path, "integer field needs an integer value");
+        if (field.min !== undefined && value < field.min)
+          issue(path, "value is below the field minimum");
+        if (field.max !== undefined && value > field.max)
+          issue(path, "value is above the field maximum");
+      }
+    }
+    for (const [edgeIndex, edge] of workspace.cardEdges.entries()) {
+      if (!cardsById.has(edge.sourceId))
+        issue(
+          ["cardEdges", edgeIndex, "sourceId"],
+          `unknown card: ${edge.sourceId}`,
+        );
+      if (!cardsById.has(edge.targetId))
+        issue(
+          ["cardEdges", edgeIndex, "targetId"],
+          `unknown card: ${edge.targetId}`,
+        );
+    }
     const worksById = new Map(workspace.works.map((work) => [work.id, work]));
     if (
       workspace.lastOpenedWorkId &&

@@ -171,6 +171,10 @@ export function createEmptyWorkspace(
     ruleSystems: [],
     abilityTemplates: [],
     itemStatTemplates: [],
+    cardTypes: [],
+    cards: [],
+    cardEdges: [],
+    constructs: [],
     universes: [],
     characters: [],
     locations: [],
@@ -213,6 +217,10 @@ export function createDemoWorkspace(
     ruleSystems: [],
     abilityTemplates: [],
     itemStatTemplates: [],
+    cardTypes: [],
+    cards: [],
+    cardEdges: [],
+    constructs: [],
     universes: [
       {
         id: "uni_mist_harbor",

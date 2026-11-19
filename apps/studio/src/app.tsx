@@ -24,8 +24,18 @@ import {
   nextChapterNumber,
   workWords,
 } from "./core/factory.ts";
+import {
+  applyConstruct,
+  BUILT_IN_CONSTRUCTS,
+  deleteCardTypeFromDraft,
+  duplicateCardType as cloneCardType,
+  reconcileCardValues,
+} from "./core/cards.ts";
 import type {
   ArcReelBundle,
+  Card,
+  CardEdge,
+  CardType,
   Character,
   Chapter,
   ExportRecord,
@@ -71,10 +81,18 @@ import {
   UniverseModal,
   WorkflowTaskModal,
 } from "./components/forms.tsx";
+import {
+  CardBatchModal,
+  CardEdgeModal,
+  CardModal,
+  CardTypeModal,
+  ConstructModal,
+} from "./components/card-forms.tsx";
 import { Icon } from "./components/icon.tsx";
 import { SearchOverlay } from "./components/search-overlay.tsx";
 import { useToast } from "./components/use-toast.ts";
 import { Button, Modal, Toast } from "./components/ui.tsx";
+import { CardsView } from "./views/cards-view.tsx";
 import { CastLibrary } from "./views/cast-library.tsx";
 import { Dashboard } from "./views/dashboard.tsx";
 import { ExportsView } from "./views/exports-view.tsx";
@@ -128,7 +146,12 @@ type ModalState =
       workId?: string;
     }
   | { kind: "mcp" }
-  | { kind: "standard"; initial?: WorkspaceStandard };
+  | { kind: "standard"; initial?: WorkspaceStandard }
+  | { kind: "cardType"; initial?: CardType }
+  | { kind: "card"; typeId: string; initial?: Card }
+  | { kind: "cardBatch"; typeId: string }
+  | { kind: "cardEdge"; defaultSourceId?: string }
+  | { kind: "construct"; constructId: string };
 
 export function App() {
   const state = useStudioWorkspace();
@@ -264,6 +287,8 @@ export function App() {
       };
     if (route.name === "cast")
       return { eyebrow: "CAST SYSTEM / 人物系统", title: t("cast") };
+    if (route.name === "cards")
+      return { eyebrow: "NODE SYSTEM / 节点系统", title: t("cards") };
     if (route.name === "library")
       return { eyebrow: "LIBRARY / 小说书架", title: t("library") };
     if (route.name === "graph")
@@ -388,6 +413,118 @@ export function App() {
       else draft.relationships[index] = relationship;
     });
   };
+
+  const saveCardType = (next: CardType): boolean => {
+    const exists = workspace.cardTypes.some((item) => item.id === next.id);
+    const applied = mutateChecked((draft) => {
+      const index = draft.cardTypes.findIndex((item) => item.id === next.id);
+      if (index >= 0) draft.cardTypes[index] = next;
+      else draft.cardTypes.push(next);
+      // Editing a type can remove fields or narrow their ranges; existing
+      // cards keep only the values that still fit the new shape.
+      for (const card of draft.cards) {
+        if (card.typeId !== next.id) continue;
+        card.values = reconcileCardValues(next, card.values);
+      }
+    });
+    if (!applied) return false;
+    notify(exists ? t("cardsTypeUpdated") : t("cardsTypeCreated"));
+    return true;
+  };
+
+  const duplicateCardTypeTemplate = (type: CardType) => {
+    const copy = cloneCardType(type);
+    const applied = mutateChecked((draft) => {
+      draft.cardTypes.push(copy);
+    });
+    if (applied) notify(t("cardsTypeCopied"));
+  };
+
+  const deleteCardType = (type: CardType) => {
+    const message = t("cardsDeleteTypeConfirm", {
+      name: displayText(type.name, locale),
+    });
+    if (!window.confirm(message)) return;
+    const applied = mutateChecked((draft) => {
+      deleteCardTypeFromDraft(draft, type.id);
+    });
+    if (applied) notify(t("saved"));
+  };
+
+  const saveCard = (next: Card): boolean => {
+    const applied = mutateChecked((draft) => {
+      const index = draft.cards.findIndex((item) => item.id === next.id);
+      if (index >= 0) draft.cards[index] = next;
+      else draft.cards.push(next);
+    });
+    if (applied) notify(t("saved"));
+    return applied;
+  };
+
+  const saveCardBatch = (batch: Card[]): boolean => {
+    if (!batch.length) return false;
+    const applied = mutateChecked((draft) => {
+      draft.cards.push(...batch);
+    });
+    if (applied) notify(t("cardsBatchCreated", { count: batch.length }));
+    return applied;
+  };
+
+  const deleteCard = (card: Card) => {
+    if (!window.confirm(t("cardsDeleteCardConfirm"))) return;
+    const applied = mutateChecked((draft) => {
+      draft.cards = draft.cards.filter((item) => item.id !== card.id);
+      draft.cardEdges = draft.cardEdges.filter(
+        (edge) => edge.sourceId !== card.id && edge.targetId !== card.id,
+      );
+    });
+    if (applied) notify(t("saved"));
+  };
+
+  const saveCardEdge = (edge: CardEdge): boolean => {
+    const applied = mutateChecked((draft) => {
+      draft.cardEdges.push(edge);
+    });
+    if (applied) notify(t("cardsEdgeCreated"));
+    return applied;
+  };
+
+  const deleteCardEdge = (edge: CardEdge) => {
+    if (!window.confirm(t("cardsDeleteEdgeConfirm"))) return;
+    const applied = mutateChecked((draft) => {
+      draft.cardEdges = draft.cardEdges.filter((item) => item.id !== edge.id);
+    });
+    if (applied) notify(t("saved"));
+  };
+
+  const applyBuiltInConstruct = (constructId: string): boolean => {
+    if (workspace.constructs.some((item) => item.id === constructId)) {
+      notify(t("constructAlreadyApplied"));
+      return false;
+    }
+    const applied = mutateChecked((draft) => {
+      applyConstruct(draft, constructId);
+    });
+    if (!applied) return false;
+    const construct = BUILT_IN_CONSTRUCTS.find(
+      (item) => item.id === constructId,
+    );
+    notify(
+      t("constructApplied", {
+        name: construct ? displayText(construct.name, locale) : constructId,
+      }),
+    );
+    return true;
+  };
+
+  const modalCardType =
+    modal && (modal.kind === "card" || modal.kind === "cardBatch")
+      ? workspace.cardTypes.find((item) => item.id === modal.typeId)
+      : undefined;
+  const modalConstruct =
+    modal?.kind === "construct"
+      ? BUILT_IN_CONSTRUCTS.find((item) => item.id === modal.constructId)
+      : undefined;
 
   const saveTimelineEvent = (event: TimelineEvent): boolean => {
     const applied = mutateChecked((draft) => {
@@ -902,6 +1039,38 @@ export function App() {
               onOpenWork={(workId) => navigate({ name: "work", workId })}
               onNewWorld={() => setModal({ kind: "world" })}
               onNewNovel={() => setModal({ kind: "novel" })}
+              onApplyConstruct={(constructId) =>
+                setModal({ kind: "construct", constructId })
+              }
+              onOpenCards={() => navigate({ name: "cards" })}
+              onNewCardType={() => setModal({ kind: "cardType" })}
+            />
+          ) : null}
+
+          {route.name === "cards" ? (
+            <CardsView
+              workspace={workspace}
+              locale={locale}
+              t={t}
+              onNewType={() => setModal({ kind: "cardType" })}
+              onEditType={(initial) => setModal({ kind: "cardType", initial })}
+              onDuplicateType={duplicateCardTypeTemplate}
+              onDeleteType={deleteCardType}
+              onNewCard={(typeId) => setModal({ kind: "card", typeId })}
+              onEditCard={(card) =>
+                setModal({
+                  kind: "card",
+                  typeId: card.typeId,
+                  initial: card,
+                })
+              }
+              onBatch={(typeId) => setModal({ kind: "cardBatch", typeId })}
+              onNewEdge={(defaultSourceId) =>
+                setModal({ kind: "cardEdge", defaultSourceId })
+              }
+              onDeleteCard={deleteCard}
+              onDeleteEdge={deleteCardEdge}
+              onOpenQuickStart={() => navigate({ name: "dashboard" })}
             />
           ) : null}
 
@@ -1326,6 +1495,66 @@ export function App() {
           workspace={workspace}
           initial={modal.initial}
           onSave={saveStandard}
+        />
+      ) : null}
+      {modal?.kind === "cardType" ? (
+        <CardTypeModal
+          key={`card-type-${modal.initial?.id ?? "new"}`}
+          open
+          onClose={() => setModal(null)}
+          t={t}
+          locale={locale}
+          initial={modal.initial}
+          onSave={saveCardType}
+        />
+      ) : null}
+      {modal?.kind === "card" && modalCardType ? (
+        <CardModal
+          key={`card-${modal.initial?.id ?? "new"}-${modalCardType.id}`}
+          open
+          onClose={() => setModal(null)}
+          t={t}
+          locale={locale}
+          type={modalCardType}
+          initial={modal.initial}
+          onSave={saveCard}
+        />
+      ) : null}
+      {modal?.kind === "cardBatch" && modalCardType ? (
+        <CardBatchModal
+          key={`card-batch-${modalCardType.id}`}
+          open
+          onClose={() => setModal(null)}
+          t={t}
+          locale={locale}
+          type={modalCardType}
+          onSave={saveCardBatch}
+        />
+      ) : null}
+      {modal?.kind === "cardEdge" ? (
+        <CardEdgeModal
+          key={`card-edge-${modal.defaultSourceId ?? "new"}`}
+          open
+          onClose={() => setModal(null)}
+          t={t}
+          locale={locale}
+          workspace={workspace}
+          defaultSourceId={modal.defaultSourceId}
+          onSave={saveCardEdge}
+        />
+      ) : null}
+      {modal?.kind === "construct" && modalConstruct ? (
+        <ConstructModal
+          key={`construct-${modalConstruct.id}`}
+          open
+          onClose={() => setModal(null)}
+          t={t}
+          locale={locale}
+          construct={modalConstruct}
+          alreadyApplied={workspace.constructs.some(
+            (item) => item.id === modalConstruct.id,
+          )}
+          onApply={() => applyBuiltInConstruct(modalConstruct.id)}
         />
       ) : null}
       {modal?.kind === "task" ? (
