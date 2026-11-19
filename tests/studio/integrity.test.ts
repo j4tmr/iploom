@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { applyConstruct } from "../../apps/studio/src/core/cards.ts";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import {
   applyWorkspaceChange,
@@ -13,11 +14,6 @@ import {
   saveWorkFromEditor,
   unlinkCharacterFromUniverse,
 } from "../../apps/studio/src/core/integrity.ts";
-import {
-  CHAPTER_LIMITS,
-  MAX_WORKFLOW_RESULT_LENGTH,
-} from "../../apps/studio/src/core/types.ts";
-import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 import type {
   Character,
   StoryWork,
@@ -25,6 +21,11 @@ import type {
   WorkflowTask,
   WorkspaceStandard,
 } from "../../apps/studio/src/core/types.ts";
+import {
+  CHAPTER_LIMITS,
+  MAX_WORKFLOW_RESULT_LENGTH,
+} from "../../apps/studio/src/core/types.ts";
+import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 
 const NOW = "2026-11-06T00:00:00.000Z";
 
@@ -301,6 +302,56 @@ describe("workspace integrity", () => {
       ),
     ).toBe(false);
     expect(() => validateWorkspace(outcome.workspace)).not.toThrow();
+  });
+
+  test("deleting a world removes its node types, cards, relations and constructs", () => {
+    const workspace = demo();
+    applyConstruct(workspace, "looter", "uni_mist_harbor", NOW);
+    applyConstruct(workspace, "looter", "uni_ninth_station", NOW);
+    const removedTypeIds = new Set(
+      workspace.cardTypes
+        .filter((type) => type.universeId === "uni_mist_harbor")
+        .map((type) => type.id),
+    );
+    const removedCardIds = new Set(
+      workspace.cards
+        .filter((card) => removedTypeIds.has(card.typeId))
+        .map((card) => card.id),
+    );
+    expect(removedTypeIds.size).toBe(3);
+    expect(removedCardIds.size).toBe(8);
+
+    const outcome = applyWorkspaceChange(workspace, (draft) => {
+      deleteUniverseFromDraft(draft, "uni_mist_harbor");
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    const next = outcome.workspace;
+
+    expect(
+      next.cardTypes.some((type) => type.universeId === "uni_mist_harbor"),
+    ).toBe(false);
+    expect(next.cards.some((card) => removedCardIds.has(card.id))).toBe(false);
+    expect(
+      next.cardEdges.some(
+        (edge) =>
+          removedCardIds.has(edge.sourceId) ||
+          removedCardIds.has(edge.targetId),
+      ),
+    ).toBe(false);
+    expect(
+      next.constructs.some(
+        (construct) => construct.universeId === "uni_mist_harbor",
+      ),
+    ).toBe(false);
+    // The other universe's node data is untouched.
+    expect(
+      next.cardTypes.filter((type) => type.universeId === "uni_ninth_station"),
+    ).toHaveLength(3);
+    expect(next.cards).toHaveLength(8);
+    expect(next.cardEdges).toHaveLength(6);
+    expect(next.constructs).toHaveLength(1);
+    expect(() => validateWorkspace(next)).not.toThrow();
   });
 
   test("a novel moved out of a world survives deleting the old world", () => {

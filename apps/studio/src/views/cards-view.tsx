@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { appliedConstructs, BUILT_IN_CONSTRUCTS } from "../core/cards.ts";
 import { displayText } from "../core/factory.ts";
 import type {
   Card,
@@ -94,6 +95,7 @@ function CardRow({
 
 export function CardsView({
   workspace,
+  universeId,
   locale,
   t,
   onNewType,
@@ -106,9 +108,10 @@ export function CardsView({
   onNewEdge,
   onDeleteCard,
   onDeleteEdge,
-  onOpenQuickStart,
+  onApplyConstruct,
 }: {
   workspace: StudioWorkspace;
+  universeId: string;
   locale: UiLocale;
   t: Translate;
   onNewType: () => void;
@@ -121,25 +124,43 @@ export function CardsView({
   onNewEdge: (defaultSourceId?: string) => void;
   onDeleteCard: (card: Card) => void;
   onDeleteEdge: (edge: CardEdge) => void;
-  onOpenQuickStart: () => void;
+  onApplyConstruct: (constructId: string) => void;
 }) {
+  const universeTypes = useMemo(
+    () => workspace.cardTypes.filter((type) => type.universeId === universeId),
+    [workspace.cardTypes, universeId],
+  );
+  const universeCards = useMemo(() => {
+    const typeIds = new Set(universeTypes.map((type) => type.id));
+    return workspace.cards.filter((card) => typeIds.has(card.typeId));
+  }, [workspace.cards, universeTypes]);
+  const universeEdges = useMemo(() => {
+    const cardIds = new Set(universeCards.map((card) => card.id));
+    return workspace.cardEdges.filter(
+      (edge) => cardIds.has(edge.sourceId) && cardIds.has(edge.targetId),
+    );
+  }, [workspace.cardEdges, universeCards]);
+  const usedConstructs = appliedConstructs(workspace, universeId);
+  const unusedConstructs = BUILT_IN_CONSTRUCTS.filter(
+    (item) => !usedConstructs.some((applied) => applied.id === item.id),
+  );
   const [selectedTypeId, setSelectedTypeId] = useState(
-    () => workspace.cardTypes[0]?.id ?? "",
+    () => universeTypes[0]?.id ?? "",
   );
   const activeType =
-    workspace.cardTypes.find((type) => type.id === selectedTypeId) ??
-    workspace.cardTypes[0];
+    universeTypes.find((type) => type.id === selectedTypeId) ??
+    universeTypes[0];
   const cardsById = useMemo(() => {
     const map = new Map<string, Card>();
-    for (const card of workspace.cards) map.set(card.id, card);
+    for (const card of universeCards) map.set(card.id, card);
     return map;
-  }, [workspace.cards]);
+  }, [universeCards]);
   const activeCards = useMemo(
     () =>
       activeType
-        ? workspace.cards.filter((card) => card.typeId === activeType.id)
+        ? universeCards.filter((card) => card.typeId === activeType.id)
         : [],
-    [workspace.cards, activeType],
+    [universeCards, activeType],
   );
   const activeCardIds = useMemo(
     () => new Set(activeCards.map((card) => card.id)),
@@ -147,29 +168,35 @@ export function CardsView({
   );
   const activeEdges = useMemo(
     () =>
-      workspace.cardEdges.filter(
+      universeEdges.filter(
         (edge) =>
           activeCardIds.has(edge.sourceId) || activeCardIds.has(edge.targetId),
       ),
-    [workspace.cardEdges, activeCardIds],
+    [universeEdges, activeCardIds],
   );
+  const relationCountByCardId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const edge of universeEdges) {
+      counts.set(edge.sourceId, (counts.get(edge.sourceId) ?? 0) + 1);
+      counts.set(edge.targetId, (counts.get(edge.targetId) ?? 0) + 1);
+    }
+    return counts;
+  }, [universeEdges]);
   const relationCountFor = (cardId: string) =>
-    workspace.cardEdges.filter(
-      (edge) => edge.sourceId === cardId || edge.targetId === cardId,
-    ).length;
+    relationCountByCardId.get(cardId) ?? 0;
 
   return (
-    <div className="view cards-view">
+    <div className="cards-view">
       <section className="cards-head">
         <div>
           <span className="eyebrow">NODE SYSTEM / 节点系统</span>
-          <h1>{t("cardsTitle")}</h1>
+          <h2>{t("cardsTitle")}</h2>
           <p>{t("cardsLead")}</p>
         </div>
         <div className="cards-head-actions">
           <Button
             icon="link"
-            disabled={workspace.cards.length < 2}
+            disabled={universeCards.length < 2}
             onClick={() => onNewEdge()}
           >
             {t("cardsNewEdge")}
@@ -180,6 +207,26 @@ export function CardsView({
         </div>
       </section>
 
+      {unusedConstructs.length ? (
+        <div className="construct-inline">
+          <span className="construct-inline-label">
+            {t("constructQuickStart")}
+          </span>
+          {unusedConstructs.map((construct) => (
+            <button
+              type="button"
+              className="construct-inline-chip"
+              key={construct.id}
+              onClick={() => onApplyConstruct(construct.id)}
+            >
+              <Icon name="sparkles" size={14} />
+              {displayText(construct.name, locale)}
+            </button>
+          ))}
+          <span className="hint">{t("constructTemplateHint")}</span>
+        </div>
+      ) : null}
+
       {!activeType ? (
         <EmptyState
           icon="layers"
@@ -189,9 +236,14 @@ export function CardsView({
               <Button variant="primary" icon="plus" onClick={onNewType}>
                 {t("cardsNewType")}
               </Button>
-              <Button icon="sparkles" onClick={onOpenQuickStart}>
-                {t("constructQuickStart")}
-              </Button>
+              {unusedConstructs[0] ? (
+                <Button
+                  icon="sparkles"
+                  onClick={() => onApplyConstruct(unusedConstructs[0]!.id)}
+                >
+                  {t("constructQuickStart")}
+                </Button>
+              ) : null}
             </div>
           }
         >
@@ -200,8 +252,8 @@ export function CardsView({
       ) : (
         <div className="cards-layout">
           <aside className="card-type-rail">
-            {workspace.cardTypes.map((type) => {
-              const count = workspace.cards.filter(
+            {universeTypes.map((type) => {
+              const count = universeCards.filter(
                 (card) => card.typeId === type.id,
               ).length;
               return (
@@ -326,7 +378,7 @@ export function CardsView({
               <Button
                 variant="ghost"
                 icon="link"
-                disabled={workspace.cards.length < 2}
+                disabled={universeCards.length < 2}
                 onClick={() => onNewEdge()}
               >
                 {t("cardsNewEdge")}

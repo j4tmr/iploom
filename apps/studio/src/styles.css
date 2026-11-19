@@ -1728,6 +1728,78 @@ fieldset.field > legend {
   white-space: nowrap;
 }
 
+.world-node-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.world-node-summary li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-raised);
+}
+
+.world-node-summary strong {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 550;
+}
+
+.world-node-summary small {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.world-node-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.world-node-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.world-node-row i {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+}
+
+.world-node-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.world-node-row small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .world-card-foot strong {
   color: var(--ink-soft);
 }
@@ -5877,7 +5949,8 @@ fieldset.field > legend {
   flex-wrap: wrap;
 }
 
-.cards-head h1 {
+.cards-head h1,
+.cards-head h2 {
   margin: 6px 0 8px;
 }
 
@@ -5892,6 +5965,49 @@ fieldset.field > legend {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.construct-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: var(--paper-raised);
+}
+
+.construct-inline-label {
+  margin-right: 4px;
+  color: var(--muted-2);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.construct-inline-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.construct-inline-chip:hover {
+  border-color: var(--accent);
+  background: var(--accent-pale);
+}
+
+.construct-inline .hint {
+  flex-basis: 100%;
+  margin: 0;
 }
 
 .empty-action-row {
@@ -6161,80 +6277,6 @@ fieldset.field > legend {
 
 .card-field-row .field-wide {
   grid-column: 1 / -1;
-}
-
-.construct-section .section-lead {
-  max-width: 720px;
-  margin: -2px 0 12px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.75;
-}
-
-.construct-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 12px;
-}
-
-.construct-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 190px;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--paper);
-}
-
-.construct-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.construct-glyph {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  font-weight: 700;
-}
-
-.construct-card h3 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.construct-card p {
-  flex: 1;
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.7;
-}
-
-.construct-card .button {
-  align-self: flex-start;
-}
-
-.construct-card.used {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
-}
-
-.construct-card.custom {
-  border-style: dashed;
-  background: transparent;
-}
-
-.construct-used-on {
-  color: var(--muted-2);
-  font-size: 10px;
 }
 
 .construct-preview {

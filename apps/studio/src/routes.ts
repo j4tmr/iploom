@@ -4,11 +4,10 @@ export type StudioRoute =
   | {
       name: "universe";
       id: string;
-      tab?: "overview" | "cast" | "atlas" | "graph" | "stories";
+      tab?: "overview" | "cast" | "atlas" | "graph" | "stories" | "nodes";
     }
   | { name: "work"; workId: string }
   | { name: "cast"; universeId?: string }
-  | { name: "cards" }
   | { name: "graph"; universeId?: string }
   | { name: "timeline"; universeId?: string }
   | { name: "workflow" }

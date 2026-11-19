@@ -35,7 +35,6 @@ export function Sidebar({
     { route: "dashboard", label: t("dashboard"), icon: "grid" },
     { route: "library", label: t("library"), icon: "book" },
     { route: "cast", label: t("cast"), icon: "users" },
-    { route: "cards", label: t("cards"), icon: "file" },
     { route: "graph", label: t("relationships"), icon: "graph" },
     { route: "timeline", label: t("timeline"), icon: "timeline" },
     { route: "foundation", label: t("foundation"), icon: "layers" },

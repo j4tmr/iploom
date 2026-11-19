@@ -3,40 +3,75 @@ import {
   appliedConstructs,
   applyConstruct,
   BUILT_IN_CONSTRUCTS,
+  cardUniverseId,
   createCardBatch,
   defaultCardValues,
   deleteCardTypeFromDraft,
   duplicateCardType,
   reconcileCardValues,
 } from "../../apps/studio/src/core/cards.ts";
-import { createEmptyWorkspace } from "../../apps/studio/src/core/factory.ts";
-import type { CardType } from "../../apps/studio/src/core/types.ts";
+import {
+  createDemoWorkspace,
+  createEmptyWorkspace,
+  localized,
+} from "../../apps/studio/src/core/factory.ts";
+import type {
+  CardType,
+  StudioWorkspace,
+} from "../../apps/studio/src/core/types.ts";
 import { validateWorkspace } from "../../apps/studio/src/core/validate.ts";
 
 const NOW = "2026-11-19T00:00:00.000Z";
 
-function looterType(typeId: string, workspace = createEmptyWorkspace("en")) {
-  applyConstruct(workspace, "looter", NOW);
-  const type = workspace.cardTypes.find((item) => item.id === typeId);
-  if (!type) throw new Error(`missing type ${typeId}`);
+function demo(): { workspace: StudioWorkspace; universeId: string } {
+  const workspace = createDemoWorkspace("en", NOW);
+  return { workspace, universeId: workspace.universes[0]!.id };
+}
+
+function applyLooter(workspace: StudioWorkspace, universeId: string): void {
+  const result = applyConstruct(workspace, "looter", universeId, NOW);
+  if (result.status !== "applied") throw new Error(result.status);
+}
+
+function typeIn(
+  workspace: StudioWorkspace,
+  universeId: string,
+  name: string,
+): CardType {
+  const type = workspace.cardTypes.find(
+    (item) => item.universeId === universeId && item.name.en === name,
+  );
+  if (!type) throw new Error(`missing type ${name} in ${universeId}`);
   return type;
+}
+
+function cardTypeId(
+  workspace: StudioWorkspace,
+  universeId: string,
+  name: string,
+): string {
+  return typeIn(workspace, universeId, name).id;
 }
 
 describe("built-in constructs", () => {
   test("applying the looter construct adds editable types, cards and edges", () => {
-    const workspace = createEmptyWorkspace("en");
-    const result = applyConstruct(workspace, "looter", NOW);
-    expect(result.status).toBe("applied");
-    expect(workspace.cardTypes.map((type) => type.id)).toEqual([
-      "cardtype_looter_scene",
-      "cardtype_looter_monster",
-      "cardtype_looter_equipment",
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
+    expect(workspace.cardTypes.map((type) => type.name.en)).toEqual([
+      "Scene",
+      "Monster",
+      "Equipment",
     ]);
+    expect(new Set(workspace.cardTypes.map((type) => type.id)).size).toBe(3);
+    expect(
+      workspace.cardTypes.every((type) => type.universeId === universeId),
+    ).toBe(true);
     expect(workspace.cards.length).toBe(8);
     expect(workspace.cardEdges.length).toBe(6);
     expect(workspace.constructs).toEqual([
       {
         id: "looter",
+        universeId,
         name: { zh: "刷子游戏", en: "Looter game" },
         appliedAt: NOW,
       },
@@ -45,40 +80,66 @@ describe("built-in constructs", () => {
     expect(() => validateWorkspace(workspace)).not.toThrow();
   });
 
-  test("a construct cannot be applied twice", () => {
-    const workspace = createEmptyWorkspace("en");
-    applyConstruct(workspace, "looter", NOW);
-    const again = applyConstruct(workspace, "looter", NOW);
+  test("a construct cannot be applied twice in the same universe", () => {
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
+    const again = applyConstruct(workspace, "looter", universeId, NOW);
     expect(again.status).toBe("already-applied");
     expect(workspace.cards.length).toBe(8);
     expect(workspace.constructs.length).toBe(1);
   });
 
-  test("an unknown construct id changes nothing", () => {
-    const workspace = createEmptyWorkspace("en");
-    expect(applyConstruct(workspace, "nope", NOW).status).toBe("unknown");
+  test("the same construct can be applied in another universe", () => {
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
+    const otherUniverse = workspace.universes[1]!.id;
+    applyLooter(workspace, otherUniverse);
+    expect(workspace.cardTypes.length).toBe(6);
+    expect(workspace.cards.length).toBe(16);
+    expect(workspace.cardEdges.length).toBe(12);
+    expect(workspace.constructs.length).toBe(2);
+    expect(
+      workspace.cardTypes.filter((type) => type.universeId === otherUniverse),
+    ).toHaveLength(3);
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+  });
+
+  test("an unknown construct id or universe changes nothing", () => {
+    const { workspace, universeId } = demo();
+    expect(applyConstruct(workspace, "nope", universeId, NOW).status).toBe(
+      "unknown",
+    );
+    expect(applyConstruct(workspace, "looter", "uni_missing", NOW).status).toBe(
+      "unknown",
+    );
     expect(workspace.cardTypes).toEqual([]);
     expect(workspace.constructs).toEqual([]);
   });
 
-  test("applied constructs are listed newest first", () => {
-    const workspace = createEmptyWorkspace("en");
-    applyConstruct(workspace, "looter", NOW);
+  test("applied constructs are listed per universe, newest first", () => {
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
     workspace.constructs.push({
       id: "other",
+      universeId,
       name: { zh: "其他", en: "Other" },
       appliedAt: "2026-11-20T00:00:00.000Z",
     });
-    expect(appliedConstructs(workspace).map((item) => item.id)).toEqual([
-      "other",
-      "looter",
-    ]);
+    workspace.constructs.push({
+      id: "other",
+      universeId: workspace.universes[1]!.id,
+      name: { zh: "其他", en: "Other" },
+      appliedAt: "2026-11-21T00:00:00.000Z",
+    });
+    expect(
+      appliedConstructs(workspace, universeId).map((item) => item.id),
+    ).toEqual(["other", "looter"]);
     expect(BUILT_IN_CONSTRUCTS[0]?.id).toBe("looter");
   });
 
   test("sample values survive their own type definitions", () => {
-    const workspace = createEmptyWorkspace("en");
-    applyConstruct(workspace, "looter", NOW);
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
     for (const card of workspace.cards) {
       const type = workspace.cardTypes.find((item) => item.id === card.typeId);
       expect(type).toBeDefined();
@@ -86,15 +147,23 @@ describe("built-in constructs", () => {
         expect(type!.fields.some((field) => field.key === key)).toBe(true);
     }
   });
+
+  test("every generated card resolves to the universe of its type", () => {
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
+    for (const card of workspace.cards)
+      expect(cardUniverseId(workspace, card)).toBe(universeId);
+  });
 });
 
 describe("type templates", () => {
   test("duplicating a type copies its fields under a new identity", () => {
-    const workspace = createEmptyWorkspace("en");
-    applyConstruct(workspace, "looter", NOW);
-    const original = workspace.cardTypes[1]!;
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
+    const original = typeIn(workspace, universeId, "Monster");
     const copy = duplicateCardType(original, NOW);
     expect(copy.id).not.toBe(original.id);
+    expect(copy.universeId).toBe(universeId);
     expect(copy.name).toEqual({ zh: "怪物 副本", en: "Monster copy" });
     expect(copy.fields).toEqual(original.fields);
     copy.fields[0]!.key = "renamed";
@@ -104,32 +173,31 @@ describe("type templates", () => {
   });
 
   test("deleting a type removes its cards and the relations that touched them", () => {
-    const workspace = createEmptyWorkspace("en");
-    applyConstruct(workspace, "looter", NOW);
-    expect(deleteCardTypeFromDraft(workspace, "cardtype_looter_monster")).toBe(
-      true,
-    );
-    expect(workspace.cardTypes.map((type) => type.id)).toEqual([
-      "cardtype_looter_scene",
-      "cardtype_looter_equipment",
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
+    const monsterTypeId = cardTypeId(workspace, universeId, "Monster");
+    expect(deleteCardTypeFromDraft(workspace, monsterTypeId)).toBe(true);
+    expect(workspace.cardTypes.map((type) => type.name.en)).toEqual([
+      "Scene",
+      "Equipment",
     ]);
     expect(workspace.cards.map((card) => card.typeId)).toEqual([
-      "cardtype_looter_scene",
-      "cardtype_looter_scene",
-      "cardtype_looter_equipment",
-      "cardtype_looter_equipment",
+      cardTypeId(workspace, universeId, "Scene"),
+      cardTypeId(workspace, universeId, "Scene"),
+      cardTypeId(workspace, universeId, "Equipment"),
+      cardTypeId(workspace, universeId, "Equipment"),
     ]);
     expect(workspace.cardEdges).toEqual([]);
     expect(() => validateWorkspace(workspace)).not.toThrow();
-    expect(deleteCardTypeFromDraft(workspace, "cardtype_looter_monster")).toBe(
-      false,
-    );
+    expect(deleteCardTypeFromDraft(workspace, monsterTypeId)).toBe(false);
   });
 });
 
 describe("card batches", () => {
   test("createCardBatch numbers titles and fills defaults", () => {
-    const type = looterType("cardtype_looter_monster");
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
+    const type = typeIn(workspace, universeId, "Monster");
     const batch = createCardBatch(type, {
       count: 3,
       titlePrefix: "骷髅",
@@ -147,7 +215,9 @@ describe("card batches", () => {
   });
 
   test("batch size is clamped and a start index is honoured", () => {
-    const type = looterType("cardtype_looter_monster");
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
+    const type = typeIn(workspace, universeId, "Monster");
     const batch = createCardBatch(type, {
       count: 900,
       titlePrefix: "狼",
@@ -162,7 +232,8 @@ describe("card batches", () => {
 
 describe("reconciling values after a type edit", () => {
   const type: CardType = {
-    id: "cardtype_test",
+    id: "ctype_test",
+    universeId: "uni_mist_harbor",
     name: { zh: "测试", en: "Test" },
     summary: { zh: "", en: "" },
     color: "#336655",
@@ -215,17 +286,17 @@ describe("reconciling values after a type edit", () => {
 
 describe("card schema checks", () => {
   test("rejects values whose key is not a field of the type", () => {
-    const workspace = createEmptyWorkspace("en");
-    applyConstruct(workspace, "looter", NOW);
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
     workspace.cards[0]!.values.ghost = 1;
     expect(() => validateWorkspace(workspace)).toThrow();
   });
 
   test("rejects numeric fields holding text and non-integer integers", () => {
-    const workspace = createEmptyWorkspace("en");
-    applyConstruct(workspace, "looter", NOW);
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
     const monster = workspace.cards.find(
-      (card) => card.typeId === "cardtype_looter_monster",
+      (card) => card.typeId === cardTypeId(workspace, universeId, "Monster"),
     )!;
     monster.values.hp = "lots";
     expect(() => validateWorkspace(workspace)).toThrow();
@@ -234,8 +305,8 @@ describe("card schema checks", () => {
   });
 
   test("rejects edges that point at a missing card", () => {
-    const workspace = createEmptyWorkspace("en");
-    applyConstruct(workspace, "looter", NOW);
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
     workspace.cardEdges.push({
       id: "cardedge_missing",
       sourceId: "card_missing",
@@ -248,9 +319,32 @@ describe("card schema checks", () => {
     expect(() => validateWorkspace(workspace)).toThrow(/unknown card/);
   });
 
-  test("rejects duplicate field keys and duplicate construct records", () => {
-    const workspace = createEmptyWorkspace("en");
-    applyConstruct(workspace, "looter", NOW);
+  test("rejects a relation between cards of different universes", () => {
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
+    const otherUniverse = workspace.universes[1]!.id;
+    applyLooter(workspace, otherUniverse);
+    const mine = workspace.cards.find(
+      (card) => card.typeId === cardTypeId(workspace, universeId, "Monster"),
+    )!;
+    const foreign = workspace.cards.find(
+      (card) => card.typeId === cardTypeId(workspace, otherUniverse, "Scene"),
+    )!;
+    workspace.cardEdges.push({
+      id: "cardedge_cross",
+      sourceId: mine.id,
+      targetId: foreign.id,
+      label: localized("跨越", "Crosses"),
+      notes: "",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    expect(() => validateWorkspace(workspace)).toThrow(/crosses universe/);
+  });
+
+  test("rejects duplicate field keys and construct records within a universe", () => {
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
     workspace.cardTypes[0]!.fields.push({
       ...workspace.cardTypes[0]!.fields[0]!,
     });
@@ -258,6 +352,12 @@ describe("card schema checks", () => {
     workspace.cardTypes[0]!.fields.pop();
     workspace.constructs.push({ ...workspace.constructs[0]! });
     expect(() => validateWorkspace(workspace)).toThrow();
+    workspace.constructs.pop();
+    workspace.constructs.push({
+      ...workspace.constructs[0]!,
+      universeId: workspace.universes[1]!.id,
+    });
+    expect(() => validateWorkspace(workspace)).not.toThrow();
   });
 
   const field = (
@@ -274,7 +374,7 @@ describe("card schema checks", () => {
   test.each([
     [
       "min greater than max",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         const target = workspace.cardTypes[0]!.fields[0]!;
         target.min = 50;
         target.max = 10;
@@ -282,13 +382,13 @@ describe("card schema checks", () => {
     ],
     [
       "enum without values",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         workspace.cardTypes[0]!.fields.push(field({ type: "enum" }));
       },
     ],
     [
       "enum default outside its values",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         workspace.cardTypes[0]!.fields.push(
           field({ type: "enum", enumValues: ["a"], defaultValue: "b" }),
         );
@@ -296,7 +396,7 @@ describe("card schema checks", () => {
     ],
     [
       "numeric enum default",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         workspace.cardTypes[0]!.fields.push(
           field({ type: "enum", enumValues: ["a"], defaultValue: 1 }),
         );
@@ -304,7 +404,7 @@ describe("card schema checks", () => {
     ],
     [
       "enum values on a text field",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         workspace.cardTypes[0]!.fields.push(
           field({ type: "text", enumValues: ["a"] }),
         );
@@ -312,7 +412,7 @@ describe("card schema checks", () => {
     ],
     [
       "text default on a numeric field",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         workspace.cardTypes[0]!.fields.push(
           field({ type: "integer", defaultValue: "5" }),
         );
@@ -320,7 +420,7 @@ describe("card schema checks", () => {
     ],
     [
       "decimal default on an integer field",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         workspace.cardTypes[0]!.fields.push(
           field({ type: "integer", defaultValue: 1.5 }),
         );
@@ -328,7 +428,7 @@ describe("card schema checks", () => {
     ],
     [
       "numeric default on a text field",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         workspace.cardTypes[0]!.fields.push(
           field({ type: "text", defaultValue: 3 }),
         );
@@ -336,7 +436,7 @@ describe("card schema checks", () => {
     ],
     [
       "default below the minimum",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         workspace.cardTypes[0]!.fields.push(
           field({ type: "integer", min: 10, defaultValue: 5 }),
         );
@@ -344,7 +444,7 @@ describe("card schema checks", () => {
     ],
     [
       "default above the maximum",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         workspace.cardTypes[0]!.fields.push(
           field({ type: "integer", max: 10, defaultValue: 50 }),
         );
@@ -352,74 +452,76 @@ describe("card schema checks", () => {
     ],
     [
       "unknown card type",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         workspace.cards[0]!.typeId = "cardtype_missing";
       },
     ],
     [
       "text field holding a number",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         const card = workspace.cards.find(
-          (item) => item.typeId === "cardtype_looter_scene",
+          (item) => item.typeId === workspace.cardTypes[0]!.id,
         )!;
         card.values.mood = 3;
       },
     ],
     [
       "enum value outside the declared values",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         const card = workspace.cards.find(
-          (item) => item.typeId === "cardtype_looter_monster",
+          (item) => item.typeId === workspace.cardTypes[1]!.id,
         )!;
         card.values.tier = "传说";
       },
     ],
     [
       "value below the field minimum",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         const card = workspace.cards.find(
-          (item) => item.typeId === "cardtype_looter_monster",
+          (item) => item.typeId === workspace.cardTypes[1]!.id,
         )!;
         card.values.level = 0;
       },
     ],
     [
       "value above the field maximum",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         const card = workspace.cards.find(
-          (item) => item.typeId === "cardtype_looter_monster",
+          (item) => item.typeId === workspace.cardTypes[1]!.id,
         )!;
         card.values.level = 101;
       },
     ],
     [
       "duplicate card id",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         workspace.cards.push({ ...workspace.cards[0]!, values: {} });
       },
     ],
     [
       "duplicate card edge id",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         workspace.cardEdges.push({ ...workspace.cardEdges[0]! });
       },
     ],
     [
       "duplicate card type id",
-      (workspace: ReturnType<typeof createEmptyWorkspace>) => {
+      (workspace: StudioWorkspace) => {
         workspace.cardTypes.push({ ...workspace.cardTypes[0]!, fields: [] });
       },
     ],
   ])("rejects an invalid field or value: %s", (_name, mutate) => {
-    const workspace = createEmptyWorkspace("en");
-    applyConstruct(workspace, "looter", NOW);
+    const { workspace, universeId } = demo();
+    applyLooter(workspace, universeId);
     mutate(workspace);
     expect(() => validateWorkspace(workspace)).toThrow();
   });
+});
 
+describe("universe scoping migrations", () => {
   test("migrates v8 workspaces by adding empty card collections", () => {
     const legacy = structuredClone(
-      createEmptyWorkspace("en"),
+      createEmptyWorkspace("Test", "en", NOW),
     ) as unknown as Record<string, unknown>;
     legacy.schema_version = 8;
     delete legacy.cardTypes;
@@ -427,10 +529,78 @@ describe("card schema checks", () => {
     delete legacy.cardEdges;
     delete legacy.constructs;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(9);
+    expect(migrated.schema_version).toBe(10);
     expect(migrated.cardTypes).toEqual([]);
     expect(migrated.cards).toEqual([]);
     expect(migrated.cardEdges).toEqual([]);
     expect(migrated.constructs).toEqual([]);
+  });
+
+  test("assigns v9 node data to the first universe", () => {
+    const legacy = structuredClone(
+      createDemoWorkspace("en", NOW),
+    ) as unknown as Record<string, unknown>;
+    legacy.schema_version = 9;
+    legacy.revision = 20;
+    legacy.cardTypes = [
+      {
+        id: "ctype_legacy",
+        name: { zh: "旧类型", en: "Legacy type" },
+        summary: { zh: "", en: "" },
+        color: "#336655",
+        fields: [],
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ];
+    legacy.constructs = [
+      {
+        id: "looter",
+        name: { zh: "刷子游戏", en: "Looter game" },
+        appliedAt: NOW,
+      },
+    ];
+    const migrated = validateWorkspace(legacy);
+    expect(migrated.schema_version).toBe(10);
+    expect(migrated.revision).toBe(21);
+    expect(migrated.cardTypes[0]!.universeId).toBe("uni_mist_harbor");
+    expect(migrated.constructs[0]!.universeId).toBe("uni_mist_harbor");
+    expect(migrated.universes.map((universe) => universe.id)).toEqual([
+      "uni_mist_harbor",
+      "uni_ninth_station",
+    ]);
+  });
+
+  test("creates a node workshop universe for v9 node data without universes", () => {
+    const legacy = structuredClone(
+      createEmptyWorkspace("Test", "en", NOW),
+    ) as unknown as Record<string, unknown>;
+    legacy.schema_version = 9;
+    legacy.cardTypes = [
+      {
+        id: "ctype_legacy",
+        name: { zh: "旧类型", en: "Legacy type" },
+        summary: { zh: "", en: "" },
+        color: "#336655",
+        fields: [],
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ];
+    const migrated = validateWorkspace(legacy);
+    expect(migrated.schema_version).toBe(10);
+    expect(migrated.universes).toHaveLength(1);
+    expect(migrated.universes[0]!.id).toBe("universe_node_workshop");
+    expect(migrated.cardTypes[0]!.universeId).toBe("universe_node_workshop");
+  });
+
+  test("does not create a universe when v9 has no node data", () => {
+    const legacy = structuredClone(
+      createEmptyWorkspace("Test", "en", NOW),
+    ) as unknown as Record<string, unknown>;
+    legacy.schema_version = 9;
+    const migrated = validateWorkspace(legacy);
+    expect(migrated.schema_version).toBe(10);
+    expect(migrated.universes).toEqual([]);
   });
 });

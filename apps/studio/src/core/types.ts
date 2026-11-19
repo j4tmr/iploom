@@ -1,4 +1,4 @@
-export const WORKSPACE_SCHEMA_VERSION = 9 as const;
+export const WORKSPACE_SCHEMA_VERSION = 10 as const;
 export const ARC_REEL_SCHEMA = "iploom.arcreel/v1" as const;
 /** Longest result text the workspace stores per language. */
 export const MAX_WORKFLOW_RESULT_LENGTH = 200_000 as const;
@@ -393,9 +393,14 @@ export interface CardField {
   defaultValue?: number | string;
 }
 
-/** A user-defined card shape: a name plus the fields every card carries. */
+/**
+ * A user-defined card shape: a name plus the fields every card carries.
+ * A type belongs to exactly one universe, so two worlds can have their own
+ * node vocabulary without sharing records.
+ */
 export interface CardType {
   id: string;
+  universeId: string;
   name: LocalizedText;
   summary: LocalizedText;
   color: string;
@@ -426,9 +431,13 @@ export interface CardEdge {
   updatedAt: string;
 }
 
-/** A quick construct this workspace has applied, newest last used first. */
+/**
+ * A quick construct applied inside one universe. The same construct can be
+ * applied once in every universe, so identity is (universeId, id).
+ */
 export interface AppliedConstruct {
   id: string;
+  universeId: string;
   name: LocalizedText;
   appliedAt: string;
 }

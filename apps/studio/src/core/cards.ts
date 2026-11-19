@@ -67,6 +67,7 @@ export function duplicateCardType(
   return {
     ...structuredClone(type),
     id: createId("ctype"),
+    universeId: type.universeId,
     name: {
       zh: `${type.name.zh.trim()} 副本`.trim(),
       en: `${type.name.en.trim()} copy`.trim(),
@@ -136,7 +137,7 @@ export interface BuiltInConstruct {
   id: string;
   name: LocalizedText;
   summary: LocalizedText;
-  build: (now: string) => ConstructBuild;
+  build: (now: string, universeId: string) => ConstructBuild;
 }
 
 function field(
@@ -156,9 +157,10 @@ function field(
   };
 }
 
-function looterConstruct(now: string): ConstructBuild {
+function looterConstruct(now: string, universeId: string): ConstructBuild {
   const sceneType: CardType = {
-    id: "cardtype_looter_scene",
+    id: createId("ctype"),
+    universeId,
     name: localized("场景", "Scene"),
     summary: localized(
       "关卡或副本：等级区间、波次、首领与掉落倾向。",
@@ -192,7 +194,8 @@ function looterConstruct(now: string): ConstructBuild {
     updatedAt: now,
   };
   const monsterType: CardType = {
-    id: "cardtype_looter_monster",
+    id: createId("ctype"),
+    universeId,
     name: localized("怪物", "Monster"),
     summary: localized(
       "可战斗单位：等级、基础属性、类型与掉落。",
@@ -228,7 +231,8 @@ function looterConstruct(now: string): ConstructBuild {
     updatedAt: now,
   };
   const equipmentType: CardType = {
-    id: "cardtype_looter_equipment",
+    id: createId("ctype"),
+    universeId,
     name: localized("装备", "Equipment"),
     summary: localized(
       "可掉落物：稀有度、部位、数值与词条。",
@@ -253,7 +257,6 @@ function looterConstruct(now: string): ConstructBuild {
   };
 
   const sceneMine = createCard(sceneType, {
-    id: "card_looter_scene_mine",
     title: localized("腐化矿坑", "Corrupted Mine"),
     values: {
       levelMin: 5,
@@ -266,7 +269,6 @@ function looterConstruct(now: string): ConstructBuild {
     now,
   });
   const sceneWoods = createCard(sceneType, {
-    id: "card_looter_scene_woods",
     title: localized("静谧林地", "Quiet Woods"),
     values: {
       levelMin: 1,
@@ -279,7 +281,6 @@ function looterConstruct(now: string): ConstructBuild {
     now,
   });
   const miner = createCard(monsterType, {
-    id: "card_looter_monster_miner",
     title: localized("腐化矿工", "Corrupted Miner"),
     values: {
       level: 3,
@@ -294,7 +295,6 @@ function looterConstruct(now: string): ConstructBuild {
     now,
   });
   const warden = createCard(monsterType, {
-    id: "card_looter_monster_warden",
     title: localized("矿坑守卫", "Mine Warden"),
     values: {
       level: 8,
@@ -309,7 +309,6 @@ function looterConstruct(now: string): ConstructBuild {
     now,
   });
   const wolf = createCard(monsterType, {
-    id: "card_looter_monster_wolf",
     title: localized("林地狼", "Woodland Wolf"),
     values: {
       level: 2,
@@ -324,7 +323,6 @@ function looterConstruct(now: string): ConstructBuild {
     now,
   });
   const giantWolf = createCard(monsterType, {
-    id: "card_looter_monster_giant_wolf",
     title: localized("林地巨狼", "Giant Wolf"),
     values: {
       level: 5,
@@ -339,7 +337,6 @@ function looterConstruct(now: string): ConstructBuild {
     now,
   });
   const sword = createCard(equipmentType, {
-    id: "card_looter_equipment_sword",
     title: localized("锈蚀短剑", "Rusted Shortsword"),
     values: {
       rarity: "普通",
@@ -351,7 +348,6 @@ function looterConstruct(now: string): ConstructBuild {
     now,
   });
   const charm = createCard(equipmentType, {
-    id: "card_looter_equipment_charm",
     title: localized("矿工护符", "Miner's Charm"),
     values: {
       rarity: "稀有",
@@ -368,9 +364,8 @@ function looterConstruct(now: string): ConstructBuild {
     targetId: string,
     zh: string,
     en: string,
-    id: string,
   ): CardEdge => ({
-    id,
+    id: createId("cedge"),
     sourceId,
     targetId,
     label: localized(zh, en),
@@ -392,24 +387,12 @@ function looterConstruct(now: string): ConstructBuild {
       charm,
     ],
     edges: [
-      edge(miner.id, sceneMine.id, "出没于", "Haunts", "cardedge_miner_mine"),
-      edge(warden.id, sceneMine.id, "镇守", "Guards", "cardedge_warden_mine"),
-      edge(wolf.id, sceneWoods.id, "出没于", "Haunts", "cardedge_wolf_woods"),
-      edge(
-        giantWolf.id,
-        sceneWoods.id,
-        "镇守",
-        "Guards",
-        "cardedge_giant_wolf_woods",
-      ),
-      edge(sword.id, miner.id, "掉落自", "Drops from", "cardedge_sword_miner"),
-      edge(
-        charm.id,
-        warden.id,
-        "掉落自",
-        "Drops from",
-        "cardedge_charm_warden",
-      ),
+      edge(miner.id, sceneMine.id, "出没于", "Haunts"),
+      edge(warden.id, sceneMine.id, "镇守", "Guards"),
+      edge(wolf.id, sceneWoods.id, "出没于", "Haunts"),
+      edge(giantWolf.id, sceneWoods.id, "镇守", "Guards"),
+      edge(sword.id, miner.id, "掉落自", "Drops from"),
+      edge(charm.id, warden.id, "掉落自", "Drops from"),
     ],
   };
 }
@@ -458,18 +441,24 @@ export type ApplyConstructResult =
 export function applyConstruct(
   draft: StudioWorkspace,
   constructId: string,
+  universeId: string,
   now = new Date().toISOString(),
 ): ApplyConstructResult {
   const construct = BUILT_IN_CONSTRUCTS.find((item) => item.id === constructId);
   if (!construct) return { status: "unknown" };
-  const recorded = draft.constructs.find((item) => item.id === constructId);
+  if (!draft.universes.some((universe) => universe.id === universeId))
+    return { status: "unknown" };
+  const recorded = draft.constructs.find(
+    (item) => item.id === constructId && item.universeId === universeId,
+  );
   if (recorded) return { status: "already-applied", name: construct.name };
-  const built = construct.build(now);
+  const built = construct.build(now, universeId);
   draft.cardTypes.push(...built.types);
   draft.cards.push(...built.cards);
   draft.cardEdges.push(...built.edges);
   const applied: AppliedConstruct = {
     id: construct.id,
+    universeId,
     name: construct.name,
     appliedAt: now,
   };
@@ -477,11 +466,21 @@ export function applyConstruct(
   return { status: "applied", name: construct.name };
 }
 
-/** Constructs this workspace has applied, most recently used first. */
+/** Constructs applied inside one universe, most recently used first. */
 export function appliedConstructs(
   workspace: StudioWorkspace,
+  universeId: string,
 ): AppliedConstruct[] {
-  return [...workspace.constructs].sort((left, right) =>
-    right.appliedAt.localeCompare(left.appliedAt),
-  );
+  return workspace.constructs
+    .filter((item) => item.universeId === universeId)
+    .sort((left, right) => right.appliedAt.localeCompare(left.appliedAt));
+}
+
+/** The universe a card belongs to, through the type it instantiates. */
+export function cardUniverseId(
+  workspace: Pick<StudioWorkspace, "cardTypes">,
+  card: Card,
+): string | undefined {
+  return workspace.cardTypes.find((type) => type.id === card.typeId)
+    ?.universeId;
 }

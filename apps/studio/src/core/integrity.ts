@@ -2,8 +2,8 @@ import { migrateWorkspace } from "./migrations.ts";
 import type { StoryWork, StudioWorkspace, TimelineEvent } from "./types.ts";
 import {
   validateWorkspace,
-  WorkspaceValidationError,
   type WorkspaceIssueDetail,
+  WorkspaceValidationError,
 } from "./validate.ts";
 
 function isUnknownRecord(value: unknown): value is Record<string, unknown> {
@@ -596,6 +596,27 @@ export function deleteUniverseFromDraft(
   );
   draft.itemStatTemplates = draft.itemStatTemplates.filter(
     (item) => item.universeId !== universeId,
+  );
+  const removedCardTypes = new Set(
+    draft.cardTypes
+      .filter((type) => type.universeId === universeId)
+      .map((type) => type.id),
+  );
+  const removedCards = new Set(
+    draft.cards
+      .filter((card) => removedCardTypes.has(card.typeId))
+      .map((card) => card.id),
+  );
+  draft.cardTypes = draft.cardTypes.filter(
+    (type) => type.universeId !== universeId,
+  );
+  draft.cards = draft.cards.filter((card) => !removedCards.has(card.id));
+  draft.cardEdges = draft.cardEdges.filter(
+    (edge) =>
+      !removedCards.has(edge.sourceId) && !removedCards.has(edge.targetId),
+  );
+  draft.constructs = draft.constructs.filter(
+    (construct) => construct.universeId !== universeId,
   );
 
   const removedTasks = new Set(
