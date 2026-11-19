@@ -1,23 +1,4 @@
-import { useEffect, useState } from "react";
-import { buildRelationshipGraph } from "../core/graph.ts";
-import { displayText, workWords } from "../core/factory.ts";
-import type {
-  Character,
-  LoreEntry,
-  StoryFaction,
-  StoryLocation,
-  StoryUniverse,
-  StudioWorkspace,
-  UiLocale,
-} from "../core/types.ts";
-import {
-  formatNumber,
-  loreLabels,
-  relationshipLabels,
-  relationStatusLabels,
-  statusLabels,
-  type Translate,
-} from "../i18n.ts";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../components/icon.tsx";
 import { RelationshipCanvas } from "../components/relationship-graph.tsx";
 import {
@@ -30,8 +11,37 @@ import {
   SectionTitle,
   TagList,
 } from "../components/ui.tsx";
+import { displayText, workWords } from "../core/factory.ts";
+import { buildRelationshipGraph } from "../core/graph.ts";
+import type {
+  Card,
+  CardEdge,
+  CardType,
+  Character,
+  LoreEntry,
+  StoryFaction,
+  StoryLocation,
+  StoryUniverse,
+  StudioWorkspace,
+  UiLocale,
+} from "../core/types.ts";
+import {
+  formatNumber,
+  loreLabels,
+  relationStatusLabels,
+  relationshipLabels,
+  statusLabels,
+  type Translate,
+} from "../i18n.ts";
+import { CardsView } from "./cards-view.tsx";
 
-type UniverseTab = "overview" | "cast" | "atlas" | "graph" | "stories";
+type UniverseTab =
+  | "overview"
+  | "cast"
+  | "atlas"
+  | "graph"
+  | "stories"
+  | "nodes";
 
 export function UniverseView({
   workspace,
@@ -53,6 +63,17 @@ export function UniverseView({
   onDeleteAtlas,
   onAddRelationship,
   onDeleteRelationship,
+  onNewCardType,
+  onEditCardType,
+  onDuplicateCardType,
+  onDeleteCardType,
+  onNewCard,
+  onEditCard,
+  onBatchCards,
+  onNewCardEdge,
+  onDeleteCard,
+  onDeleteCardEdge,
+  onApplyConstruct,
 }: {
   workspace: StudioWorkspace;
   universe: StoryUniverse;
@@ -76,6 +97,17 @@ export function UniverseView({
   onDeleteAtlas: (kind: "location" | "faction" | "lore", id: string) => void;
   onAddRelationship: () => void;
   onDeleteRelationship: (id: string) => void;
+  onNewCardType: () => void;
+  onEditCardType: (type: CardType) => void;
+  onDuplicateCardType: (type: CardType) => void;
+  onDeleteCardType: (type: CardType) => void;
+  onNewCard: (typeId: string) => void;
+  onEditCard: (card: Card) => void;
+  onBatchCards: (typeId: string) => void;
+  onNewCardEdge: (defaultSourceId?: string) => void;
+  onDeleteCard: (card: Card) => void;
+  onDeleteCardEdge: (edge: CardEdge) => void;
+  onApplyConstruct: (constructId: string) => void;
 }) {
   const [tab, setTab] = useState<UniverseTab>(initialTab ?? "overview");
   useEffect(() => {
@@ -97,8 +129,32 @@ export function UniverseView({
     (work) => work.universeId === universe.id,
   );
   const graph = buildRelationshipGraph(workspace, universe.id, locale);
+  const nodeTypes = useMemo(
+    () => workspace.cardTypes.filter((type) => type.universeId === universe.id),
+    [workspace.cardTypes, universe.id],
+  );
+  const nodeCards = useMemo(() => {
+    const typeIds = new Set(nodeTypes.map((type) => type.id));
+    return workspace.cards.filter((card) => typeIds.has(card.typeId));
+  }, [workspace.cards, nodeTypes]);
+  const nodeCardIds = useMemo(
+    () => new Set(nodeCards.map((card) => card.id)),
+    [nodeCards],
+  );
+  const nodeEdges = useMemo(
+    () =>
+      workspace.cardEdges.filter(
+        (edge) =>
+          nodeCardIds.has(edge.sourceId) && nodeCardIds.has(edge.targetId),
+      ),
+    [workspace.cardEdges, nodeCardIds],
+  );
+  const recentNodes = [...nodeCards]
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .slice(0, 4);
   const tabs: Array<{ id: UniverseTab; label: string; count?: number }> = [
     { id: "overview", label: t("overview") },
+    { id: "nodes", label: t("cards"), count: nodeCards.length },
     { id: "cast", label: t("cast"), count: characters.length },
     {
       id: "atlas",
@@ -150,6 +206,10 @@ export function UniverseView({
           <span>
             <strong>{graph.edges.length}</strong>
             {t("relationshipsCount")}
+          </span>
+          <span>
+            <strong>{nodeCards.length}</strong>
+            {t("cards")}
           </span>
         </div>
       </header>
@@ -269,6 +329,71 @@ export function UniverseView({
                 </button>
               ))}
             </div>
+          </section>
+          <section className="overview-nodes">
+            <SectionTitle eyebrow="NODES / 节点" title={t("cards")}>
+              <Button variant="ghost" onClick={() => setTab("nodes")}>
+                {t("viewAll")}
+              </Button>
+            </SectionTitle>
+            <ul className="world-node-summary">
+              <li>
+                <strong>{nodeTypes.length}</strong>
+                <small>{t("cardsTypes")}</small>
+              </li>
+              <li>
+                <strong>{nodeCards.length}</strong>
+                <small>{t("cards")}</small>
+              </li>
+              <li>
+                <strong>{nodeEdges.length}</strong>
+                <small>{t("cardsEdges")}</small>
+              </li>
+            </ul>
+            {recentNodes.length ? (
+              <div className="world-node-preview">
+                {recentNodes.map((card) => {
+                  const type = nodeTypes.find(
+                    (item) => item.id === card.typeId,
+                  );
+                  return (
+                    <button
+                      type="button"
+                      className="world-node-row"
+                      key={card.id}
+                      onClick={() => {
+                        setTab("nodes");
+                        onEditCard(card);
+                      }}
+                    >
+                      <i style={{ background: type?.color ?? "var(--line)" }} />
+                      <span>
+                        <strong>{displayText(card.title, locale)}</strong>
+                        <small>
+                          {type ? displayText(type.name, locale) : ""}
+                        </small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState
+                icon="layers"
+                title={t("cardsEmptyTitle")}
+                action={
+                  <Button
+                    variant="primary"
+                    icon="plus"
+                    onClick={() => setTab("nodes")}
+                  >
+                    {t("cards")}
+                  </Button>
+                }
+              >
+                {t("cardsEmptyLead")}
+              </EmptyState>
+            )}
           </section>
           <section>
             <SectionTitle eyebrow="CAST / 人物" title={t("cast")}>
@@ -566,6 +691,26 @@ export function UniverseView({
             )}
           </aside>
         </section>
+      ) : null}
+
+      {tab === "nodes" ? (
+        <CardsView
+          workspace={workspace}
+          universeId={universe.id}
+          locale={locale}
+          t={t}
+          onNewType={onNewCardType}
+          onEditType={onEditCardType}
+          onDuplicateType={onDuplicateCardType}
+          onDeleteType={onDeleteCardType}
+          onNewCard={onNewCard}
+          onEditCard={onEditCard}
+          onBatch={onBatchCards}
+          onNewEdge={onNewCardEdge}
+          onDeleteCard={onDeleteCard}
+          onDeleteEdge={onDeleteCardEdge}
+          onApplyConstruct={onApplyConstruct}
+        />
       ) : null}
 
       {tab === "stories" ? (

@@ -486,6 +486,7 @@ export const cardFieldSchema = z
 export const cardTypeSchema = z
   .object({
     id: identifier,
+    universeId: identifier,
     name: localizedSchema,
     summary: localizedSchema,
     color,
@@ -534,6 +535,7 @@ export const cardEdgeSchema = z
 export const appliedConstructSchema = z
   .object({
     id: identifier,
+    universeId: identifier,
     name: localizedSchema,
     appliedAt: isoDate,
   })
@@ -629,12 +631,30 @@ export const workspaceSchema = z
     unique(workspace.cardTypes, "cardTypes", (item) => item.id);
     unique(workspace.cards, "cards", (item) => item.id);
     unique(workspace.cardEdges, "cardEdges", (item) => item.id);
-    unique(workspace.constructs, "constructs", (item) => item.id);
+    unique(
+      workspace.constructs,
+      "constructs",
+      (item) => `${item.universeId}:${item.id}`,
+    );
 
     const cardTypesById = new Map(
       workspace.cardTypes.map((item) => [item.id, item]),
     );
     const cardsById = new Map(workspace.cards.map((item) => [item.id, item]));
+    for (const [typeIndex, type] of workspace.cardTypes.entries()) {
+      if (!universes.has(type.universeId))
+        issue(
+          ["cardTypes", typeIndex, "universeId"],
+          `unknown universe: ${type.universeId}`,
+        );
+    }
+    for (const [constructIndex, construct] of workspace.constructs.entries()) {
+      if (!universes.has(construct.universeId))
+        issue(
+          ["constructs", constructIndex, "universeId"],
+          `unknown universe: ${construct.universeId}`,
+        );
+    }
     for (const [cardIndex, card] of workspace.cards.entries()) {
       const type = cardTypesById.get(card.typeId);
       if (!type) {
@@ -678,15 +698,27 @@ export const workspaceSchema = z
       }
     }
     for (const [edgeIndex, edge] of workspace.cardEdges.entries()) {
-      if (!cardsById.has(edge.sourceId))
+      const source = cardsById.get(edge.sourceId);
+      const target = cardsById.get(edge.targetId);
+      if (!source)
         issue(
           ["cardEdges", edgeIndex, "sourceId"],
           `unknown card: ${edge.sourceId}`,
         );
-      if (!cardsById.has(edge.targetId))
+      if (!target)
         issue(
           ["cardEdges", edgeIndex, "targetId"],
           `unknown card: ${edge.targetId}`,
+        );
+      if (
+        source &&
+        target &&
+        cardTypesById.get(source.typeId)?.universeId !==
+          cardTypesById.get(target.typeId)?.universeId
+      )
+        issue(
+          ["cardEdges", edgeIndex],
+          "card relation crosses universe boundaries",
         );
     }
     const worksById = new Map(workspace.works.map((work) => [work.id, work]));

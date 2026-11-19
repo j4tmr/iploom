@@ -102,9 +102,9 @@ export function migrateWorkspace(value: unknown): unknown {
     });
   }
   if (value.schema_version === 8) {
-    return {
+    return migrateWorkspace({
       ...value,
-      schema_version: WORKSPACE_SCHEMA_VERSION,
+      schema_version: 9,
       cardTypes: [],
       cards: [],
       cardEdges: [],
@@ -113,9 +113,82 @@ export function migrateWorkspace(value: unknown): unknown {
         typeof value.revision === "number"
           ? value.revision + 1
           : value.revision,
+    });
+  }
+  if (value.schema_version === 9) {
+    const scoped = scopeCardSystemToUniverse(value);
+    return {
+      ...value,
+      ...scoped,
+      schema_version: WORKSPACE_SCHEMA_VERSION,
+      revision:
+        typeof value.revision === "number"
+          ? value.revision + 1
+          : value.revision,
     };
   }
   return value;
+}
+
+const NODE_WORKSHOP_UNIVERSE_ID = "universe_node_workshop";
+
+/**
+ * v9 node data was workspace-wide. Everything belongs to the first universe;
+ * when node data exists but the workspace has no universe yet, a dedicated
+ * universe is created so the records are not dropped.
+ */
+function scopeCardSystemToUniverse(value: Record<string, unknown>): {
+  universes: unknown;
+  cardTypes: unknown;
+  constructs: unknown;
+} {
+  const universes = Array.isArray(value.universes) ? [...value.universes] : [];
+  const cardTypes = Array.isArray(value.cardTypes) ? value.cardTypes : [];
+  const constructs = Array.isArray(value.constructs) ? value.constructs : [];
+  const firstUniverse = universes.find(record);
+  const universeId =
+    firstUniverse && typeof firstUniverse.id === "string"
+      ? firstUniverse.id
+      : undefined;
+  const hasNodeData = cardTypes.length > 0 || constructs.length > 0;
+  const targetId = universeId
+    ? universeId
+    : hasNodeData
+      ? NODE_WORKSHOP_UNIVERSE_ID
+      : undefined;
+  if (targetId && !universeId) {
+    const timestamp =
+      typeof value.updatedAt === "string"
+        ? value.updatedAt
+        : new Date(0).toISOString();
+    universes.push({
+      id: targetId,
+      name: { zh: "节点工坊", en: "Node workshop" },
+      tagline: { zh: "", en: "" },
+      summary: {
+        zh: "节点系统迁入时自动创建的宇宙。",
+        en: "Created automatically when the node system moved into universes.",
+      },
+      genres: [],
+      themes: [],
+      accent: "#3f6f8f",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+  }
+  return {
+    universes,
+    cardTypes: targetId
+      ? cardTypes.map((item) =>
+          record(item) ? { ...item, universeId: targetId } : item,
+        )
+      : cardTypes,
+    constructs: targetId
+      ? constructs.map((item) =>
+          record(item) ? { ...item, universeId: targetId } : item,
+        )
+      : constructs,
+  };
 }
 
 function idList(value: unknown): string[] {

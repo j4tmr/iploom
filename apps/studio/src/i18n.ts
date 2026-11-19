@@ -758,6 +758,7 @@ const zh = {
   cardsTypeName: "类型名称",
   cardsTypeSummary: "类型说明",
   cardsFieldList: "字段",
+  cardsTypes: "节点类型",
   cardsAddField: "添加字段",
   cardsRemoveField: "删除字段",
   cardsFieldKey: "字段键",
@@ -805,14 +806,9 @@ const zh = {
   cardsRelationCount: "{n} 条关系",
   cardsRelationCountOne: "1 条关系",
   constructQuickStart: "快速构造",
-  constructQuickStartLead:
-    "从一份可编辑的起始结构开始：它会生成节点类型、示例卡片和关系，之后随时可改。",
   constructApply: "使用这个构造",
   constructAlreadyApplied: "已使用",
   constructApplied: "已应用「{name}」。",
-  constructUsedOn: "上次使用 {date}",
-  constructCustomHint: "也可以从空白开始，自己定义节点类型。",
-  constructOpenCards: "打开节点卡片",
   constructTemplateHint:
     "这些字段只是起始模板：应用后可以增删字段、改数值和关系。",
 } as const;
@@ -1618,6 +1614,7 @@ const en: Record<MessageKey, string> = {
   cardsTypeName: "Type name",
   cardsTypeSummary: "Type summary",
   cardsFieldList: "Fields",
+  cardsTypes: "Node types",
   cardsAddField: "Add field",
   cardsRemoveField: "Remove field",
   cardsFieldKey: "Field key",
@@ -1667,14 +1664,9 @@ const en: Record<MessageKey, string> = {
   cardsRelationCount: "{n} relations",
   cardsRelationCountOne: "1 relation",
   constructQuickStart: "Quick constructs",
-  constructQuickStartLead:
-    "Start from an editable structure: it creates node types, sample cards and relations you can change at any time.",
   constructApply: "Use this construct",
   constructAlreadyApplied: "Already used",
   constructApplied: 'Applied "{name}".',
-  constructUsedOn: "Last used {date}",
-  constructCustomHint: "Or start from a blank type of your own.",
-  constructOpenCards: "Open node cards",
   constructTemplateHint:
     "These fields are only a starting template: after applying, add or remove fields and change values and relations.",
 };

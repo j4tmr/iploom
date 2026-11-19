@@ -1,76 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AiConfigInfo } from "./core/ai.ts";
-import { MCP_TOOL_NAMES, mcpToolsNote } from "./core/mcp-tools.ts";
-import {
-  attachOverlayKeyboard,
-  isComposingEvent,
-  overlayStack,
-} from "./core/overlay-stack.ts";
-import { setWorkflowTaskResult, taskDescendantIds } from "./core/workflow.ts";
-import { removeSceneReferences } from "./core/timeline.ts";
-import {
-  deleteChapterFromDraft,
-  deleteCharacterFromDraft,
-  deleteUniverseFromDraft,
-  deleteWorkFromDraft,
-  reassignStandardUniverse,
-  saveWorkFromEditor,
-  unlinkCharacterFromUniverse,
-} from "./core/integrity.ts";
-import {
-  createId,
-  displayText,
-  findWork,
-  nextChapterNumber,
-  workWords,
-} from "./core/factory.ts";
-import {
-  applyConstruct,
-  BUILT_IN_CONSTRUCTS,
-  deleteCardTypeFromDraft,
-  duplicateCardType as cloneCardType,
-  reconcileCardValues,
-} from "./core/cards.ts";
-import type {
-  ArcReelBundle,
-  Card,
-  CardEdge,
-  CardType,
-  Character,
-  Chapter,
-  ExportRecord,
-  LoreEntry,
-  Relationship,
-  SearchHit,
-  StoryFaction,
-  StoryLocation,
-  StoryObject,
-  StoryUniverse,
-  StoryWork,
-  StudioWorkspace,
-  StandardStatus,
-  TimelineEvent,
-  ThemeMode,
-  UiLocale,
-  WorkflowTask,
-  WorkflowTaskRunMeta,
-  WorkflowTaskStatus,
-  WorkspaceSettings,
-  WorkspaceStandard,
-} from "./core/types.ts";
-import {
-  dictionaries,
-  formatNumber,
-  translator,
-  type Translate,
-} from "./i18n.ts";
-import { MAX_WORKFLOW_RESULT_LENGTH } from "./core/types.ts";
-import { bridge, type AppInfo } from "./platform.ts";
-import { applyTheme, useStudioWorkspace } from "./use-studio-workspace.ts";
-import type { StudioRoute } from "./routes.ts";
-import { describeWorkspaceProblem } from "./validation-message.ts";
-import { describeResetFailure } from "./workspace-errors.ts";
 import { Sidebar, Topbar } from "./components/app-shell.tsx";
+import {
+  CardBatchModal,
+  CardEdgeModal,
+  CardModal,
+  CardTypeModal,
+  ConstructModal,
+} from "./components/card-forms.tsx";
 import {
   AtlasModal,
   ChapterModal,
@@ -81,41 +17,104 @@ import {
   UniverseModal,
   WorkflowTaskModal,
 } from "./components/forms.tsx";
-import {
-  CardBatchModal,
-  CardEdgeModal,
-  CardModal,
-  CardTypeModal,
-  ConstructModal,
-} from "./components/card-forms.tsx";
 import { Icon } from "./components/icon.tsx";
-import { SearchOverlay } from "./components/search-overlay.tsx";
-import { useToast } from "./components/use-toast.ts";
-import { Button, Modal, Toast } from "./components/ui.tsx";
-import { CardsView } from "./views/cards-view.tsx";
-import { CastLibrary } from "./views/cast-library.tsx";
-import { Dashboard } from "./views/dashboard.tsx";
-import { ExportsView } from "./views/exports-view.tsx";
-import { LibraryView } from "./views/library-view.tsx";
-import { RelationshipsView } from "./views/relationships-view.tsx";
-import { SettingsView } from "./views/settings-view.tsx";
-import { FoundationView } from "./views/foundation-view.tsx";
-import { UniverseView } from "./views/universe-view.tsx";
-import { WorkView } from "./views/work-view.tsx";
-import { WorkflowView } from "./views/workflow-view.tsx";
-import { ProductionPanel } from "./components/production-panel.tsx";
 import { ManuscriptImport } from "./components/manuscript-import.tsx";
-import {
-  insertChapterInOrder,
-  mergeManuscriptImport,
-} from "./core/manuscript.ts";
-import { prepareSnapshot } from "./snapshot-guard.ts";
+import { ProductionPanel } from "./components/production-panel.tsx";
+import { SearchOverlay } from "./components/search-overlay.tsx";
 import {
   StoryObjectModal,
   TimelineEventModal,
 } from "./components/timeline-forms.tsx";
-import { TimelineView } from "./views/timeline-view.tsx";
+import { Button, Modal, Toast } from "./components/ui.tsx";
+import { useToast } from "./components/use-toast.ts";
+import type { AiConfigInfo } from "./core/ai.ts";
+import {
+  applyConstruct,
+  BUILT_IN_CONSTRUCTS,
+  duplicateCardType as cloneCardType,
+  deleteCardTypeFromDraft,
+  reconcileCardValues,
+} from "./core/cards.ts";
+import {
+  createId,
+  displayText,
+  findWork,
+  nextChapterNumber,
+  workWords,
+} from "./core/factory.ts";
+import {
+  deleteChapterFromDraft,
+  deleteCharacterFromDraft,
+  deleteUniverseFromDraft,
+  deleteWorkFromDraft,
+  reassignStandardUniverse,
+  saveWorkFromEditor,
+  unlinkCharacterFromUniverse,
+} from "./core/integrity.ts";
+import {
+  insertChapterInOrder,
+  mergeManuscriptImport,
+} from "./core/manuscript.ts";
+import { MCP_TOOL_NAMES, mcpToolsNote } from "./core/mcp-tools.ts";
+import {
+  attachOverlayKeyboard,
+  isComposingEvent,
+  overlayStack,
+} from "./core/overlay-stack.ts";
 import type { StandardCandidate } from "./core/standards.ts";
+import { removeSceneReferences } from "./core/timeline.ts";
+import type {
+  ArcReelBundle,
+  Card,
+  CardEdge,
+  CardType,
+  Chapter,
+  Character,
+  ExportRecord,
+  LoreEntry,
+  Relationship,
+  SearchHit,
+  StandardStatus,
+  StoryFaction,
+  StoryLocation,
+  StoryObject,
+  StoryUniverse,
+  StoryWork,
+  StudioWorkspace,
+  ThemeMode,
+  TimelineEvent,
+  UiLocale,
+  WorkflowTask,
+  WorkflowTaskRunMeta,
+  WorkflowTaskStatus,
+  WorkspaceSettings,
+  WorkspaceStandard,
+} from "./core/types.ts";
+import { MAX_WORKFLOW_RESULT_LENGTH } from "./core/types.ts";
+import { setWorkflowTaskResult, taskDescendantIds } from "./core/workflow.ts";
+import {
+  dictionaries,
+  formatNumber,
+  type Translate,
+  translator,
+} from "./i18n.ts";
+import { type AppInfo, bridge } from "./platform.ts";
+import type { StudioRoute } from "./routes.ts";
+import { prepareSnapshot } from "./snapshot-guard.ts";
+import { applyTheme, useStudioWorkspace } from "./use-studio-workspace.ts";
+import { describeWorkspaceProblem } from "./validation-message.ts";
+import { CastLibrary } from "./views/cast-library.tsx";
+import { Dashboard } from "./views/dashboard.tsx";
+import { ExportsView } from "./views/exports-view.tsx";
+import { FoundationView } from "./views/foundation-view.tsx";
+import { LibraryView } from "./views/library-view.tsx";
+import { RelationshipsView } from "./views/relationships-view.tsx";
+import { SettingsView } from "./views/settings-view.tsx";
+import { TimelineView } from "./views/timeline-view.tsx";
+import { UniverseView } from "./views/universe-view.tsx";
+import { WorkView } from "./views/work-view.tsx";
+import { WorkflowView } from "./views/workflow-view.tsx";
+import { describeResetFailure } from "./workspace-errors.ts";
 
 type ModalState =
   | { kind: "import" }
@@ -147,11 +146,11 @@ type ModalState =
     }
   | { kind: "mcp" }
   | { kind: "standard"; initial?: WorkspaceStandard }
-  | { kind: "cardType"; initial?: CardType }
+  | { kind: "cardType"; universeId: string; initial?: CardType }
   | { kind: "card"; typeId: string; initial?: Card }
   | { kind: "cardBatch"; typeId: string }
-  | { kind: "cardEdge"; defaultSourceId?: string }
-  | { kind: "construct"; constructId: string };
+  | { kind: "cardEdge"; universeId: string; defaultSourceId?: string }
+  | { kind: "construct"; universeId: string; constructId: string };
 
 export function App() {
   const state = useStudioWorkspace();
@@ -287,8 +286,6 @@ export function App() {
       };
     if (route.name === "cast")
       return { eyebrow: "CAST SYSTEM / 人物系统", title: t("cast") };
-    if (route.name === "cards")
-      return { eyebrow: "NODE SYSTEM / 节点系统", title: t("cards") };
     if (route.name === "library")
       return { eyebrow: "LIBRARY / 小说书架", title: t("library") };
     if (route.name === "graph")
@@ -418,7 +415,13 @@ export function App() {
     const exists = workspace.cardTypes.some((item) => item.id === next.id);
     const applied = mutateChecked((draft) => {
       const index = draft.cardTypes.findIndex((item) => item.id === next.id);
-      if (index >= 0) draft.cardTypes[index] = next;
+      // A type never changes universe: moving it would silently re-scope every
+      // card that instantiates it.
+      if (index >= 0)
+        draft.cardTypes[index] = {
+          ...next,
+          universeId: draft.cardTypes[index]!.universeId,
+        };
       else draft.cardTypes.push(next);
       // Editing a type can remove fields or narrow their ranges; existing
       // cards keep only the values that still fit the new shape.
@@ -497,13 +500,20 @@ export function App() {
     if (applied) notify(t("saved"));
   };
 
-  const applyBuiltInConstruct = (constructId: string): boolean => {
-    if (workspace.constructs.some((item) => item.id === constructId)) {
+  const applyBuiltInConstruct = (
+    universeId: string,
+    constructId: string,
+  ): boolean => {
+    if (
+      workspace.constructs.some(
+        (item) => item.id === constructId && item.universeId === universeId,
+      )
+    ) {
       notify(t("constructAlreadyApplied"));
       return false;
     }
     const applied = mutateChecked((draft) => {
-      applyConstruct(draft, constructId);
+      applyConstruct(draft, constructId, universeId);
     });
     if (!applied) return false;
     const construct = BUILT_IN_CONSTRUCTS.find(
@@ -1039,38 +1049,6 @@ export function App() {
               onOpenWork={(workId) => navigate({ name: "work", workId })}
               onNewWorld={() => setModal({ kind: "world" })}
               onNewNovel={() => setModal({ kind: "novel" })}
-              onApplyConstruct={(constructId) =>
-                setModal({ kind: "construct", constructId })
-              }
-              onOpenCards={() => navigate({ name: "cards" })}
-              onNewCardType={() => setModal({ kind: "cardType" })}
-            />
-          ) : null}
-
-          {route.name === "cards" ? (
-            <CardsView
-              workspace={workspace}
-              locale={locale}
-              t={t}
-              onNewType={() => setModal({ kind: "cardType" })}
-              onEditType={(initial) => setModal({ kind: "cardType", initial })}
-              onDuplicateType={duplicateCardTypeTemplate}
-              onDeleteType={deleteCardType}
-              onNewCard={(typeId) => setModal({ kind: "card", typeId })}
-              onEditCard={(card) =>
-                setModal({
-                  kind: "card",
-                  typeId: card.typeId,
-                  initial: card,
-                })
-              }
-              onBatch={(typeId) => setModal({ kind: "cardBatch", typeId })}
-              onNewEdge={(defaultSourceId) =>
-                setModal({ kind: "cardEdge", defaultSourceId })
-              }
-              onDeleteCard={deleteCard}
-              onDeleteEdge={deleteCardEdge}
-              onOpenQuickStart={() => navigate({ name: "dashboard" })}
             />
           ) : null}
 
@@ -1140,6 +1118,43 @@ export function App() {
                     );
                   });
               }}
+              onNewCardType={() =>
+                setModal({ kind: "cardType", universeId: universe.id })
+              }
+              onEditCardType={(initial) =>
+                setModal({
+                  kind: "cardType",
+                  universeId: initial.universeId,
+                  initial,
+                })
+              }
+              onDuplicateCardType={duplicateCardTypeTemplate}
+              onDeleteCardType={deleteCardType}
+              onNewCard={(typeId) => setModal({ kind: "card", typeId })}
+              onEditCard={(card) =>
+                setModal({
+                  kind: "card",
+                  typeId: card.typeId,
+                  initial: card,
+                })
+              }
+              onBatchCards={(typeId) => setModal({ kind: "cardBatch", typeId })}
+              onNewCardEdge={(defaultSourceId) =>
+                setModal({
+                  kind: "cardEdge",
+                  universeId: universe.id,
+                  defaultSourceId,
+                })
+              }
+              onDeleteCard={deleteCard}
+              onDeleteCardEdge={deleteCardEdge}
+              onApplyConstruct={(constructId) =>
+                setModal({
+                  kind: "construct",
+                  universeId: universe.id,
+                  constructId,
+                })
+              }
             />
           ) : null}
 
@@ -1504,6 +1519,7 @@ export function App() {
           onClose={() => setModal(null)}
           t={t}
           locale={locale}
+          universeId={modal.universeId}
           initial={modal.initial}
           onSave={saveCardType}
         />
@@ -1539,6 +1555,7 @@ export function App() {
           t={t}
           locale={locale}
           workspace={workspace}
+          universeId={modal.universeId}
           defaultSourceId={modal.defaultSourceId}
           onSave={saveCardEdge}
         />
@@ -1551,10 +1568,15 @@ export function App() {
           t={t}
           locale={locale}
           construct={modalConstruct}
+          universeId={modal.universeId}
           alreadyApplied={workspace.constructs.some(
-            (item) => item.id === modalConstruct.id,
+            (item) =>
+              item.id === modalConstruct.id &&
+              item.universeId === modal.universeId,
           )}
-          onApply={() => applyBuiltInConstruct(modalConstruct.id)}
+          onApply={() =>
+            applyBuiltInConstruct(modal.universeId, modalConstruct.id)
+          }
         />
       ) : null}
       {modal?.kind === "task" ? (

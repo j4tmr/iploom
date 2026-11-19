@@ -176,9 +176,11 @@ export function CardTypeModal({
   open,
   onClose,
   t,
+  universeId,
   initial,
   onSave,
 }: ModalBase & {
+  universeId: string;
   initial?: CardType;
   onSave: (type: CardType) => boolean;
 }) {
@@ -219,6 +221,7 @@ export function CardTypeModal({
               const now = new Date().toISOString();
               const saved = onSave({
                 id: initial?.id ?? createId("ctype"),
+                universeId: initial?.universeId ?? universeId,
                 name: { zh: nameZh.trim(), en: nameEn.trim() },
                 summary: { zh: summaryZh.trim(), en: summaryEn.trim() },
                 color,
@@ -648,27 +651,32 @@ export function CardEdgeModal({
   t,
   locale,
   workspace,
+  universeId,
   defaultSourceId,
   onSave,
 }: ModalBase & {
   workspace: StudioWorkspace;
+  universeId: string;
   defaultSourceId?: string;
   onSave: (edge: CardEdge) => boolean;
 }) {
   const cards = useMemo(
     () =>
-      workspace.cards.map((card) => {
-        const type = workspace.cardTypes.find(
-          (item) => item.id === card.typeId,
-        );
-        return {
+      workspace.cards
+        .map((card) => {
+          const type = workspace.cardTypes.find(
+            (item) => item.id === card.typeId,
+          );
+          return { card, type };
+        })
+        .filter((entry) => entry.type?.universeId === universeId)
+        .map(({ card, type }) => ({
           card,
           label: type
             ? `${displayText(type.name, locale)} · ${displayText(card.title, locale)}`
             : displayText(card.title, locale),
-        };
-      }),
-    [workspace.cards, workspace.cardTypes, locale],
+        })),
+    [workspace.cards, workspace.cardTypes, universeId, locale],
   );
   const [sourceId, setSourceId] = useState(defaultSourceId ?? "");
   const [targetId, setTargetId] = useState("");
@@ -776,16 +784,18 @@ export function ConstructModal({
   t,
   locale,
   construct,
+  universeId,
   alreadyApplied,
   onApply,
 }: ModalBase & {
   construct: BuiltInConstruct;
+  universeId: string;
   alreadyApplied: boolean;
   onApply: () => boolean;
 }) {
   const preview = useMemo(
-    () => construct.build(new Date().toISOString()),
-    [construct],
+    () => construct.build(new Date().toISOString(), universeId),
+    [construct, universeId],
   );
   return (
     <Modal
@@ -816,7 +826,7 @@ export function ConstructModal({
     >
       <div className="construct-preview">
         <span>
-          <strong>{preview.types.length}</strong> {t("cardsFieldList")}
+          <strong>{preview.types.length}</strong> {t("cardsTypes")}
         </span>
         <span>
           <strong>{preview.cards.length}</strong> {t("cards")}
