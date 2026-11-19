@@ -769,9 +769,12 @@ function configureSessionSecurity(): void {
   session.defaultSession.setPermissionCheckHandler(() => false);
 }
 
-function navigateToRoute(name: string): void {
+function navigateToRoute(name: string, params?: Record<string, string>): void {
   if (mainWindow && !mainWindow.webContents.isDestroyed()) {
-    mainWindow.webContents.send("iploom:navigate-route", { name });
+    mainWindow.webContents.send(
+      "iploom:navigate-route",
+      params ? { name, params } : { name },
+    );
   }
 }
 
@@ -791,11 +794,11 @@ function configureApplicationMenu(): void {
     submenu: [
       {
         label: labels.about,
-        click: () => navigateToRoute("settings"),
+        click: () => navigateToRoute("settings", { section: "about" }),
       },
       {
         label: labels.checkUpdates,
-        click: () => navigateToRoute("settings"),
+        click: () => navigateToRoute("settings", { section: "about" }),
       },
       { type: "separator" },
       {
@@ -820,11 +823,11 @@ function configureApplicationMenu(): void {
     submenu: [
       {
         label: labels.about,
-        click: () => navigateToRoute("settings"),
+        click: () => navigateToRoute("settings", { section: "about" }),
       },
       {
         label: labels.checkUpdates,
-        click: () => navigateToRoute("settings"),
+        click: () => navigateToRoute("settings", { section: "about" }),
       },
       { type: "separator" },
       {

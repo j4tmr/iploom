@@ -160,6 +160,10 @@ export function App() {
   const t = useMemo(() => translator(locale), [locale]);
   const [route, setRoute] = useState<StudioRoute>({ name: "dashboard" });
   const [, setHistory] = useState<StudioRoute[]>([]);
+  // Bumped when a menu item targets the About section of Settings; the panel
+  // scrolls itself into view on every change, including when Settings is
+  // already the active route.
+  const [aboutFocus, setAboutFocus] = useState(0);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const { toast, notify } = useToast();
@@ -223,12 +227,16 @@ export function App() {
     if (!bridge.onNavigateRoute) return;
     return bridge.onNavigateRoute((target) => {
       if (!target || typeof target.name !== "string") return;
-      if (
+      if (target.name === "settings") {
+        if (target.params?.section === "about") {
+          setAboutFocus((token) => token + 1);
+        }
+        navigate({ name: "settings" });
+      } else if (
         target.name === "dashboard" ||
         target.name === "library" ||
         target.name === "workflow" ||
-        target.name === "exports" ||
-        target.name === "settings"
+        target.name === "exports"
       ) {
         navigate({ name: target.name });
       } else if (target.name === "universe" && target.params?.id) {
@@ -270,9 +278,12 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [state.saveNow]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the route is the trigger — a new page should start at the top even though the effect does not read it
+  // A new page starts at the top, and an About focus request only belongs to
+  // the navigation that carried it — a later plain visit to Settings must not
+  // scroll down to the panel.
   useEffect(() => {
     window.scrollTo(0, 0);
+    if (route.name !== "settings") setAboutFocus(0);
   }, [route]);
 
   if (state.saveState === "loading" || !workspace) {
@@ -1318,6 +1329,7 @@ export function App() {
               onUpdateSettings={updateSettings}
               onResetDemo={resetDemo}
               onRestoreSnapshot={restoreSnapshot}
+              aboutFocus={aboutFocus}
             />
           ) : null}
 
