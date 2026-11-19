@@ -750,6 +750,11 @@ const zh = {
   cardsEmptyLead: "新建一个类型，或从快速构造开始。",
   cardsNewType: "新建节点类型",
   cardsEditType: "编辑节点类型",
+  cardsDuplicateType: "复制为模板",
+  cardsTypeCopied: "已复制类型，可以继续修改字段。",
+  cardsDeleteType: "删除类型",
+  cardsDeleteTypeConfirm:
+    "将删除「{name}」及其下所有节点与关系，不可撤销。继续吗？",
   cardsTypeName: "类型名称",
   cardsTypeSummary: "类型说明",
   cardsFieldList: "字段",
@@ -808,6 +813,8 @@ const zh = {
   constructUsedOn: "上次使用 {date}",
   constructCustomHint: "也可以从空白开始，自己定义节点类型。",
   constructOpenCards: "打开节点卡片",
+  constructTemplateHint:
+    "这些字段只是起始模板：应用后可以增删字段、改数值和关系。",
 } as const;
 
 export type MessageKey = keyof typeof zh;
@@ -1603,6 +1610,11 @@ const en: Record<MessageKey, string> = {
   cardsEmptyLead: "Create a type, or start from a quick construct.",
   cardsNewType: "New node type",
   cardsEditType: "Edit node type",
+  cardsDuplicateType: "Duplicate as template",
+  cardsTypeCopied: "Type duplicated. Edit its fields to make it yours.",
+  cardsDeleteType: "Delete type",
+  cardsDeleteTypeConfirm:
+    'This deletes "{name}", all its nodes and their relations. It cannot be undone. Continue?',
   cardsTypeName: "Type name",
   cardsTypeSummary: "Type summary",
   cardsFieldList: "Fields",
@@ -1663,6 +1675,8 @@ const en: Record<MessageKey, string> = {
   constructUsedOn: "Last used {date}",
   constructCustomHint: "Or start from a blank type of your own.",
   constructOpenCards: "Open node cards",
+  constructTemplateHint:
+    "These fields are only a starting template: after applying, add or remove fields and change values and relations.",
 };
 
 export const dictionaries: Record<UiLocale, Record<MessageKey, string>> = {

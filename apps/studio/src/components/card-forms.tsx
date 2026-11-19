@@ -836,6 +836,7 @@ export function ConstructModal({
           </li>
         ))}
       </ul>
+      <p className="hint">{t("constructTemplateHint")}</p>
     </Modal>
   );
 }

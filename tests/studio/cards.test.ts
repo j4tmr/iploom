@@ -5,6 +5,8 @@ import {
   BUILT_IN_CONSTRUCTS,
   createCardBatch,
   defaultCardValues,
+  deleteCardTypeFromDraft,
+  duplicateCardType,
   reconcileCardValues,
 } from "../../apps/studio/src/core/cards.ts";
 import { createEmptyWorkspace } from "../../apps/studio/src/core/factory.ts";
@@ -83,6 +85,45 @@ describe("built-in constructs", () => {
       for (const key of Object.keys(card.values))
         expect(type!.fields.some((field) => field.key === key)).toBe(true);
     }
+  });
+});
+
+describe("type templates", () => {
+  test("duplicating a type copies its fields under a new identity", () => {
+    const workspace = createEmptyWorkspace("en");
+    applyConstruct(workspace, "looter", NOW);
+    const original = workspace.cardTypes[1]!;
+    const copy = duplicateCardType(original, NOW);
+    expect(copy.id).not.toBe(original.id);
+    expect(copy.name).toEqual({ zh: "怪物 副本", en: "Monster copy" });
+    expect(copy.fields).toEqual(original.fields);
+    copy.fields[0]!.key = "renamed";
+    expect(original.fields[0]!.key).toBe("level");
+    workspace.cardTypes.push(copy);
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+  });
+
+  test("deleting a type removes its cards and the relations that touched them", () => {
+    const workspace = createEmptyWorkspace("en");
+    applyConstruct(workspace, "looter", NOW);
+    expect(deleteCardTypeFromDraft(workspace, "cardtype_looter_monster")).toBe(
+      true,
+    );
+    expect(workspace.cardTypes.map((type) => type.id)).toEqual([
+      "cardtype_looter_scene",
+      "cardtype_looter_equipment",
+    ]);
+    expect(workspace.cards.map((card) => card.typeId)).toEqual([
+      "cardtype_looter_scene",
+      "cardtype_looter_scene",
+      "cardtype_looter_equipment",
+      "cardtype_looter_equipment",
+    ]);
+    expect(workspace.cardEdges).toEqual([]);
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+    expect(deleteCardTypeFromDraft(workspace, "cardtype_looter_monster")).toBe(
+      false,
+    );
   });
 });
 

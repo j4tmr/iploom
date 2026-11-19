@@ -27,6 +27,8 @@ import {
 import {
   applyConstruct,
   BUILT_IN_CONSTRUCTS,
+  deleteCardTypeFromDraft,
+  duplicateCardType as cloneCardType,
   reconcileCardValues,
 } from "./core/cards.ts";
 import type {
@@ -428,6 +430,25 @@ export function App() {
     if (!applied) return false;
     notify(exists ? t("cardsTypeUpdated") : t("cardsTypeCreated"));
     return true;
+  };
+
+  const duplicateCardTypeTemplate = (type: CardType) => {
+    const copy = cloneCardType(type);
+    const applied = mutateChecked((draft) => {
+      draft.cardTypes.push(copy);
+    });
+    if (applied) notify(t("cardsTypeCopied"));
+  };
+
+  const deleteCardType = (type: CardType) => {
+    const message = t("cardsDeleteTypeConfirm", {
+      name: displayText(type.name, locale),
+    });
+    if (!window.confirm(message)) return;
+    const applied = mutateChecked((draft) => {
+      deleteCardTypeFromDraft(draft, type.id);
+    });
+    if (applied) notify(t("saved"));
   };
 
   const saveCard = (next: Card): boolean => {
@@ -1033,6 +1054,8 @@ export function App() {
               t={t}
               onNewType={() => setModal({ kind: "cardType" })}
               onEditType={(initial) => setModal({ kind: "cardType", initial })}
+              onDuplicateType={duplicateCardTypeTemplate}
+              onDeleteType={deleteCardType}
               onNewCard={(typeId) => setModal({ kind: "card", typeId })}
               onEditCard={(card) =>
                 setModal({

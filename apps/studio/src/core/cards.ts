@@ -55,6 +55,27 @@ export function reconcileCardValues(
   return next;
 }
 
+/**
+ * Copy a type as a starting template: same fields and look, fresh identity and
+ * no cards. The copy's values are independent, so editing it never touches the
+ * original type or its cards.
+ */
+export function duplicateCardType(
+  type: CardType,
+  now = new Date().toISOString(),
+): CardType {
+  return {
+    ...structuredClone(type),
+    id: createId("ctype"),
+    name: {
+      zh: `${type.name.zh.trim()} 副本`.trim(),
+      en: `${type.name.en.trim()} copy`.trim(),
+    },
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 export function createCard(
   type: CardType,
   input: {
@@ -404,6 +425,26 @@ export const BUILT_IN_CONSTRUCTS: readonly BuiltInConstruct[] = [
     build: looterConstruct,
   },
 ];
+
+/**
+ * Remove a type together with every card of that type and every relation that
+ * touched one of those cards. Returns false when the type was already gone.
+ */
+export function deleteCardTypeFromDraft(
+  draft: StudioWorkspace,
+  typeId: string,
+): boolean {
+  if (!draft.cardTypes.some((type) => type.id === typeId)) return false;
+  const cardIds = new Set(
+    draft.cards.filter((card) => card.typeId === typeId).map((card) => card.id),
+  );
+  draft.cardTypes = draft.cardTypes.filter((type) => type.id !== typeId);
+  draft.cards = draft.cards.filter((card) => card.typeId !== typeId);
+  draft.cardEdges = draft.cardEdges.filter(
+    (edge) => !cardIds.has(edge.sourceId) && !cardIds.has(edge.targetId),
+  );
+  return true;
+}
 
 export type ApplyConstructResult =
   | { status: "applied"; name: LocalizedText }

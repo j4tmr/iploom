@@ -98,6 +98,8 @@ export function CardsView({
   t,
   onNewType,
   onEditType,
+  onDuplicateType,
+  onDeleteType,
   onNewCard,
   onEditCard,
   onBatch,
@@ -111,6 +113,8 @@ export function CardsView({
   t: Translate;
   onNewType: () => void;
   onEditType: (type: CardType) => void;
+  onDuplicateType: (type: CardType) => void;
+  onDeleteType: (type: CardType) => void;
   onNewCard: (typeId: string) => void;
   onEditCard: (card: Card) => void;
   onBatch: (typeId: string) => void;
@@ -241,6 +245,16 @@ export function CardsView({
                   label={t("cardsEditType")}
                   icon="edit"
                   onClick={() => onEditType(activeType)}
+                />
+                <IconButton
+                  label={t("cardsDuplicateType")}
+                  icon="copy"
+                  onClick={() => onDuplicateType(activeType)}
+                />
+                <IconButton
+                  label={t("cardsDeleteType")}
+                  icon="trash"
+                  onClick={() => onDeleteType(activeType)}
                 />
                 <Button icon="plus" onClick={() => onNewCard(activeType.id)}>
                   {t("cardsNewCard")}
