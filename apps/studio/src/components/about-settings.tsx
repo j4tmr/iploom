@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { UiLocale } from "../core/types.ts";
 import type { UpdateCheckResult } from "../core/updates.ts";
 import { RELEASES_PAGE_URL } from "../core/updates.ts";
@@ -30,14 +30,46 @@ export function AboutSettings({
   info,
   locale,
   t,
+  focusSignal = 0,
 }: {
   info: AppInfo | null;
   locale: UiLocale;
   t: Translate;
+  /** Incremented by the native menu; every change scrolls the panel into view. */
+  focusSignal?: number;
 }) {
   const [result, setResult] = useState<UpdateCheckResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const panelRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!focusSignal) return;
+    // Two things can undo the scroll: App's route effect resets the scroll to
+    // the top after this component's effects run, and the settings panels above
+    // this one grow while the app info and snapshots load. Re-align once per
+    // frame while the page settles for a moment.
+    let frame = 0;
+    let alive = true;
+    const align = () => {
+      frame = 0;
+      if (!alive) return;
+      panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    const schedule = () => {
+      if (alive && !frame) frame = requestAnimationFrame(align);
+    };
+    schedule();
+    const observer = new ResizeObserver(schedule);
+    observer.observe(document.body);
+    const timer = window.setTimeout(() => observer.disconnect(), 1500);
+    return () => {
+      alive = false;
+      observer.disconnect();
+      window.clearTimeout(timer);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [focusSignal]);
 
   const displayVersion = info?.version ?? APP_VERSION;
   const isDesktop =
@@ -60,7 +92,7 @@ export function AboutSettings({
   };
 
   return (
-    <section className="settings-panel about-panel">
+    <section className="settings-panel about-panel" ref={panelRef}>
       <div className="about-hero">
         <div className="about-mark" aria-hidden="true">
           界

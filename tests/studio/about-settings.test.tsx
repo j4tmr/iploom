@@ -33,6 +33,75 @@ describe("AboutSettings component", () => {
     expect(view.getByText(t("openReleases"))).toBeTruthy();
   });
 
+  test("scrolls the panel into view whenever the focus signal changes", async () => {
+    const t = translator("zh-CN");
+    const scrolled: Element[] = [];
+    const prototype = Element.prototype as unknown as {
+      scrollIntoView?: (options?: ScrollIntoViewOptions) => void;
+    };
+    const original = prototype.scrollIntoView;
+    prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+
+    try {
+      const view = render(
+        <AboutSettings
+          info={mockAppInfo}
+          locale="zh-CN"
+          t={t}
+          focusSignal={1}
+        />,
+      );
+
+      // Mounting with an armed signal (menu click from another route) scrolls
+      // on a later frame, after the route-change reset to the top; layout
+      // changes while Settings loads may re-align the panel.
+      await waitFor(() => expect(scrolled.length).toBeGreaterThanOrEqual(1));
+      expect(scrolled[0]?.classList.contains("about-panel")).toBe(true);
+      const alignedOnce = scrolled.length;
+
+      // A second menu click while Settings is already open scrolls again.
+      view.rerender(
+        <AboutSettings
+          info={mockAppInfo}
+          locale="zh-CN"
+          t={t}
+          focusSignal={2}
+        />,
+      );
+      await waitFor(() => expect(scrolled.length).toBeGreaterThan(alignedOnce));
+      expect(
+        scrolled[scrolled.length - 1]?.classList.contains("about-panel"),
+      ).toBe(true);
+    } finally {
+      if (original) prototype.scrollIntoView = original;
+      else delete prototype.scrollIntoView;
+    }
+  });
+
+  test("does not scroll without a focus signal", async () => {
+    const t = translator("zh-CN");
+    const prototype = Element.prototype as unknown as {
+      scrollIntoView?: (options?: ScrollIntoViewOptions) => void;
+    };
+    const original = prototype.scrollIntoView;
+    let calls = 0;
+    prototype.scrollIntoView = () => {
+      calls += 1;
+    };
+
+    try {
+      render(<AboutSettings info={mockAppInfo} locale="zh-CN" t={t} />);
+      // Give any queued frame a chance to run before asserting nothing happened.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(calls).toBe(0);
+    } finally {
+      if (original) prototype.scrollIntoView = original;
+      else delete prototype.scrollIntoView;
+    }
+  });
+
   test("checks updates and renders available update with download button", async () => {
     const t = translator("en");
     const openedUrls: string[] = [];
