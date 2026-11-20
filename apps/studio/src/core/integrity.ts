@@ -651,8 +651,9 @@ export function deleteUniverseFromDraft(
 
 /**
  * Delete a work and everything that only existed for it: its timeline events,
- * its workflow tasks (repairing parent and dependency links of survivors) and
- * its export history. World-scoped tasks without a work survive.
+ * its workflow tasks (repairing parent and dependency links of survivors), its
+ * own node pack with every card and relation in it, and its export history.
+ * World-scoped tasks and the world's shared node types survive.
  */
 export function deleteWorkFromDraft(
   draft: StudioWorkspace,
@@ -663,6 +664,30 @@ export function deleteWorkFromDraft(
       .filter((task) => task.workId === workId)
       .map((task) => task.id),
   );
+  const removedTypeIds = new Set(
+    draft.cardTypes
+      .filter((type) => type.workId === workId)
+      .map((type) => type.id),
+  );
+  if (removedTypeIds.size) {
+    const removedCardIds = new Set(
+      draft.cards
+        .filter((card) => removedTypeIds.has(card.typeId))
+        .map((card) => card.id),
+    );
+    draft.cardTypes = draft.cardTypes.filter(
+      (type) => !removedTypeIds.has(type.id),
+    );
+    draft.cards = draft.cards.filter((card) => !removedCardIds.has(card.id));
+    draft.cardEdges = draft.cardEdges.filter(
+      (edge) =>
+        !removedCardIds.has(edge.sourceId) &&
+        !removedCardIds.has(edge.targetId),
+    );
+    draft.constructs = draft.constructs.filter(
+      (construct) => construct.workId !== workId,
+    );
+  }
   draft.works = draft.works.filter((item) => item.id !== workId);
   draft.timelineEvents = draft.timelineEvents.filter(
     (event) => event.workId !== workId,

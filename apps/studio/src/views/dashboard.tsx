@@ -50,10 +50,6 @@ export function Dashboard({
               {t("localOnly")}
             </span>
             <span>
-              <Icon name="package" size={14} />
-              ArcReel handoff
-            </span>
-            <span>
               <Icon name="terminal" size={14} />
               MCP ready
             </span>
@@ -203,7 +199,7 @@ export function Dashboard({
                   <TagList values={universe.genres} max={3} />
                   <div className="world-card-foot">
                     <span>
-                      <strong>{works.length}</strong> {t("novels")}
+                      <strong>{works.length}</strong> {t("works")}
                     </span>
                     <span>
                       <strong>{cast.length}</strong> {t("characters")}

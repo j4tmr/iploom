@@ -360,6 +360,42 @@ describe("card schema checks", () => {
     expect(() => validateWorkspace(workspace)).not.toThrow();
   });
 
+  test("scopes work-owned packs to their work and its universe", () => {
+    const { workspace, universeId } = demo();
+    const work = workspace.works.find(
+      (item) => item.universeId === universeId,
+    )!;
+    applyConstruct(workspace, "looter", universeId, NOW, work.id);
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+    // The same construct may also exist at world level, and in two works.
+    applyConstruct(workspace, "looter", universeId, NOW);
+    const second = structuredClone(work);
+    second.id = "work_scope_second";
+    workspace.works.push(second);
+    applyConstruct(workspace, "looter", universeId, NOW, second.id);
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+
+    // A pack cannot point at a work that does not exist.
+    workspace.cardTypes[0]!.workId = "work_missing";
+    expect(() => validateWorkspace(workspace)).toThrow(/unknown work/);
+    workspace.cardTypes[0]!.workId = work.id;
+
+    // Nor at a work that belongs to another universe.
+    const other = workspace.universes[1]!.id;
+    const foreignWork = workspace.works.find(
+      (item) => item.universeId === other,
+    );
+    expect(foreignWork).toBeDefined();
+    workspace.constructs[0]!.workId = foreignWork!.id;
+    expect(() => validateWorkspace(workspace)).toThrow(
+      /work belongs to another universe/,
+    );
+
+    // The applied-construct record carries the same rule.
+    workspace.constructs[0]!.workId = "work_missing";
+    expect(() => validateWorkspace(workspace)).toThrow(/unknown work/);
+  });
+
   const field = (
     overrides: Partial<CardType["fields"][number]> = {},
   ): CardType["fields"][number] => ({
@@ -529,7 +565,7 @@ describe("universe scoping migrations", () => {
     delete legacy.cardEdges;
     delete legacy.constructs;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(10);
+    expect(migrated.schema_version).toBe(11);
     expect(migrated.cardTypes).toEqual([]);
     expect(migrated.cards).toEqual([]);
     expect(migrated.cardEdges).toEqual([]);
@@ -561,8 +597,8 @@ describe("universe scoping migrations", () => {
       },
     ];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(10);
-    expect(migrated.revision).toBe(21);
+    expect(migrated.schema_version).toBe(11);
+    expect(migrated.revision).toBe(22);
     expect(migrated.cardTypes[0]!.universeId).toBe("uni_mist_harbor");
     expect(migrated.constructs[0]!.universeId).toBe("uni_mist_harbor");
     expect(migrated.universes.map((universe) => universe.id)).toEqual([
@@ -588,7 +624,7 @@ describe("universe scoping migrations", () => {
       },
     ];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(10);
+    expect(migrated.schema_version).toBe(11);
     expect(migrated.universes).toHaveLength(1);
     expect(migrated.universes[0]!.id).toBe("universe_node_workshop");
     expect(migrated.cardTypes[0]!.universeId).toBe("universe_node_workshop");
@@ -600,7 +636,7 @@ describe("universe scoping migrations", () => {
     ) as unknown as Record<string, unknown>;
     legacy.schema_version = 9;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(10);
+    expect(migrated.schema_version).toBe(11);
     expect(migrated.universes).toEqual([]);
   });
 });

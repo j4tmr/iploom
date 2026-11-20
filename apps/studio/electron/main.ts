@@ -959,18 +959,24 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
           const shell = document.querySelector(".studio-shell");
           const text = document.body.innerText.trim();
           if (shell && text.length > 100) {
-            const workflowNav = document.querySelector('[data-route="workflow"]');
-            if (!(workflowNav instanceof HTMLElement)) {
-              reject(new Error("workflow navigation did not render"));
+            // Worlds are the only navigation now: open the first world from
+            // the sidebar, then its workflow tab.
+            const world = document.querySelector(".sidebar-worlds button");
+            if (!(world instanceof HTMLElement)) {
+              reject(new Error("world navigation did not render"));
               return;
             }
-            workflowNav.click();
+            world.click();
             await new Promise((resolveWorkflow, rejectWorkflow) => {
               const workflowDeadline = Date.now() + ${smokeWorkflowReadyMs};
               const timeout = setTimeout(() => {
                 rejectWorkflow(new Error("workflow view timed out"));
               }, ${smokeWorkflowReadyMs});
               const poll = () => {
+                const tab = document.querySelector('[data-tab="workflow"]');
+                if (tab instanceof HTMLElement) {
+                  tab.click();
+                }
                 if (
                   document.querySelector(".workflow-view") &&
                   document.querySelector(".workflow-row") &&
@@ -1059,30 +1065,34 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
         await window.iploom.configureAi({ endpoint: ${JSON.stringify(mockEndpoint)}, model: "smoke-model", apiKey: "" });
         const config = await window.iploom.aiConfig();
         if ("apiKey" in config) throw new Error("AI config exposed a secret field");
-        document.querySelector('.production-panel').open = true;
-        document.querySelector('[data-testid="production-compose"]').click();
-        await waitFor(() => !document.querySelector('[data-testid="production-run"]').disabled);
         const originalConfirm = window.confirm;
         window.confirm = () => true;
-        try { document.querySelector('[data-testid="production-run"]').click();
-          await waitFor(() => document.querySelector('[data-testid="production-output"]')?.value.length > 500 && !document.querySelector('[data-testid="production-run"]').disabled);
+        try {
+          // The world opened above; import a novel into it from its Works tab.
+          document.querySelector('[data-tab="stories"]').click();
+          await waitFor(() => document.querySelector('[data-testid="import-open"]'));
+          document.querySelector('[data-testid="import-open"]').click();
+          await waitFor(() => document.querySelector('[data-testid="import-title"]'));
+          setValue('[data-testid="import-title"]', 'smoke-import-novel');
+          setValue('[data-testid="import-text"]', 'Chapter 1\\nA traveler arrived at the lighthouse.\\nChapter 2\\nThe lamp turned blue.');
+          await waitFor(() => document.querySelector('[data-testid="import-analyze"]') && !document.querySelector('[data-testid="import-analyze"]').disabled);
+          document.querySelector('[data-testid="import-analyze"]').click();
+          await waitFor(() => document.querySelector('[data-testid="import-review"]') && !document.querySelector('[data-testid="import-review"]').disabled);
+          document.querySelector('[data-testid="import-review"]').click();
+          await waitFor(() => !document.querySelector('[data-testid="import-confirm"]').disabled);
+          document.querySelector('[data-testid="import-confirm"]').click();
+          await waitFor(() => document.querySelector('.work-view h1')?.textContent === 'smoke-import-novel');
         } finally { window.confirm = originalConfirm; }
-        document.querySelector('[data-route="library"]').click();
-        await waitFor(() => document.querySelector('[data-testid="import-open"]'));
-        document.querySelector('[data-testid="import-open"]').click();
-        await waitFor(() => document.querySelector('[data-testid="import-title"]'));
-        setValue('[data-testid="import-title"]', 'smoke-import-novel');
-        setValue('[data-testid="import-text"]', 'Chapter 1\\nA traveler arrived at the lighthouse.\\nChapter 2\\nThe lamp turned blue.');
-        await waitFor(() => !document.querySelector('[data-testid="import-confirm"]').disabled);
-        document.querySelector('[data-testid="import-confirm"]').click();
-        await waitFor(() => document.querySelector('.work-view h1')?.textContent === 'smoke-import-novel');
-        document.querySelector('[data-route="workflow"]').click();
+        // Back to the world's agent handoff board.
+        document.querySelector('.sidebar-worlds button').click();
+        await waitFor(() => document.querySelector('[data-tab="workflow"]'));
+        document.querySelector('[data-tab="workflow"]').click();
         await waitFor(() => document.querySelector('[data-testid="workflow-result"]'));
       })()`,
         true,
       );
       console.log(
-        "[smoke] live model output, review persistence and novel import verified (local mock)",
+        "[smoke] live model analysis, reviewed novel import and agent handoff board verified (local mock)",
       );
       await window.webContents.executeJavaScript(
         `new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`,

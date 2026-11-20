@@ -1,9 +1,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
-import { buildArcReelBundle } from "../core/arcreel.ts";
 import { countChapterWords, displayText, workWords } from "../core/factory.ts";
 import { CHAPTER_LIMITS } from "../core/types.ts";
 import type {
-  ArcReelBundle,
   Chapter,
   ChapterStatus,
   StoryWork,
@@ -17,11 +15,9 @@ import {
   statusLabels,
   type Translate,
 } from "../i18n.ts";
-import { bridge } from "../platform.ts";
 import { BeatsInput } from "../components/beats-input.tsx";
 import { Icon } from "../components/icon.tsx";
 import { SceneEditor } from "../components/scene-editor.tsx";
-import { useToast } from "../components/use-toast.ts";
 import {
   Badge,
   Button,
@@ -35,10 +31,10 @@ import {
   TagList,
   TextArea,
   TextInput,
-  Toast,
 } from "../components/ui.tsx";
 
-type WorkTab = "manuscript" | "bible" | "adaptation";
+/** A novel works in its manuscript; a game works on its own node board. */
+type WorkTab = "manuscript" | "bible" | "nodes";
 
 export function WorkView({
   workspace,
@@ -53,7 +49,7 @@ export function WorkView({
   onOpenTimeline,
   onDeleteChapter,
   onChangeChapter,
-  onRecordExport,
+  nodeBoard,
 }: {
   workspace: StudioWorkspace;
   work: StoryWork;
@@ -70,14 +66,11 @@ export function WorkView({
     chapterId: string,
     change: (chapter: Chapter) => void,
   ) => void;
-  onRecordExport: (
-    bundle: ArcReelBundle,
-    directory: string,
-    files: number,
-    bytes: number,
-  ) => void;
+  /** Built by the app with this work's node-board actions bound. */
+  nodeBoard: React.ReactNode;
 }) {
-  const [tab, setTab] = useState<WorkTab>("manuscript");
+  const isGame = work.kind === "game";
+  const [tab, setTab] = useState<WorkTab>(isGame ? "nodes" : "manuscript");
   // Chapters render in story order; the stored array follows creation order,
   // which drifts when chapters are added out of sequence.
   const chapters = useMemo(
@@ -155,9 +148,13 @@ export function WorkView({
             <Badge tone={work.status === "complete" ? "green" : "neutral"}>
               {statusLabels[locale][work.status]}
             </Badge>
-            <span>
-              {chapters.length} {t("chapters")}
-            </span>
+            {isGame ? (
+              <span>{t("game")}</span>
+            ) : (
+              <span>
+                {chapters.length} {t("chapters")}
+              </span>
+            )}
             <span>
               {formatNumber(words, locale)} {t("words")}
             </span>
@@ -173,7 +170,7 @@ export function WorkView({
               {t("edit")}
             </Button>
             <Button variant="danger" icon="trash" onClick={onDeleteWork}>
-              {t("deleteNovel")}
+              {isGame ? t("deleteWork") : t("deleteNovel")}
             </Button>
           </div>
         </div>
@@ -185,21 +182,28 @@ export function WorkView({
           <small>
             {formatNumber(work.targetWords, locale)} {t("words")}
           </small>
-          <Button icon="package" onClick={() => setTab("adaptation")}>
-            {t("adaptation")}
-          </Button>
         </div>
       </header>
 
       <nav className="tab-bar">
-        <button
-          type="button"
-          className={`tab-button ${tab === "manuscript" ? "active" : ""}`}
-          onClick={() => setTab("manuscript")}
-        >
-          {t("manuscript")}
-          <span>{chapters.length}</span>
-        </button>
+        {isGame ? (
+          <button
+            type="button"
+            className={`tab-button ${tab === "nodes" ? "active" : ""}`}
+            onClick={() => setTab("nodes")}
+          >
+            {t("nodeBoard")}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={`tab-button ${tab === "manuscript" ? "active" : ""}`}
+            onClick={() => setTab("manuscript")}
+          >
+            {t("manuscript")}
+            <span>{chapters.length}</span>
+          </button>
+        )}
         <button
           type="button"
           className={`tab-button ${tab === "bible" ? "active" : ""}`}
@@ -207,14 +211,6 @@ export function WorkView({
         >
           {t("storyBible")}
           <span>{characters.length}</span>
-        </button>
-        <button
-          type="button"
-          className={`tab-button ${tab === "adaptation" ? "active" : ""}`}
-          onClick={() => setTab("adaptation")}
-        >
-          {t("adaptation")}
-          <span>3D</span>
         </button>
       </nav>
 
@@ -554,278 +550,7 @@ export function WorkView({
         </div>
       ) : null}
 
-      {tab === "adaptation" ? (
-        <AdaptationPanel
-          workspace={workspace}
-          work={work}
-          locale={locale}
-          t={t}
-          onRecordExport={onRecordExport}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function AdaptationPanel({
-  workspace,
-  work,
-  locale,
-  t,
-  onRecordExport,
-}: {
-  workspace: StudioWorkspace;
-  work: StoryWork;
-  locale: UiLocale;
-  t: Translate;
-  onRecordExport: (
-    bundle: ArcReelBundle,
-    directory: string,
-    files: number,
-    bytes: number,
-  ) => void;
-}) {
-  // Same story order as the chapter list; the stored array follows creation
-  // order and can drift when chapters are added out of sequence.
-  const chapters = useMemo(
-    () => [...work.chapters].sort((a, b) => a.number - b.number),
-    [work.chapters],
-  );
-  const [selected, setSelected] = useState<string[]>(
-    chapters.map((chapter) => chapter.id),
-  );
-  const [approvedOnly, setApprovedOnly] = useState(
-    workspace.settings.exportApprovedOnly,
-  );
-  const [bundle, setBundle] = useState<ArcReelBundle | null>(null);
-  const [bundleSignature, setBundleSignature] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const { toast, notify } = useToast();
-  const [error, setError] = useState<string | null>(null);
-  const currentSignature = JSON.stringify({
-    workspaceRevision: workspace.revision,
-    chapters: [...selected].sort(),
-    approvedOnly,
-    locale,
-    aspectRatio: workspace.settings.defaultAspectRatio,
-  });
-  const stale = Boolean(bundle) && bundleSignature !== currentSignature;
-
-  const generate = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const next = await buildArcReelBundle(workspace, {
-        workId: work.id,
-        chapterIds: selected,
-        locale,
-        aspectRatio: workspace.settings.defaultAspectRatio,
-        approvedOnly,
-      });
-      setBundle(next);
-      setBundleSignature(currentSignature);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const exportBundle = async () => {
-    if (!bundle) return;
-    setBusy(true);
-    try {
-      const written = await bridge.exportArcReel(bundle);
-      if (written.canceled) {
-        notify(t("exportCanceled"));
-        return;
-      }
-      onRecordExport(bundle, written.directory, written.files, written.bytes);
-      notify(`${t("exportSuccess")} · ${written.directory}`);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="adaptation-layout">
-      <section className="adaptation-controls">
-        <span className="eyebrow">ARCREEL / 3D COMIC DRAMA</span>
-        <h2>{t("exportCenter")}</h2>
-        <p>{t("exportLead")}</p>
-        <div className="adaptation-style-card">
-          <span className="style-orb">3D</span>
-          <div>
-            <strong>{t("style3d")}</strong>
-            <small>{t("style3dMeta")}</small>
-          </div>
-        </div>
-        <div className="chapter-select-head">
-          <strong>{t("chapterSelection")}</strong>
-          <span>{t("selected", { n: selected.length })}</span>
-        </div>
-        <div className="chapter-select-list">
-          {chapters.map((chapter) => (
-            <label className="chapter-select-row" key={chapter.id}>
-              <input
-                type="checkbox"
-                checked={selected.includes(chapter.id)}
-                onChange={(event) =>
-                  setSelected((current) =>
-                    event.target.checked
-                      ? [...current, chapter.id]
-                      : current.filter((id) => id !== chapter.id),
-                  )
-                }
-              />
-              <span className="chapter-number">
-                {String(chapter.number).padStart(2, "0")}
-              </span>
-              <span>
-                <strong>{chapter.title}</strong>
-                <small>
-                  {statusLabels[locale][chapter.status]} ·{" "}
-                  {formatNumber(countChapterWords(chapter), locale)}{" "}
-                  {t("words")}
-                </small>
-              </span>
-              <Badge tone={chapter.status === "approved" ? "green" : "neutral"}>
-                {statusLabels[locale][chapter.status]}
-              </Badge>
-            </label>
-          ))}
-        </div>
-        <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={approvedOnly}
-            onChange={(event) => setApprovedOnly(event.target.checked)}
-          />
-          <span>
-            <strong>{t("approvedOnly")}</strong>
-          </span>
-        </label>
-        <div className="adaptation-buttons">
-          <Button
-            variant="primary"
-            icon="sparkles"
-            disabled={busy || !selected.length}
-            onClick={() => void generate()}
-          >
-            {busy
-              ? t("exporting")
-              : bundle
-                ? t("regenerate")
-                : t("generatePreview")}
-          </Button>
-          <Button
-            icon="download"
-            disabled={!bundle || busy || stale}
-            title={stale ? t("regenerateRequired") : undefined}
-            onClick={() => void exportBundle()}
-          >
-            {t("exportBundle")}
-          </Button>
-        </div>
-        {error ? <p className="form-error">{error}</p> : null}
-      </section>
-
-      <section className="adaptation-preview">
-        {!bundle ? (
-          <EmptyState icon="package" title={t("noAdaptationPreview")}>
-            {t("draftNote")}
-          </EmptyState>
-        ) : (
-          <>
-            <div className="bundle-summary">
-              <div>
-                <strong>{bundle.chapters.length}</strong>
-                <span>{t("sourceChapters")}</span>
-              </div>
-              <div>
-                <strong>{formatNumber(bundle.totalWords, locale)}</strong>
-                <span>{t("statWords")}</span>
-              </div>
-              <div>
-                <strong>{bundle.totalScenes}</strong>
-                <span>{t("totalScenes")}</span>
-              </div>
-              <div>
-                <strong>{bundle.totalShots}</strong>
-                <span>{t("totalShots")}</span>
-              </div>
-            </div>
-            <div className="manifest-hash">
-              <span>{t("manifestHash")}</span>
-              <code>{bundle.manifestSha256}</code>
-            </div>
-            {stale ? (
-              <div className="warning-box stale-bundle-warning">
-                <div className="warning-box-head">
-                  <Icon name="sparkles" size={17} />
-                  <strong>{t("bundleOutdated")}</strong>
-                </div>
-                <p>{t("regenerateRequired")}</p>
-              </div>
-            ) : null}
-            <div className="warning-box">
-              <div className="warning-box-head">
-                <Icon name="sparkles" size={17} />
-                <strong>{t("bundleWarnings")}</strong>
-              </div>
-              {bundle.warnings.length ? (
-                <ul>
-                  {bundle.warnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p>{t("noWarnings")}</p>
-              )}
-            </div>
-            <div className="file-tree">
-              <div className="file-tree-head">
-                <strong>{t("files")}</strong>
-                <span>{bundle.files.length}</span>
-              </div>
-              {bundle.files.map((file) => (
-                <div className="file-row" key={file.path}>
-                  <Icon
-                    name={
-                      file.mediaType === "application/json" ? "layers" : "file"
-                    }
-                    size={16}
-                  />
-                  <code>{file.path}</code>
-                  <span>
-                    {new TextEncoder()
-                      .encode(file.content)
-                      .byteLength.toLocaleString()}{" "}
-                    B
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="preview-chapters">
-              {bundle.chapters.map((chapter) => (
-                <div key={chapter.chapterId}>
-                  <span className="chapter-number">
-                    {String(chapter.number).padStart(2, "0")}
-                  </span>
-                  <strong>{chapter.title}</strong>
-                  <small>
-                    {chapter.sceneCount} {t("scenes")} · {chapter.shotCount}{" "}
-                    {t("shots")}
-                  </small>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </section>
-      {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}
+      {tab === "nodes" ? nodeBoard : null}
     </div>
   );
 }

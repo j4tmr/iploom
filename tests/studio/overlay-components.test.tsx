@@ -329,6 +329,7 @@ test("switching workflow tasks with an unsaved result asks first", () => {
   const view = render(
     <WorkflowView
       workspace={workspace}
+      universeId={workspace.workflowTasks[0]!.universeId!}
       locale="en"
       t={translator("en")}
       onNewTask={() => {}}

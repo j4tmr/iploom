@@ -19,7 +19,6 @@ import {
 } from "./components/forms.tsx";
 import { Icon } from "./components/icon.tsx";
 import { ManuscriptImport } from "./components/manuscript-import.tsx";
-import { ProductionPanel } from "./components/production-panel.tsx";
 import { SearchOverlay } from "./components/search-overlay.tsx";
 import {
   StoryObjectModal,
@@ -57,6 +56,7 @@ import {
   mergeManuscriptImport,
 } from "./core/manuscript.ts";
 import { MCP_TOOL_NAMES, mcpToolsNote } from "./core/mcp-tools.ts";
+import { quickBuildWork } from "./core/quick-build.ts";
 import {
   attachOverlayKeyboard,
   isComposingEvent,
@@ -69,13 +69,11 @@ import {
   findWorldTemplate,
 } from "./core/world-templates.ts";
 import type {
-  ArcReelBundle,
   Card,
   CardEdge,
   CardType,
   Chapter,
   Character,
-  ExportRecord,
   LoreEntry,
   Relationship,
   SearchHit,
@@ -89,6 +87,7 @@ import type {
   ThemeMode,
   TimelineEvent,
   UiLocale,
+  WorkKind,
   WorkflowTask,
   WorkflowTaskRunMeta,
   WorkflowTaskStatus,
@@ -108,17 +107,15 @@ import type { StudioRoute, UniverseTab } from "./routes.ts";
 import { prepareSnapshot } from "./snapshot-guard.ts";
 import { applyTheme, useStudioWorkspace } from "./use-studio-workspace.ts";
 import { describeWorkspaceProblem } from "./validation-message.ts";
+import { CardsView } from "./views/cards-view.tsx";
 import { Dashboard } from "./views/dashboard.tsx";
-import { ExportsView } from "./views/exports-view.tsx";
-import { LibraryView } from "./views/library-view.tsx";
 import { SettingsView } from "./views/settings-view.tsx";
 import { UniverseView } from "./views/universe-view.tsx";
 import { WorkView } from "./views/work-view.tsx";
-import { WorkflowView } from "./views/workflow-view.tsx";
 import { describeResetFailure } from "./workspace-errors.ts";
 
 type ModalState =
-  | { kind: "import" }
+  | { kind: "import"; universeId?: string }
   | { kind: "world"; initial?: StoryUniverse; templateId?: string }
   | { kind: "novel"; universeId?: string; initial?: StoryWork }
   | { kind: "character"; initial?: Character; universeId?: string }
@@ -147,11 +144,21 @@ type ModalState =
     }
   | { kind: "mcp" }
   | { kind: "standard"; initial?: WorkspaceStandard; universeId?: string }
-  | { kind: "cardType"; universeId: string; initial?: CardType }
+  | {
+      kind: "cardType";
+      universeId: string;
+      workId?: string;
+      initial?: CardType;
+    }
   | { kind: "card"; typeId: string; initial?: Card }
   | { kind: "cardBatch"; typeId: string }
   | { kind: "cardEdge"; universeId: string; defaultSourceId?: string }
-  | { kind: "construct"; universeId: string; constructId: string };
+  | {
+      kind: "construct";
+      universeId: string;
+      workId?: string;
+      constructId: string;
+    };
 
 export function App() {
   const state = useStudioWorkspace();
@@ -232,13 +239,8 @@ export function App() {
           setAboutFocus((token) => token + 1);
         }
         navigate({ name: "settings" });
-      } else if (
-        target.name === "dashboard" ||
-        target.name === "library" ||
-        target.name === "workflow" ||
-        target.name === "exports"
-      ) {
-        navigate({ name: target.name });
+      } else if (target.name === "dashboard") {
+        navigate({ name: "dashboard" });
       } else if (target.name === "universe" && target.params?.id) {
         navigate({
           name: "universe",
@@ -319,15 +321,9 @@ export function App() {
       };
     if (route.name === "work" && work)
       return {
-        eyebrow: "NOVEL / 小说",
+        eyebrow: work.kind === "game" ? "GAME / 游戏" : "NOVEL / 小说",
         title: displayText(work.title, locale),
       };
-    if (route.name === "library")
-      return { eyebrow: "LIBRARY / 小说书架", title: t("library") };
-    if (route.name === "workflow")
-      return { eyebrow: "AI WORKFLOW / 创作流水线", title: t("workflow") };
-    if (route.name === "exports")
-      return { eyebrow: "ARCREEL / 漫剧交付", title: t("exports") };
     if (route.name === "settings")
       return { eyebrow: "PREFERENCES / 设置", title: t("settings") };
     return { eyebrow: "IPLOOM STUDIO / 造界工坊", title: t("dashboard") };
@@ -386,6 +382,21 @@ export function App() {
     if (!exists) navigate({ name: "work", workId: next.id });
     notify(t("saved"));
     return true;
+  };
+
+  /**
+   * World-scoped quick build: "写小说" lands in chapter one, "做游戏" lands on
+   * a node board seeded with this game's own pack. Both run as one mutation so
+   * a rejected change never leaves a half-built work behind.
+   */
+  const quickBuild = (universeId: string, kind: WorkKind) => {
+    let created: StoryWork | undefined;
+    const applied = mutateChecked((draft) => {
+      created = quickBuildWork(draft, universeId, kind, locale);
+    });
+    if (!applied || !created) return;
+    navigate({ name: "work", workId: created.id });
+    notify(kind === "game" ? t("gameCreated") : t("novelCreated"));
   };
 
   const deleteUniverse = async (target: StoryUniverse) => {
@@ -459,12 +470,13 @@ export function App() {
     const exists = workspace.cardTypes.some((item) => item.id === next.id);
     const applied = mutateChecked((draft) => {
       const index = draft.cardTypes.findIndex((item) => item.id === next.id);
-      // A type never changes universe: moving it would silently re-scope every
-      // card that instantiates it.
+      // A type never changes universe or work: moving it would silently
+      // re-scope every card that instantiates it.
       if (index >= 0)
         draft.cardTypes[index] = {
           ...next,
           universeId: draft.cardTypes[index]!.universeId,
+          workId: draft.cardTypes[index]!.workId,
         };
       else draft.cardTypes.push(next);
       // Editing a type can remove fields or narrow their ranges; existing
@@ -547,10 +559,14 @@ export function App() {
   const applyBuiltInConstruct = (
     universeId: string,
     constructId: string,
+    workId?: string,
   ): boolean => {
     if (
       workspace.constructs.some(
-        (item) => item.id === constructId && item.universeId === universeId,
+        (item) =>
+          item.id === constructId &&
+          item.universeId === universeId &&
+          (item.workId ?? undefined) === workId,
       )
     ) {
       notify(t("constructAlreadyApplied"));
@@ -558,7 +574,13 @@ export function App() {
     }
     let resultStatus: ApplyConstructResult["status"] | undefined;
     const applied = mutateChecked((draft) => {
-      const result = applyConstruct(draft, constructId, universeId);
+      const result = applyConstruct(
+        draft,
+        constructId,
+        universeId,
+        undefined,
+        workId,
+      );
       resultStatus = result.status;
     });
     if (!applied || resultStatus !== "applied") {
@@ -882,41 +904,6 @@ export function App() {
     });
   };
 
-  const recordExport = (
-    bundle: ArcReelBundle,
-    directory: string,
-    files: number,
-    bytes: number,
-  ) => {
-    let recorded = false;
-    const applied = mutateChecked((draft) => {
-      const work = draft.works.find((item) => item.id === bundle.workId);
-      if (!work) return;
-      const chapterIds = new Set(work.chapters.map((item) => item.id));
-      const record: ExportRecord = {
-        id: createId("export"),
-        workId: work.id,
-        workTitle: bundle.workTitle,
-        createdAt: new Date().toISOString(),
-        chapterIds: [
-          ...new Set(
-            bundle.chapters
-              .map((chapter) => chapter.chapterId)
-              .filter((id) => chapterIds.has(id)),
-          ),
-        ],
-        fileCount: files,
-        bytes,
-        manifestSha256: bundle.manifestSha256,
-        outputPath: directory,
-      };
-      draft.exports.unshift(record);
-      recorded = true;
-    });
-    if (!applied) return;
-    notify(recorded ? t("exportSuccess") : t("exportWorkMissing"));
-  };
-
   const updateSettings = (change: Partial<WorkspaceSettings>) => {
     mutate((draft) => {
       Object.assign(draft.settings, change);
@@ -1045,32 +1032,6 @@ export function App() {
           onMcp={() => setModal({ kind: "mcp" })}
         />
         <main className="studio-main">
-          <ProductionPanel
-            workspace={workspace}
-            locale={locale}
-            t={t}
-            aiInfo={aiInfo}
-            onOpenSettings={() => navigate({ name: "settings" })}
-            context={{
-              universeId: defaultUniverseId ?? workspace.universes[0]?.id,
-              workId: work?.id,
-              characterId:
-                modal?.kind === "character" ? modal.initial?.id : undefined,
-            }}
-            onTasks={(tasks) =>
-              mutateChecked((draft) => {
-                for (const task of tasks) {
-                  const index = draft.workflowTasks.findIndex(
-                    (item) => item.id === task.id,
-                  );
-                  if (index < 0) draft.workflowTasks.push(task);
-                  else draft.workflowTasks[index] = task;
-                }
-              })
-            }
-            onStatus={changeWorkflowStatus}
-            onResult={saveWorkflowResult}
-          />
           {state.recovered ? (
             <div
               className="recovery-banner"
@@ -1103,17 +1064,6 @@ export function App() {
             />
           ) : null}
 
-          {route.name === "library" ? (
-            <LibraryView
-              onImportNovel={() => setModal({ kind: "import" })}
-              workspace={workspace}
-              locale={locale}
-              t={t}
-              onOpenWork={(workId) => navigate({ name: "work", workId })}
-              onNewNovel={() => setModal({ kind: "novel" })}
-            />
-          ) : null}
-
           {route.name === "universe" && universe ? (
             <UniverseView
               workspace={workspace}
@@ -1128,8 +1078,9 @@ export function App() {
               }
               onDeleteUniverse={() => deleteUniverse(universe)}
               onOpenWork={(workId) => navigate({ name: "work", workId })}
-              onNewNovel={() =>
-                setModal({ kind: "novel", universeId: universe.id })
+              onQuickBuild={(kind) => quickBuild(universe.id, kind)}
+              onImportNovel={() =>
+                setModal({ kind: "import", universeId: universe.id })
               }
               onNewCharacter={() =>
                 setModal({ kind: "character", universeId: universe.id })
@@ -1198,8 +1149,23 @@ export function App() {
               onRegisterCandidates={(candidates) =>
                 registerStandardCandidates(candidates, universe.id)
               }
-              onOpenWorkflow={() => navigate({ name: "workflow" })}
+              onOpenWorkflow={() => replaceRoute({ ...route, tab: "workflow" })}
               onOpenSettings={() => navigate({ name: "settings" })}
+              onNewTask={() =>
+                setModal({ kind: "task", universeId: universe.id })
+              }
+              onEditTask={(initial) => setModal({ kind: "task", initial })}
+              onAddSubtask={(task) =>
+                setModal({
+                  kind: "task",
+                  parentId: task.id,
+                  universeId: task.universeId,
+                  workId: task.workId,
+                })
+              }
+              onDeleteTask={deleteWorkflowTask}
+              onStatusChangeTask={changeWorkflowStatus}
+              onSaveResult={saveWorkflowResult}
               onNewCardType={() =>
                 setModal({ kind: "cardType", universeId: universe.id })
               }
@@ -1273,48 +1239,57 @@ export function App() {
               onChangeChapter={(chapterId, change) =>
                 changeChapter(work.id, chapterId, change)
               }
-              onRecordExport={recordExport}
-            />
-          ) : null}
-
-          {route.name === "exports" ? (
-            <ExportsView
-              workspace={workspace}
-              locale={locale}
-              t={t}
-              onNotify={(message) => notify(message, "error")}
-              onOpenWork={(workId) => navigate({ name: "work", workId })}
-            />
-          ) : null}
-
-          {route.name === "workflow" ? (
-            <WorkflowView
-              workspace={workspace}
-              locale={locale}
-              t={t}
-              onNewTask={() =>
-                setModal({
-                  kind: "task",
-                  universeId:
-                    workspace.works.find(
-                      (item) => item.id === workspace.lastOpenedWorkId,
-                    )?.universeId ?? workspace.universes[0]?.id,
-                  workId: workspace.lastOpenedWorkId,
-                })
+              nodeBoard={
+                <CardsView
+                  workspace={workspace}
+                  universeId={work.universeId}
+                  workId={work.id}
+                  locale={locale}
+                  t={t}
+                  onNewType={() =>
+                    setModal({
+                      kind: "cardType",
+                      universeId: work.universeId,
+                      workId: work.id,
+                    })
+                  }
+                  onEditType={(initial) =>
+                    setModal({
+                      kind: "cardType",
+                      universeId: initial.universeId,
+                      initial,
+                    })
+                  }
+                  onDuplicateType={duplicateCardTypeTemplate}
+                  onDeleteType={deleteCardType}
+                  onNewCard={(typeId) => setModal({ kind: "card", typeId })}
+                  onEditCard={(card) =>
+                    setModal({
+                      kind: "card",
+                      typeId: card.typeId,
+                      initial: card,
+                    })
+                  }
+                  onBatch={(typeId) => setModal({ kind: "cardBatch", typeId })}
+                  onNewEdge={(defaultSourceId) =>
+                    setModal({
+                      kind: "cardEdge",
+                      universeId: work.universeId,
+                      defaultSourceId,
+                    })
+                  }
+                  onDeleteCard={deleteCard}
+                  onDeleteEdge={deleteCardEdge}
+                  onApplyConstruct={(constructId) =>
+                    setModal({
+                      kind: "construct",
+                      universeId: work.universeId,
+                      workId: work.id,
+                      constructId,
+                    })
+                  }
+                />
               }
-              onEditTask={(initial) => setModal({ kind: "task", initial })}
-              onAddSubtask={(task) =>
-                setModal({
-                  kind: "task",
-                  parentId: task.id,
-                  universeId: task.universeId,
-                  workId: task.workId,
-                })
-              }
-              onDeleteTask={deleteWorkflowTask}
-              onStatusChange={changeWorkflowStatus}
-              onSaveResult={saveWorkflowResult}
-              onOpenWork={(workId) => navigate({ name: "work", workId })}
             />
           ) : null}
 
@@ -1373,6 +1348,7 @@ export function App() {
         <ManuscriptImport
           locale={locale}
           t={t}
+          universeId={modal.universeId}
           onClose={() => setModal(null)}
           onImport={async (imported) => {
             if (!(await snapshotBefore("before-import-novel"))) return false;
@@ -1518,12 +1494,13 @@ export function App() {
       ) : null}
       {modal?.kind === "cardType" ? (
         <CardTypeModal
-          key={`card-type-${modal.initial?.id ?? "new"}`}
+          key={`card-type-${modal.initial?.id ?? "new"}-${modal.workId ?? ""}`}
           open
           onClose={() => setModal(null)}
           t={t}
           locale={locale}
           universeId={modal.universeId}
+          workId={modal.workId}
           initial={modal.initial}
           onSave={saveCardType}
         />
@@ -1576,10 +1553,15 @@ export function App() {
           alreadyApplied={workspace.constructs.some(
             (item) =>
               item.id === modalConstruct.id &&
-              item.universeId === modal.universeId,
+              item.universeId === modal.universeId &&
+              (item.workId ?? undefined) === modal.workId,
           )}
           onApply={() =>
-            applyBuiltInConstruct(modal.universeId, modalConstruct.id)
+            applyBuiltInConstruct(
+              modal.universeId,
+              modalConstruct.id,
+              modal.workId,
+            )
           }
         />
       ) : null}

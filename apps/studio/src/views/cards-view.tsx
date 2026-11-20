@@ -93,9 +93,15 @@ function CardRow({
   );
 }
 
+/**
+ * The node board of one world or one work. Without `workId` it shows the
+ * world-level packs shared by everything in that world; with `workId` it shows
+ * only that work's own packs — a game's dedicated board.
+ */
 export function CardsView({
   workspace,
   universeId,
+  workId,
   locale,
   t,
   onNewType,
@@ -112,6 +118,7 @@ export function CardsView({
 }: {
   workspace: StudioWorkspace;
   universeId: string;
+  workId?: string;
   locale: UiLocale;
   t: Translate;
   onNewType: () => void;
@@ -127,8 +134,13 @@ export function CardsView({
   onApplyConstruct: (constructId: string) => void;
 }) {
   const universeTypes = useMemo(
-    () => workspace.cardTypes.filter((type) => type.universeId === universeId),
-    [workspace.cardTypes, universeId],
+    () =>
+      workspace.cardTypes.filter(
+        (type) =>
+          type.universeId === universeId &&
+          (type.workId ?? undefined) === workId,
+      ),
+    [workspace.cardTypes, universeId, workId],
   );
   const universeCards = useMemo(() => {
     const typeIds = new Set(universeTypes.map((type) => type.id));
@@ -140,7 +152,7 @@ export function CardsView({
       (edge) => cardIds.has(edge.sourceId) && cardIds.has(edge.targetId),
     );
   }, [workspace.cardEdges, universeCards]);
-  const usedConstructs = appliedConstructs(workspace, universeId);
+  const usedConstructs = appliedConstructs(workspace, universeId, workId);
   const unusedConstructs = BUILT_IN_CONSTRUCTS.filter(
     (item) => !usedConstructs.some((applied) => applied.id === item.id),
   );

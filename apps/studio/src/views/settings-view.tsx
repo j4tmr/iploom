@@ -17,14 +17,7 @@ import { Icon } from "../components/icon.tsx";
 import { AboutSettings } from "../components/about-settings.tsx";
 import { AiSettings } from "../components/ai-settings.tsx";
 import { useToast } from "../components/use-toast.ts";
-import {
-  Button,
-  Field,
-  FieldGrid,
-  SectionTitle,
-  Select,
-  Toast,
-} from "../components/ui.tsx";
+import { Button, SectionTitle, Toast } from "../components/ui.tsx";
 
 export function SettingsView({
   workspace,
@@ -163,37 +156,6 @@ export function SettingsView({
               </button>
             ))}
           </div>
-
-          <FieldGrid>
-            <Field label={t("aspectRatio")}>
-              <Select
-                value={workspace.settings.defaultAspectRatio}
-                onChange={(event) =>
-                  onUpdateSettings({
-                    defaultAspectRatio: event.target
-                      .value as WorkspaceSettings["defaultAspectRatio"],
-                  })
-                }
-              >
-                <option value="9:16">{t("aspectRatioVertical")}</option>
-                <option value="16:9">{t("aspectRatioLandscape")}</option>
-                <option value="1:1">{t("aspectRatioSquare")}</option>
-              </Select>
-            </Field>
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={workspace.settings.exportApprovedOnly}
-                onChange={(event) =>
-                  onUpdateSettings({ exportApprovedOnly: event.target.checked })
-                }
-              />
-              <span>
-                <strong>{t("approvedOnly")}</strong>
-                <small>{t("draftNote")}</small>
-              </span>
-            </label>
-          </FieldGrid>
         </section>
 
         <section className="settings-panel mcp-settings-card">

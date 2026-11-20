@@ -178,6 +178,7 @@ function buildLargeWorkspace(): StudioWorkspace {
   workspace.works.push({
     id: "work_dense_budget",
     universeId: DENSE_WORLD_ID,
+    kind: "novel",
     title: { zh: CJK_FILLER, en: ASCII_FILLER },
     logline: { zh: CJK_FILLER, en: ASCII_FILLER },
     synopsis: "",

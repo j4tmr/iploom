@@ -120,6 +120,17 @@ export function migrateWorkspace(value: unknown): unknown {
     return migrateWorkspace({
       ...value,
       ...scoped,
+      schema_version: 10,
+      revision:
+        typeof value.revision === "number"
+          ? value.revision + 1
+          : value.revision,
+    });
+  }
+  if (value.schema_version === 10) {
+    return migrateWorkspace({
+      ...value,
+      works: withWorkKinds(value.works),
       schema_version: WORKSPACE_SCHEMA_VERSION,
       revision:
         typeof value.revision === "number"
@@ -128,6 +139,18 @@ export function migrateWorkspace(value: unknown): unknown {
     });
   }
   return value;
+}
+
+/**
+ * Every work before v11 was a novel; nothing in the old data can describe a
+ * game yet, so the default is always `novel`. An unknown kind is left for the
+ * strict schema to reject instead of being silently rewritten.
+ */
+function withWorkKinds(works: unknown): unknown {
+  if (!Array.isArray(works)) return works;
+  return works.map((work) =>
+    record(work) && !("kind" in work) ? { ...work, kind: "novel" } : work,
+  );
 }
 
 const NODE_WORKSHOP_UNIVERSE_ID = "universe_node_workshop";

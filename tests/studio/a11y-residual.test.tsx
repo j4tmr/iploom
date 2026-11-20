@@ -22,6 +22,7 @@ function renderWorkflowView(workspace: StudioWorkspace) {
   return render(
     <WorkflowView
       workspace={workspace}
+      universeId={workspace.workflowTasks[0]!.universeId!}
       locale="en"
       t={t}
       onNewTask={noop}
@@ -50,7 +51,7 @@ function renderWorkView(work: StoryWork, workspace?: StudioWorkspace) {
       onOpenTimeline={noop}
       onDeleteChapter={noop}
       onChangeChapter={noop}
-      onRecordExport={noop}
+      nodeBoard={null}
     />,
   );
 }
@@ -148,7 +149,7 @@ test("clicking the chapter cast group text autosaves nothing; rows still toggle"
       onAddChapter={noop}
       onOpenTimeline={noop}
       onChangeChapter={onChangeChapter}
-      onRecordExport={noop}
+      nodeBoard={null}
     />,
   );
   const group = view.getByRole("group", { name: t("sceneCast") });
@@ -235,17 +236,14 @@ test("chapter list and default selection follow story order, not storage order",
   expect(prose.value).toBe(one.content);
 });
 
-test("the export chapter selection list follows story order", () => {
+test("a novel work offers manuscript and bible tabs, not an adaptation tab", () => {
   const workspace = createDemoWorkspace("en");
   const { work } = workWithChaptersStored132(workspace);
   const view = renderWorkView(work, workspace);
-  const adaptationTab = [
-    ...view.container.querySelectorAll("button.tab-button"),
-  ].find((button) => button.textContent?.startsWith(t("adaptation")));
-  expect(adaptationTab).toBeDefined();
-  fireEvent.click(adaptationTab!);
-  const numbers = [
-    ...view.container.querySelectorAll(".chapter-select-row .chapter-number"),
-  ].map((node) => node.textContent);
-  expect(numbers).toEqual(["01", "02", "03"]);
+  const tabs = [...view.container.querySelectorAll("button.tab-button")].map(
+    (button) => button.textContent ?? "",
+  );
+  expect(tabs.some((label) => label.startsWith(t("manuscript")))).toBe(true);
+  expect(tabs.some((label) => label.startsWith(t("storyBible")))).toBe(true);
+  expect(tabs.some((label) => label.startsWith(t("adaptation")))).toBe(false);
 });

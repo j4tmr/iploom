@@ -1,4 +1,4 @@
-export const WORKSPACE_SCHEMA_VERSION = 10 as const;
+export const WORKSPACE_SCHEMA_VERSION = 11 as const;
 export const ARC_REEL_SCHEMA = "iploom.arcreel/v1" as const;
 /** Longest result text the workspace stores per language. */
 export const MAX_WORKFLOW_RESULT_LENGTH = 200_000 as const;
@@ -144,9 +144,17 @@ export interface Chapter {
   updatedAt: string;
 }
 
+/**
+ * What a world produces. A novel is written chapter by chapter; a game is
+ * built from its own node pack and handed to an external agent for the rest.
+ * Everything a work owns is scoped by its id, so one world can hold both.
+ */
+export type WorkKind = "novel" | "game";
+
 export interface StoryWork {
   id: string;
   universeId: string;
+  kind: WorkKind;
   title: LocalizedText;
   logline: LocalizedText;
   synopsis: string;
@@ -401,6 +409,11 @@ export interface CardField {
 export interface CardType {
   id: string;
   universeId: string;
+  /**
+   * The work this type belongs to. Absent on world-level types shared by every
+   * work of that world; a game quick build creates its own pack instead.
+   */
+  workId?: string;
   name: LocalizedText;
   summary: LocalizedText;
   color: string;
@@ -438,6 +451,8 @@ export interface CardEdge {
 export interface AppliedConstruct {
   id: string;
   universeId: string;
+  /** Set when the construct was applied inside one work instead of the world. */
+  workId?: string;
   name: LocalizedText;
   appliedAt: string;
 }
