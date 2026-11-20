@@ -576,6 +576,7 @@ export function NovelModal({
               const saved = onSave({
                 id: initial?.id ?? createId("work"),
                 universeId,
+                kind: initial?.kind ?? "novel",
                 title: { zh: titleZh.trim(), en: titleEn.trim() },
                 logline: { zh: loglineZh.trim(), en: loglineEn.trim() },
                 synopsis,
@@ -840,11 +841,13 @@ export function WorkflowTaskModal({
     initial?.deliverable.en ?? "",
   );
   const [kind, setKind] = useState<WorkflowTaskKind>(initial?.kind ?? "novel");
-  const [status, setStatus] = useState<WorkflowTaskStatus>(
-    initial?.status ?? "queued",
-  );
+  // A new task opened from inside a world starts scoped to that world; the
+  // form keeps offering every world so an edit can still retarget it.
   const [universeId, setUniverseId] = useState(
     initial?.universeId ?? defaultUniverseId ?? "",
+  );
+  const [status, setStatus] = useState<WorkflowTaskStatus>(
+    initial?.status ?? "queued",
   );
   const [workId, setWorkId] = useState(initial?.workId ?? defaultWorkId ?? "");
   const [chapterId, setChapterId] = useState(initial?.chapterId ?? "");

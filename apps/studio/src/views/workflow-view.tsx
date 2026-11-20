@@ -63,8 +63,15 @@ export function taskKindText(t: Translate, kind: WorkflowTaskKind): string {
   }[kind];
 }
 
+/**
+ * The world's agent handoff board. It keeps the tasks that belong to this
+ * world, builds the brief an external agent needs to execute one, and takes
+ * back the result the agent wrote. No model runs here on purpose: the studio
+ * stores data, the agent does the generation.
+ */
 export function WorkflowView({
   workspace,
+  universeId,
   locale,
   t,
   onNewTask,
@@ -76,6 +83,7 @@ export function WorkflowView({
   onOpenWork,
 }: {
   workspace: StudioWorkspace;
+  universeId: string;
   locale: UiLocale;
   t: Translate;
   onNewTask: () => void;
@@ -86,14 +94,26 @@ export function WorkflowView({
   onSaveResult: (task: WorkflowTask, result: string) => boolean;
   onOpenWork: (workId: string) => void;
 }) {
-  const summary = workflowSummary(workspace);
+  // Readiness and readiness blockers are resolved through workspace tasks.
+  // Narrowing to this world keeps the board honest: another world's tasks are
+  // never shown or treated as dependencies here.
+  const scoped = useMemo(
+    () => ({
+      ...workspace,
+      workflowTasks: workspace.workflowTasks.filter(
+        (task) => task.universeId === universeId,
+      ),
+    }),
+    [workspace, universeId],
+  );
+  const summary = workflowSummary(scoped);
   const [filter, setFilter] = useState<WorkflowFilter>("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(
-    workspace.workflowTasks[0]?.id ?? null,
+    scoped.workflowTasks[0]?.id ?? null,
   );
   const selected =
-    workspace.workflowTasks.find((task) => task.id === selectedId) ?? null;
+    scoped.workflowTasks.find((task) => task.id === selectedId) ?? null;
   const [resultText, setResultText] = useState(
     selected ? displayText(selected.result, locale) : "",
   );
@@ -116,11 +136,11 @@ export function WorkflowView({
   useEffect(() => {
     if (
       selectedId &&
-      !workspace.workflowTasks.some((task) => task.id === selectedId)
+      !scoped.workflowTasks.some((task) => task.id === selectedId)
     ) {
-      setSelectedId(workspace.workflowTasks[0]?.id ?? null);
+      setSelectedId(scoped.workflowTasks[0]?.id ?? null);
     }
-  }, [selectedId, workspace.workflowTasks]);
+  }, [selectedId, scoped.workflowTasks]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the workspace text fields are the trigger; depending on `selected`'s identity would rerun the sync on every workspace write
   useEffect(() => {
@@ -166,8 +186,8 @@ export function WorkflowView({
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    return workspace.workflowTasks.filter((task) => {
-      const readiness = workflowTaskReadiness(workspace, task);
+    return scoped.workflowTasks.filter((task) => {
+      const readiness = workflowTaskReadiness(scoped, task);
       if (filter === "ready" && !readiness.ready) return false;
       if (filter === "waiting" && (task.status !== "queued" || readiness.ready))
         return false;
@@ -180,16 +200,16 @@ export function WorkflowView({
         displayText(task.deliverable, locale),
       ].some((value) => value.toLocaleLowerCase().includes(needle));
     });
-  }, [filter, locale, query, workspace]);
+  }, [filter, locale, query, scoped]);
 
   const driftedTaskIds = useMemo(
     () =>
       new Set(
-        workspace.workflowTasks
-          .filter((task) => standardRefDrift(workspace, task).length > 0)
+        scoped.workflowTasks
+          .filter((task) => standardRefDrift(scoped, task).length > 0)
           .map((task) => task.id),
       ),
-    [workspace],
+    [scoped],
   );
 
   const stats = [
@@ -235,23 +255,21 @@ export function WorkflowView({
     ? work?.chapters.find((item) => item.id === selected.chapterId)
     : undefined;
   const parent = selected?.parentId
-    ? workspace.workflowTasks.find((item) => item.id === selected.parentId)
+    ? scoped.workflowTasks.find((item) => item.id === selected.parentId)
     : undefined;
-  const children = selected ? taskChildren(workspace, selected) : [];
+  const children = selected ? taskChildren(scoped, selected) : [];
   const dependencies = selected
     ? selected.dependsOnIds
-        .map((id) => workspace.workflowTasks.find((task) => task.id === id))
+        .map((id) => scoped.workflowTasks.find((task) => task.id === id))
         .filter((task): task is WorkflowTask => Boolean(task))
     : [];
-  const readiness = selected
-    ? workflowTaskReadiness(workspace, selected)
-    : null;
+  const readiness = selected ? workflowTaskReadiness(scoped, selected) : null;
   const selectedStandardDrift = selected
     ? standardRefDrift(workspace, selected)
     : [];
 
   const filters: { id: WorkflowFilter; label: string; count: number }[] = [
-    { id: "all", label: t("all"), count: workspace.workflowTasks.length },
+    { id: "all", label: t("all"), count: scoped.workflowTasks.length },
     { id: "ready", label: t("workflowFilterReady"), count: summary.ready },
     {
       id: "waiting",
@@ -270,7 +288,7 @@ export function WorkflowView({
     <div className="view workflow-view">
       <header className="page-heading workflow-heading">
         <div>
-          <span className="eyebrow">AI WORKFLOW / 创作流水线</span>
+          <span className="eyebrow">AGENT HANDOFF / 外部代理</span>
           <h1>{t("workflowTitle")}</h1>
           <p>{t("workflowLead")}</p>
         </div>
@@ -319,8 +337,8 @@ export function WorkflowView({
           <div className="workflow-list">
             {filtered.length ? (
               filtered.map((task) => {
-                const taskReadiness = workflowTaskReadiness(workspace, task);
-                const depth = taskDepth(workspace.workflowTasks, task);
+                const taskReadiness = workflowTaskReadiness(scoped, task);
+                const depth = taskDepth(scoped.workflowTasks, task);
                 const taskWork = task.workId
                   ? workspace.works.find((item) => item.id === task.workId)
                   : undefined;
@@ -615,7 +633,7 @@ export function WorkflowView({
               <div className="workflow-actions">
                 <Button
                   variant="primary"
-                  icon="sparkles"
+                  icon="copy"
                   onClick={async () => {
                     await bridge.copyText(
                       buildWorkflowBrief(workspace, selected.id, locale),

@@ -177,10 +177,13 @@ export function CardTypeModal({
   onClose,
   t,
   universeId,
+  workId,
   initial,
   onSave,
 }: ModalBase & {
   universeId: string;
+  /** Set when the type belongs to one work (a game's own node board). */
+  workId?: string;
   initial?: CardType;
   onSave: (type: CardType) => boolean;
 }) {
@@ -222,6 +225,7 @@ export function CardTypeModal({
               const saved = onSave({
                 id: initial?.id ?? createId("ctype"),
                 universeId: initial?.universeId ?? universeId,
+                ...(workId ? { workId } : {}),
                 name: { zh: nameZh.trim(), en: nameEn.trim() },
                 summary: { zh: summaryZh.trim(), en: summaryEn.trim() },
                 color,

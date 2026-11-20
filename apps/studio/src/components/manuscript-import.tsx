@@ -21,11 +21,14 @@ const sameChunk = (left: ChunkRef, right: ChunkRef) =>
 export function ManuscriptImport({
   locale,
   t,
+  universeId,
   onClose,
   onImport,
 }: {
   locale: UiLocale;
   t: Translate;
+  /** The world the imported novel joins; absent only for a standalone import. */
+  universeId?: string;
   onClose: () => void;
   onImport: (workspace: StudioWorkspace) => boolean | Promise<boolean>;
 }) {
@@ -202,6 +205,7 @@ export function ManuscriptImport({
         chapters,
         analysis ? JSON.parse(analysis) : [],
         locale,
+        universeId,
       );
       if (await onImport(imported)) {
         onClose();
@@ -343,6 +347,7 @@ export function ManuscriptImport({
       </details>
       <p>{t("importLeadBody")}</p>
       <Button
+        data-testid="import-analyze"
         disabled={
           locked || !chunks.length || Boolean(plan.block) || Boolean(parseError)
         }
@@ -402,6 +407,7 @@ export function ManuscriptImport({
           <label className="toggle-row">
             <input
               type="checkbox"
+              data-testid="import-review"
               checked={reviewed}
               disabled={locked}
               onChange={(e) => setReviewed(e.target.checked)}

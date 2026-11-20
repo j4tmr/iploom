@@ -30,6 +30,9 @@ import type {
   StudioWorkspace,
   TimelineEvent,
   UiLocale,
+  WorkKind,
+  WorkflowTask,
+  WorkflowTaskStatus,
   WorkspaceStandard,
 } from "../core/types.ts";
 import {
@@ -44,6 +47,7 @@ import type { UniverseTab } from "../routes.ts";
 import { CardsView } from "./cards-view.tsx";
 import { FoundationView } from "./foundation-view.tsx";
 import { TimelineView } from "./timeline-view.tsx";
+import { WorkflowView } from "./workflow-view.tsx";
 
 export function UniverseView({
   workspace,
@@ -57,7 +61,8 @@ export function UniverseView({
   onEditUniverse,
   onDeleteUniverse,
   onOpenWork,
-  onNewNovel,
+  onQuickBuild,
+  onImportNovel,
   onNewCharacter,
   onEditCharacter,
   onDeleteCharacter,
@@ -80,6 +85,12 @@ export function UniverseView({
   onRegisterCandidates,
   onOpenWorkflow,
   onOpenSettings,
+  onNewTask,
+  onEditTask,
+  onAddSubtask,
+  onDeleteTask,
+  onStatusChangeTask,
+  onSaveResult,
   onNewCardType,
   onEditCardType,
   onDuplicateCardType,
@@ -108,7 +119,8 @@ export function UniverseView({
   onEditUniverse: () => void;
   onDeleteUniverse: () => void;
   onOpenWork: (workId: string) => void;
-  onNewNovel: () => void;
+  onQuickBuild: (kind: WorkKind) => void;
+  onImportNovel: () => void;
   onNewCharacter: () => void;
   onEditCharacter: (character: Character) => void;
   onDeleteCharacter: (character: Character) => void;
@@ -134,6 +146,12 @@ export function UniverseView({
   onRegisterCandidates: (candidates: StandardCandidate[]) => void;
   onOpenWorkflow: () => void;
   onOpenSettings: () => void;
+  onNewTask: () => void;
+  onEditTask: (task: WorkflowTask) => void;
+  onAddSubtask: (task: WorkflowTask) => void;
+  onDeleteTask: (task: WorkflowTask) => void;
+  onStatusChangeTask: (task: WorkflowTask, status: WorkflowTaskStatus) => void;
+  onSaveResult: (task: WorkflowTask, result: string) => boolean;
   onNewCardType: () => void;
   onEditCardType: (type: CardType) => void;
   onDuplicateCardType: (type: CardType) => void;
@@ -161,6 +179,9 @@ export function UniverseView({
   );
   const works = workspace.works.filter(
     (work) => work.universeId === universe.id,
+  );
+  const worldTasks = workspace.workflowTasks.filter(
+    (task) => task.universeId === universe.id,
   );
   const graph = buildRelationshipGraph(workspace, universe.id, locale);
   const timelineCount = workspace.timelineEvents.filter(
@@ -205,6 +226,7 @@ export function UniverseView({
     { id: "timeline", label: t("timeline"), count: timelineCount },
     { id: "foundation", label: t("foundation"), count: standardCount },
     { id: "stories", label: t("stories"), count: works.length },
+    { id: "workflow", label: t("workflow"), count: worldTasks.length },
   ];
 
   return (
@@ -239,7 +261,7 @@ export function UniverseView({
         <div className="universe-hero-stats">
           <span>
             <strong>{works.length}</strong>
-            {t("novels")}
+            {t("works")}
           </span>
           <span>
             <strong>{characters.length}</strong>
@@ -261,6 +283,7 @@ export function UniverseView({
           <button
             type="button"
             key={item.id}
+            data-tab={item.id}
             className={`tab-button ${tab === item.id ? "active" : ""}`}
             onClick={() => setTab(item.id)}
           >
@@ -811,51 +834,109 @@ export function UniverseView({
 
       {tab === "stories" ? (
         <section>
-          <SectionTitle eyebrow="STORIES / 故事" title={t("stories")}>
-            <Button variant="primary" icon="plus" onClick={onNewNovel}>
-              {t("writeNovel")}
-            </Button>
+          <SectionTitle eyebrow="WORKS / 作品" title={t("stories")}>
+            <div className="story-quick-build">
+              <Button
+                variant="primary"
+                icon="book"
+                onClick={() => onQuickBuild("novel")}
+              >
+                {t("writeNovel")}
+              </Button>
+              <Button icon="layers" onClick={() => onQuickBuild("game")}>
+                {t("makeGame")}
+              </Button>
+              <Button
+                variant="ghost"
+                icon="download"
+                data-testid="import-open"
+                onClick={onImportNovel}
+              >
+                {t("importNovel")}
+              </Button>
+            </div>
           </SectionTitle>
-          <div className="story-card-grid">
-            {works.map((work) => {
-              const words = workWords(work);
-              return (
-                <button
-                  type="button"
-                  className="story-card"
-                  key={work.id}
-                  onClick={() => onOpenWork(work.id)}
+          {!works.length ? (
+            <EmptyState
+              icon="book"
+              title={t("storiesEmptyTitle")}
+              action={
+                <Button
+                  variant="primary"
+                  icon="book"
+                  onClick={() => onQuickBuild("novel")}
                 >
-                  <Cover
-                    title={displayText(work.title, locale)}
-                    accent={work.coverColor}
-                  />
-                  <span className="story-card-copy">
-                    <span className="eyebrow">{work.genre || t("novel")}</span>
-                    <h3>{displayText(work.title, locale)}</h3>
-                    <p>{displayText(work.logline, locale)}</p>
-                    <span className="story-meta">
-                      <Badge
-                        tone={work.status === "complete" ? "green" : "neutral"}
-                      >
-                        {statusLabels[locale][work.status]}
-                      </Badge>
-                      <small>
-                        {work.chapters.length} {t("chapters")} ·{" "}
-                        {formatNumber(words, locale)} {t("words")}
-                      </small>
-                    </span>
-                    <ProgressBar
-                      value={words}
-                      max={work.targetWords}
-                      color={work.coverColor}
+                  {t("writeNovel")}
+                </Button>
+              }
+            >
+              {t("storiesEmptyLead")}
+            </EmptyState>
+          ) : (
+            <div className="story-card-grid">
+              {works.map((work) => {
+                const words = workWords(work);
+                return (
+                  <button
+                    type="button"
+                    className="story-card"
+                    key={work.id}
+                    onClick={() => onOpenWork(work.id)}
+                  >
+                    <Cover
+                      title={displayText(work.title, locale)}
+                      accent={work.coverColor}
                     />
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                    <span className="story-card-copy">
+                      <span className="eyebrow">
+                        {work.genre ||
+                          (work.kind === "game" ? t("game") : t("novel"))}
+                      </span>
+                      <h3>{displayText(work.title, locale)}</h3>
+                      <p>{displayText(work.logline, locale)}</p>
+                      <span className="story-meta">
+                        <Badge
+                          tone={
+                            work.status === "complete" ? "green" : "neutral"
+                          }
+                        >
+                          {statusLabels[locale][work.status]}
+                        </Badge>
+                        <small>
+                          {work.kind === "game"
+                            ? t("nodeBoard")
+                            : `${work.chapters.length} ${t("chapters")}`}{" "}
+                          · {formatNumber(words, locale)} {t("words")}
+                        </small>
+                      </span>
+                      <ProgressBar
+                        value={words}
+                        max={work.targetWords}
+                        color={work.coverColor}
+                      />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </section>
+      ) : null}
+
+      {tab === "workflow" ? (
+        <WorkflowView
+          workspace={workspace}
+          universeId={universe.id}
+          locale={locale}
+          t={t}
+          onNewTask={onNewTask}
+          onEditTask={onEditTask}
+          onAddSubtask={onAddSubtask}
+          onDeleteTask={onDeleteTask}
+          onStatusChange={onStatusChangeTask}
+          onSaveResult={onSaveResult}
+          onOpenWork={onOpenWork}
+        />
       ) : null}
     </div>
   );

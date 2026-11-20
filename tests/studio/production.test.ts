@@ -696,6 +696,41 @@ test("analysis validates exact evidence and linked assets, keeps manuscript and 
   ).toThrow(/unknown assets/);
 });
 
+test("an import into an existing world adds the novel without a second world", () => {
+  const chapters = splitManuscript(source);
+  const current = createDemoWorkspace("zh-CN");
+  const world = current.universes[0]!;
+  const before = JSON.stringify(current);
+  const imported = buildManuscriptImport(
+    "长夜",
+    chapters,
+    [{ chapter: 2, part: 1, analysis }],
+    "zh-CN",
+    world.id,
+  );
+  const work = imported.works[0]!;
+  expect(work.universeId).toBe(world.id);
+  expect(imported.characters[0]!.universeIds).toEqual([world.id]);
+  expect(imported.locations[0]!.universeId).toBe(world.id);
+
+  const combined = mergeManuscriptImport(current, imported);
+  // The receiving world is not duplicated, but every imported asset joined it.
+  expect(combined.universes.map((item) => item.id)).toEqual(
+    current.universes.map((item) => item.id),
+  );
+  expect(combined.works).toHaveLength(current.works.length + 1);
+  expect(combined.works.at(-1)!.universeId).toBe(world.id);
+  expect(
+    combined.characters.filter((item) => item.universeIds.includes(world.id))
+      .length,
+  ).toBeGreaterThan(
+    current.characters.filter((item) => item.universeIds.includes(world.id))
+      .length,
+  );
+  expect(JSON.stringify(current)).toBe(before);
+  expect(() => validateWorkspace(combined)).not.toThrow();
+});
+
 test("production workflow carries scope, dependencies, long results and costume constraints", () => {
   const workspace = createDemoWorkspace("en");
   const work = workspace.works[0]!;
@@ -977,8 +1012,8 @@ test("legacy workspaces without templates still validate and infer each stage", 
   legacy.schema_version = 6;
 
   const migrated = validateWorkspace(legacy);
-  expect(migrated.schema_version).toBe(10);
-  expect(migrated.revision).toBe(44);
+  expect(migrated.schema_version).toBe(11);
+  expect(migrated.revision).toBe(45);
   expect(migrated.workflowTasks.map((task) => task.template)).toEqual([
     "world",
     "character",

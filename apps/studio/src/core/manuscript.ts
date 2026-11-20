@@ -746,6 +746,8 @@ export function buildManuscriptImport(
   chapters: Chapter[],
   analyzed: AnalyzedChunk[],
   locale: UiLocale,
+  /** Import into an existing world instead of minting a new one. */
+  existingUniverseId?: string,
 ): StudioWorkspace {
   if (!title.trim() || title.length > CHAPTER_LIMITS.title)
     throw new Error(
@@ -753,7 +755,7 @@ export function buildManuscriptImport(
     );
   const workspace = createEmptyWorkspace(title, locale);
   const now = new Date().toISOString(),
-    universeId = createId("uni"),
+    universeId = existingUniverseId ?? createId("uni"),
     workId = createId("work");
   const local = (value: string) => ({
     zh: locale === "zh-CN" ? value : "",
@@ -773,6 +775,8 @@ export function buildManuscriptImport(
     if (!list.includes(message)) list.push(message);
     notices.set(chapter, list);
   };
+  // The result must validate on its own, so an import aimed at an existing
+  // world still carries a stand-in record for that world; merging skips it.
   workspace.universes.push({
     id: universeId,
     name: local(title.trim()),
@@ -793,6 +797,7 @@ export function buildManuscriptImport(
   const work = {
     id: workId,
     universeId,
+    kind: "novel" as const,
     title: local(title.trim()),
     logline: local(""),
     synopsis: "",
@@ -982,7 +987,6 @@ export function mergeManuscriptImport(
 ): StudioWorkspace {
   const next = structuredClone(current);
   for (const key of [
-    "universes",
     "works",
     "characters",
     "locations",
@@ -991,6 +995,12 @@ export function mergeManuscriptImport(
     "relationships",
   ] as const)
     (next[key] as unknown[]).push(...imported[key]);
+  // An import aimed at an existing world carries that world only as a
+  // stand-in so it validates alone; the receiving workspace already has it.
+  const existing = new Set(next.universes.map((universe) => universe.id));
+  next.universes.push(
+    ...imported.universes.filter((universe) => !existing.has(universe.id)),
+  );
   next.lastOpenedWorkId = imported.lastOpenedWorkId;
   return validateWorkspace(next);
 }

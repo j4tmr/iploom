@@ -152,6 +152,7 @@ export const workSchema = z
   .object({
     id: identifier,
     universeId: identifier,
+    kind: z.enum(["novel", "game"]).default("novel"),
     title: localizedSchema,
     logline: localizedSchema,
     synopsis: z.string().max(100_000).default(""),
@@ -487,6 +488,7 @@ export const cardTypeSchema = z
   .object({
     id: identifier,
     universeId: identifier,
+    workId: identifier.optional(),
     name: localizedSchema,
     summary: localizedSchema,
     color,
@@ -536,6 +538,7 @@ export const appliedConstructSchema = z
   .object({
     id: identifier,
     universeId: identifier,
+    workId: identifier.optional(),
     name: localizedSchema,
     appliedAt: isoDate,
   })
@@ -601,6 +604,7 @@ export const workspaceSchema = z
     const ruleSystemsById = new Map(
       workspace.ruleSystems.map((item) => [item.id, item]),
     );
+    const worksById = new Map(workspace.works.map((work) => [work.id, work]));
 
     const issue = (path: (string | number)[], message: string) =>
       ctx.addIssue({ code: "custom", path, message });
@@ -634,7 +638,7 @@ export const workspaceSchema = z
     unique(
       workspace.constructs,
       "constructs",
-      (item) => `${item.universeId}:${item.id}`,
+      (item) => `${item.universeId}:${item.workId ?? ""}:${item.id}`,
     );
 
     const cardTypesById = new Map(
@@ -647,6 +651,15 @@ export const workspaceSchema = z
           ["cardTypes", typeIndex, "universeId"],
           `unknown universe: ${type.universeId}`,
         );
+      if (type.workId) {
+        const owner = worksById.get(type.workId);
+        if (!owner) issue(["cardTypes", typeIndex, "workId"], "unknown work");
+        else if (owner.universeId !== type.universeId)
+          issue(
+            ["cardTypes", typeIndex, "workId"],
+            "work belongs to another universe",
+          );
+      }
     }
     for (const [constructIndex, construct] of workspace.constructs.entries()) {
       if (!universes.has(construct.universeId))
@@ -654,6 +667,16 @@ export const workspaceSchema = z
           ["constructs", constructIndex, "universeId"],
           `unknown universe: ${construct.universeId}`,
         );
+      if (construct.workId) {
+        const owner = worksById.get(construct.workId);
+        if (!owner)
+          issue(["constructs", constructIndex, "workId"], "unknown work");
+        else if (owner.universeId !== construct.universeId)
+          issue(
+            ["constructs", constructIndex, "workId"],
+            "work belongs to another universe",
+          );
+      }
     }
     for (const [cardIndex, card] of workspace.cards.entries()) {
       const type = cardTypesById.get(card.typeId);
@@ -721,7 +744,6 @@ export const workspaceSchema = z
           "card relation crosses universe boundaries",
         );
     }
-    const worksById = new Map(workspace.works.map((work) => [work.id, work]));
     if (
       workspace.lastOpenedWorkId &&
       !worksById.has(workspace.lastOpenedWorkId)

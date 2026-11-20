@@ -124,9 +124,13 @@ export function nextChapterNumber(work: StoryWork): number {
   return Math.max(0, ...work.chapters.map((chapter) => chapter.number)) + 1;
 }
 
+/**
+ * One blank chapter. `now` stays the second parameter for existing callers;
+ * pass `{ now }` inside `input` when the values are spread in.
+ */
 export function emptyChapter(
-  input: Partial<Chapter> & { title: string },
-  now = new Date().toISOString(),
+  input: Partial<Chapter> & { title: string; now?: string },
+  now = input.now ?? new Date().toISOString(),
 ): Chapter {
   return {
     id: input.id ?? createId("chapter"),
@@ -674,6 +678,7 @@ export function createDemoWorkspace(
       {
         id: "work_tide_clock",
         universeId: "uni_mist_harbor",
+        kind: "novel",
         title: localized("潮汐钟", "The Tide Clock"),
         logline: localized(
           "修钟学徒追查父亲失踪的那一夜，却发现整座港城都在替钟声保守同一个秘密。",
@@ -776,6 +781,7 @@ export function createDemoWorkspace(
       {
         id: "work_last_train",
         universeId: "uni_ninth_station",
+        kind: "novel",
         title: localized("末班列车", "The Last Train"),
         logline: localized(
           "一名替人保管秘密的乘务员，在末班车上遇到一个问自己终点之后是什么的乘客。",

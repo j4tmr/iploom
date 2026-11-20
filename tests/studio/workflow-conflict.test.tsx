@@ -26,6 +26,7 @@ function workflowView(workspace: StudioWorkspace) {
   return (
     <WorkflowView
       workspace={workspace}
+      universeId={workspace.workflowTasks[0]!.universeId!}
       locale="en"
       t={t}
       onNewTask={() => {}}

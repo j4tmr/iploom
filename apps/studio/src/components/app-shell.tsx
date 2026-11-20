@@ -31,13 +31,10 @@ export function Sidebar({
   t: Translate;
   onNavigate: (route: StudioRoute) => void;
 }) {
-  // Workspace-level tools only. Cast, relationships, timeline and foundation
-  // rules are world-scoped and live on the world detail tab bar instead.
+  // Worlds are the only navigation. Everything about a world — its novels,
+  // games, cast, rules, timeline and agent tasks — lives inside that world.
   const nav: NavItem[] = [
     { route: "dashboard", label: t("dashboard"), icon: "grid" },
-    { route: "library", label: t("library"), icon: "book" },
-    { route: "workflow", label: t("workflow"), icon: "sparkles" },
-    { route: "exports", label: t("exports"), icon: "package" },
   ];
   return (
     <aside className="sidebar">
@@ -82,13 +79,16 @@ export function Sidebar({
       </div>
       <div className="sidebar-worlds">
         {workspace.universes.map((universe) => {
-          const count = workspace.works.filter(
+          const works = workspace.works.filter(
             (work) => work.universeId === universe.id,
-          ).length;
+          );
+          const novels = works.filter((work) => work.kind !== "game").length;
+          const games = works.length - novels;
           return (
             <button
               type="button"
               key={universe.id}
+              data-world-id={universe.id}
               className={
                 route.name === "universe" && route.id === universe.id
                   ? "active"
@@ -107,7 +107,8 @@ export function Sidebar({
               <span>
                 <strong>{displayText(universe.name, locale)}</strong>
                 <small>
-                  {count} {t("novels")}
+                  {novels} {t("novels")}
+                  {games ? ` · ${games} ${t("games")}` : ""}
                 </small>
               </span>
             </button>
@@ -115,22 +116,18 @@ export function Sidebar({
         })}
       </div>
       <div className="sidebar-spacer" />
-      <button
-        type="button"
-        className="sidebar-novel-count"
-        onClick={() => onNavigate({ name: "library" })}
-      >
-        <span className="eyebrow">LIBRARY / 书架</span>
+      <div className="sidebar-novel-count" title={t("workspaceTotals")}>
+        <span className="eyebrow">WORKS / 作品</span>
         <strong>{workspace.works.length}</strong>
         <small>
-          {t("novels")} ·{" "}
+          {t("works")} ·{" "}
           {formatNumber(
             workspace.works.reduce((sum, work) => sum + workWords(work), 0),
             locale,
           )}{" "}
           {t("words")}
         </small>
-      </button>
+      </div>
       <button
         type="button"
         className={`sidebar-settings ${route.name === "settings" ? "active" : ""}`}

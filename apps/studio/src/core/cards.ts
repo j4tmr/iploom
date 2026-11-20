@@ -137,7 +137,11 @@ export interface BuiltInConstruct {
   id: string;
   name: LocalizedText;
   summary: LocalizedText;
-  build: (now: string, universeId: string) => ConstructBuild;
+  /**
+   * `workId` is set when the pack is created inside one work (a game quick
+   * build), so every type it stamps is scoped to that work.
+   */
+  build: (now: string, universeId: string, workId?: string) => ConstructBuild;
 }
 
 function field(
@@ -157,10 +161,15 @@ function field(
   };
 }
 
-function looterConstruct(now: string, universeId: string): ConstructBuild {
+function looterConstruct(
+  now: string,
+  universeId: string,
+  workId?: string,
+): ConstructBuild {
   const sceneType: CardType = {
     id: createId("ctype"),
     universeId,
+    ...(workId ? { workId } : {}),
     name: localized("场景", "Scene"),
     summary: localized(
       "关卡或副本：等级区间、波次、首领与掉落倾向。",
@@ -196,6 +205,7 @@ function looterConstruct(now: string, universeId: string): ConstructBuild {
   const monsterType: CardType = {
     id: createId("ctype"),
     universeId,
+    ...(workId ? { workId } : {}),
     name: localized("怪物", "Monster"),
     summary: localized(
       "可战斗单位：等级、基础属性、类型与掉落。",
@@ -233,6 +243,7 @@ function looterConstruct(now: string, universeId: string): ConstructBuild {
   const equipmentType: CardType = {
     id: createId("ctype"),
     universeId,
+    ...(workId ? { workId } : {}),
     name: localized("装备", "Equipment"),
     summary: localized(
       "可掉落物：稀有度、部位、数值与词条。",
@@ -437,28 +448,43 @@ export type ApplyConstructResult =
 /**
  * Apply one built-in construct to a draft. Applying twice is refused so a
  * starter can never duplicate its types and sample cards.
+ *
+ * Called without `workId` the pack belongs to the whole world and is applied
+ * once per world. Called with `workId` it is that work's own pack — a game's
+ * node board — and is applied once per work, so two games in one world each
+ * get their own set of types and cards.
  */
 export function applyConstruct(
   draft: StudioWorkspace,
   constructId: string,
   universeId: string,
   now = new Date().toISOString(),
+  workId?: string,
 ): ApplyConstructResult {
   const construct = BUILT_IN_CONSTRUCTS.find((item) => item.id === constructId);
   if (!construct) return { status: "unknown" };
+  const work = workId
+    ? draft.works.find((item) => item.id === workId)
+    : undefined;
+  if (workId && !work) return { status: "unknown" };
   if (!draft.universes.some((universe) => universe.id === universeId))
     return { status: "unknown" };
+  if (work && work.universeId !== universeId) return { status: "unknown" };
   const recorded = draft.constructs.find(
-    (item) => item.id === constructId && item.universeId === universeId,
+    (item) =>
+      item.id === constructId &&
+      item.universeId === universeId &&
+      (item.workId ?? undefined) === workId,
   );
   if (recorded) return { status: "already-applied", name: construct.name };
-  const built = construct.build(now, universeId);
+  const built = construct.build(now, universeId, workId);
   draft.cardTypes.push(...built.types);
   draft.cards.push(...built.cards);
   draft.cardEdges.push(...built.edges);
   const applied: AppliedConstruct = {
     id: construct.id,
     universeId,
+    ...(workId ? { workId } : {}),
     name: construct.name,
     appliedAt: now,
   };
@@ -466,13 +492,20 @@ export function applyConstruct(
   return { status: "applied", name: construct.name };
 }
 
-/** Constructs applied inside one universe, most recently used first. */
+/**
+ * Constructs applied inside one universe — its own world-level packs and, when
+ * `workId` is given, that work's packs — most recently used first.
+ */
 export function appliedConstructs(
   workspace: StudioWorkspace,
   universeId: string,
+  workId?: string,
 ): AppliedConstruct[] {
   return workspace.constructs
-    .filter((item) => item.universeId === universeId)
+    .filter(
+      (item) =>
+        item.universeId === universeId && (item.workId ?? undefined) === workId,
+    )
     .sort((left, right) => right.appliedAt.localeCompare(left.appliedAt));
 }
 
