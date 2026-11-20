@@ -9,7 +9,7 @@
 
 IPloom Studio is a local-first desktop workspace for keeping a story world, its reusable cast, relationship graph, novels, chapters and screen-adaptation material in one coherent system. It runs on macOS and Windows, stores content on your machine, and exposes the same source of truth to local MCP clients.
 
-![IPloom Studio dashboard](docs/images/dashboard.png)
+![IPloom Studio worlds home](docs/images/dashboard.png)
 
 ![IPloom Studio AI workflow](docs/images/workflow.png)
 

@@ -13,7 +13,7 @@ import type {
 const zh = {
   appName: "造界工坊",
   appTagline: "从世界到故事，再到大银幕",
-  dashboard: "总览",
+  dashboard: "世界",
   universes: "IP 宇宙",
   novels: "小说",
   cast: "人物库",
@@ -172,14 +172,14 @@ const zh = {
   buildWorld: "建立世界",
   writeNovel: "开始写小说",
   viewAll: "查看全部",
-  recentNovels: "最近小说",
-  pipeline: "创作流水线",
-  pipelineWorld: "世界观",
-  pipelineNovel: "小说",
-  pipelineScreen: "漫剧交付",
-  pipelineWorldCopy: "人物、地点、势力、规则与关系",
-  pipelineNovelCopy: "大纲、章节、正文与状态",
-  pipelineScreenCopy: "场景、镜头、角色锚点与 MCP",
+  templates: "模板",
+  templateLead:
+    "从一个可编辑的起点开始：模板只写入示例人物、地点与设定，每一项都能改名、改值或删除。",
+  templateLabel: "起点模板",
+  templateBlank: "空白世界",
+  templateBlankLead: "不预置任何内容，从零开始填写。",
+  templateUse: "用它开始",
+  worldCreatedFromTemplate: "世界「{name}」已创建，模板内容可以随意修改。",
   emptyDashboard: "从第一个世界开始。",
   emptyDashboardLead:
     "新建 IP 宇宙，填入它的规则与人物。小说会继承这些资料，之后可一键生成 3D 漫剧交接包。",
@@ -230,7 +230,6 @@ const zh = {
   castUsed: "本章人物",
   storyWorld: "所属世界",
   openWorld: "打开世界",
-  allNovels: "全部小说",
   filterWorld: "按世界筛选",
   reusedAcross: "联动宇宙",
   reusableBadge: "通用角色",
@@ -372,11 +371,7 @@ const zh = {
   castAnchors: "人物锚点",
   relationStrength: "关系强度",
   worldDetails: "世界资料",
-  statUniverses: "IP 宇宙",
-  statNovels: "小说",
-  statChapters: "章节",
   statWords: "总字数",
-  statRelationships: "关系",
   searchEverywhere: "全局搜索",
   switchLanguage: "切换语言",
   switchTheme: "切换主题",
@@ -636,8 +631,12 @@ const zh = {
   foundationNeedModel: "请先在设置中配置模型（仅桌面版），再让 AI 起草规则。",
   foundationDraftConfirm:
     "根据当前项目前提起草基础规则，并发送至 {endpoint}（{model}）？服务商可能计费。",
+  foundationDraftConfirmWorld:
+    "根据这个世界的前提起草基础规则，保存在这个世界名下，并发送至 {endpoint}（{model}）？服务商可能计费。",
   foundationDraftingMessage: "正在根据已登记的项目前提起草候选规则…",
+  foundationDraftingMessageWorld: "正在根据这个世界的前提起草候选规则…",
   foundationDraftLabel: "起草项目基础规则",
+  foundationDraftLabelWorld: "起草这个世界的基础规则",
   foundationDraftEmpty:
     "模型没有返回可登记的规则，请重试或手动新建。原有规则未改动。",
   foundationDraftGenerated:
@@ -827,7 +826,7 @@ export type MessageKey = keyof typeof zh;
 const en: Record<MessageKey, string> = {
   appName: "IPloom Studio",
   appTagline: "Worlds into stories. Stories into screen.",
-  dashboard: "Overview",
+  dashboard: "Worlds",
   universes: "IP Worlds",
   novels: "Novels",
   cast: "Cast",
@@ -994,14 +993,15 @@ const en: Record<MessageKey, string> = {
   buildWorld: "Build a world",
   writeNovel: "Start a novel",
   viewAll: "View all",
-  recentNovels: "Recent novels",
-  pipeline: "Creative pipeline",
-  pipelineWorld: "World",
-  pipelineNovel: "Novel",
-  pipelineScreen: "Screen handoff",
-  pipelineWorldCopy: "Cast, places, factions, rules and relationships",
-  pipelineNovelCopy: "Outline, chapters, prose and review status",
-  pipelineScreenCopy: "Scenes, shots, cast anchors and MCP",
+  templates: "Templates",
+  templateLead:
+    "Start from an editable seed: a template only adds example characters, places and lore that you can rename, edit or delete.",
+  templateLabel: "Starting template",
+  templateBlank: "Blank world",
+  templateBlankLead: "Nothing is prefilled; start from scratch.",
+  templateUse: "Start with this",
+  worldCreatedFromTemplate:
+    'World "{name}" created; the template content is yours to edit.',
   emptyDashboard: "Start with the first world.",
   emptyDashboardLead:
     "Create an IP universe with its rules and cast. Novels inherit this material and can generate a stylized 3D screen handoff in one step.",
@@ -1058,7 +1058,6 @@ const en: Record<MessageKey, string> = {
   castUsed: "Chapter cast",
   storyWorld: "World",
   openWorld: "Open world",
-  allNovels: "All novels",
   filterWorld: "Filter by world",
   reusedAcross: "Linked worlds",
   reusableBadge: "Reusable",
@@ -1210,11 +1209,7 @@ const en: Record<MessageKey, string> = {
   castAnchors: "Cast anchors",
   relationStrength: "Relation strength",
   worldDetails: "World details",
-  statUniverses: "IP worlds",
-  statNovels: "Novels",
-  statChapters: "Chapters",
   statWords: "Total words",
-  statRelationships: "Relations",
   searchEverywhere: "Search everywhere",
   switchLanguage: "Switch language",
   switchTheme: "Switch theme",
@@ -1497,9 +1492,14 @@ const en: Record<MessageKey, string> = {
     "Configure a model in Settings first (desktop only), then let AI draft standards.",
   foundationDraftConfirm:
     "Draft foundation standards from the current premise and send them to {endpoint} ({model})? Provider charges may apply.",
+  foundationDraftConfirmWorld:
+    "Draft foundation standards from this world's premise, scoped to this world, and send them to {endpoint} ({model})? Provider charges may apply.",
   foundationDraftingMessage:
     "Drafting candidate standards from the registered premise…",
+  foundationDraftingMessageWorld:
+    "Drafting candidate standards from this world's premise…",
   foundationDraftLabel: "Draft project foundation standards",
+  foundationDraftLabelWorld: "Draft this world's foundation standards",
   foundationDraftEmpty:
     "The model returned no registrable standards. Retry or add one manually; existing standards were not changed.",
   foundationDraftGenerated:

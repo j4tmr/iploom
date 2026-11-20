@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Icon } from "../components/icon.tsx";
 import { RelationshipCanvas } from "../components/relationship-graph.tsx";
 import {
@@ -11,19 +11,26 @@ import {
   SectionTitle,
   TagList,
 } from "../components/ui.tsx";
+import type { AiConfigInfo } from "../core/ai.ts";
 import { displayText, workWords } from "../core/factory.ts";
 import { buildRelationshipGraph } from "../core/graph.ts";
+import type { StandardCandidate } from "../core/standards.ts";
 import type {
   Card,
   CardEdge,
   CardType,
   Character,
   LoreEntry,
+  Relationship,
+  StandardStatus,
   StoryFaction,
   StoryLocation,
+  StoryObject,
   StoryUniverse,
   StudioWorkspace,
+  TimelineEvent,
   UiLocale,
+  WorkspaceStandard,
 } from "../core/types.ts";
 import {
   formatNumber,
@@ -33,22 +40,19 @@ import {
   statusLabels,
   type Translate,
 } from "../i18n.ts";
+import type { UniverseTab } from "../routes.ts";
 import { CardsView } from "./cards-view.tsx";
-
-type UniverseTab =
-  | "overview"
-  | "cast"
-  | "atlas"
-  | "graph"
-  | "stories"
-  | "nodes";
+import { FoundationView } from "./foundation-view.tsx";
+import { TimelineView } from "./timeline-view.tsx";
 
 export function UniverseView({
   workspace,
   universe,
-  initialTab,
+  tab,
+  onTabChange,
   locale,
   t,
+  aiInfo,
   onBack,
   onEditUniverse,
   onDeleteUniverse,
@@ -62,7 +66,20 @@ export function UniverseView({
   onEditAtlas,
   onDeleteAtlas,
   onAddRelationship,
+  onEditRelationship,
   onDeleteRelationship,
+  onNewEvent,
+  onEditEvent,
+  onDeleteEvent,
+  onNewObject,
+  onEditObject,
+  onDeleteObject,
+  onNewStandard,
+  onEditStandard,
+  onStatusChange,
+  onRegisterCandidates,
+  onOpenWorkflow,
+  onOpenSettings,
   onNewCardType,
   onEditCardType,
   onDuplicateCardType,
@@ -77,9 +94,16 @@ export function UniverseView({
 }: {
   workspace: StudioWorkspace;
   universe: StoryUniverse;
-  initialTab?: UniverseTab;
+  /**
+   * The active tab lives in the route, not in this component, so navigating
+   * to the same world and tab again (a search hit, for example) re-selects
+   * that tab instead of keeping whatever tab the user last clicked.
+   */
+  tab: UniverseTab;
+  onTabChange: (tab: UniverseTab) => void;
   locale: UiLocale;
   t: Translate;
+  aiInfo: AiConfigInfo | null;
   onBack: () => void;
   onEditUniverse: () => void;
   onDeleteUniverse: () => void;
@@ -96,7 +120,20 @@ export function UniverseView({
   ) => void;
   onDeleteAtlas: (kind: "location" | "faction" | "lore", id: string) => void;
   onAddRelationship: () => void;
+  onEditRelationship: (relationship: Relationship) => void;
   onDeleteRelationship: (id: string) => void;
+  onNewEvent: (universeId: string, workId?: string) => void;
+  onEditEvent: (event: TimelineEvent) => void;
+  onDeleteEvent: (event: TimelineEvent) => void;
+  onNewObject: () => void;
+  onEditObject: (object: StoryObject) => void;
+  onDeleteObject: (object: StoryObject) => void;
+  onNewStandard: () => void;
+  onEditStandard: (standard: WorkspaceStandard) => void;
+  onStatusChange: (standard: WorkspaceStandard, status: StandardStatus) => void;
+  onRegisterCandidates: (candidates: StandardCandidate[]) => void;
+  onOpenWorkflow: () => void;
+  onOpenSettings: () => void;
   onNewCardType: () => void;
   onEditCardType: (type: CardType) => void;
   onDuplicateCardType: (type: CardType) => void;
@@ -109,10 +146,7 @@ export function UniverseView({
   onDeleteCardEdge: (edge: CardEdge) => void;
   onApplyConstruct: (constructId: string) => void;
 }) {
-  const [tab, setTab] = useState<UniverseTab>(initialTab ?? "overview");
-  useEffect(() => {
-    if (initialTab) setTab(initialTab);
-  }, [initialTab]);
+  const setTab = onTabChange;
   const characters = workspace.characters.filter((character) =>
     character.universeIds.includes(universe.id),
   );
@@ -129,6 +163,12 @@ export function UniverseView({
     (work) => work.universeId === universe.id,
   );
   const graph = buildRelationshipGraph(workspace, universe.id, locale);
+  const timelineCount = workspace.timelineEvents.filter(
+    (event) => event.universeId === universe.id,
+  ).length;
+  const standardCount = workspace.standards.filter(
+    (standard) => !standard.universeId || standard.universeId === universe.id,
+  ).length;
   const nodeTypes = useMemo(
     () => workspace.cardTypes.filter((type) => type.universeId === universe.id),
     [workspace.cardTypes, universe.id],
@@ -162,6 +202,8 @@ export function UniverseView({
       count: locations.length + factions.length + lore.length,
     },
     { id: "graph", label: t("graph"), count: graph.edges.length },
+    { id: "timeline", label: t("timeline"), count: timelineCount },
+    { id: "foundation", label: t("foundation"), count: standardCount },
     { id: "stories", label: t("stories"), count: works.length },
   ];
 
@@ -662,8 +704,10 @@ export function UniverseView({
                       <strong>
                         {source
                           ? displayText(source.name, locale)
-                          : edge.source}{" "}
-                        ↔{" "}
+                          : edge.source}
+                        <span className="relation-arrow">
+                          {edge.mutual ? "↔" : "→"}
+                        </span>
                         {target
                           ? displayText(target.name, locale)
                           : edge.target}
@@ -675,12 +719,30 @@ export function UniverseView({
                         {relationStatusLabels[locale][edge.status]} ·{" "}
                         {t("relationStrength")} {edge.strength}/5
                       </small>
+                      {edge.notes ? (
+                        <details>
+                          <summary>{t("notesSourceEvidence")}</summary>
+                          <p>{edge.notes}</p>
+                        </details>
+                      ) : null}
                     </div>
-                    <IconButton
-                      label={t("delete")}
-                      icon="trash"
-                      onClick={() => onDeleteRelationship(edge.id)}
-                    />
+                    <span className="relation-row-actions">
+                      <IconButton
+                        label={t("edit")}
+                        icon="edit"
+                        onClick={() => {
+                          const relationship = workspace.relationships.find(
+                            (item) => item.id === edge.id,
+                          );
+                          if (relationship) onEditRelationship(relationship);
+                        }}
+                      />
+                      <IconButton
+                        label={t("delete")}
+                        icon="trash"
+                        onClick={() => onDeleteRelationship(edge.id)}
+                      />
+                    </span>
                   </article>
                 );
               })
@@ -710,6 +772,40 @@ export function UniverseView({
           onDeleteCard={onDeleteCard}
           onDeleteEdge={onDeleteCardEdge}
           onApplyConstruct={onApplyConstruct}
+        />
+      ) : null}
+
+      {tab === "timeline" ? (
+        <TimelineView
+          workspace={workspace}
+          locale={locale}
+          t={t}
+          lockedUniverseId={universe.id}
+          onNewEvent={onNewEvent}
+          onEditEvent={onEditEvent}
+          onDeleteEvent={onDeleteEvent}
+          onNewObject={() => onNewObject()}
+          onEditObject={onEditObject}
+          onDeleteObject={onDeleteObject}
+          onOpenWork={onOpenWork}
+        />
+      ) : null}
+
+      {tab === "foundation" ? (
+        <FoundationView
+          workspace={workspace}
+          locale={locale}
+          t={t}
+          aiInfo={aiInfo}
+          universeId={universe.id}
+          onNewStandard={onNewStandard}
+          onEditStandard={onEditStandard}
+          onStatusChange={onStatusChange}
+          onRegisterCandidates={(candidates) =>
+            onRegisterCandidates(candidates)
+          }
+          onOpenWorkflow={onOpenWorkflow}
+          onOpenSettings={onOpenSettings}
         />
       ) : null}
 

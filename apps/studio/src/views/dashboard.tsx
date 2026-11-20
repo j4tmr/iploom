@@ -1,62 +1,37 @@
-import { displayText, workWords, workspaceStats } from "../core/factory.ts";
+import { displayText } from "../core/factory.ts";
 import type {
   StoryUniverse,
   StudioWorkspace,
   UiLocale,
 } from "../core/types.ts";
-import { formatNumber, statusLabels, type Translate } from "../i18n.ts";
+import { WORLD_TEMPLATES } from "../core/world-templates.ts";
 import { Icon } from "../components/icon.tsx";
+import type { Translate } from "../i18n.ts";
 import {
-  Badge,
   Button,
-  Cover,
   EmptyState,
-  ProgressBar,
   SectionTitle,
   TagList,
 } from "../components/ui.tsx";
 
+/**
+ * The worlds home. It answers one question — which world do I open next, or
+ * which starting point do I create one from — and nothing else: cast,
+ * relationships, timeline and rules all live inside the world they describe.
+ */
 export function Dashboard({
   workspace,
   locale,
   t,
   onOpenUniverse,
-  onOpenWork,
   onNewWorld,
-  onNewNovel,
 }: {
   workspace: StudioWorkspace;
   locale: UiLocale;
   t: Translate;
   onOpenUniverse: (universe: StoryUniverse) => void;
-  onOpenWork: (workId: string) => void;
-  onNewWorld: () => void;
-  onNewNovel: () => void;
+  onNewWorld: (templateId?: string) => void;
 }) {
-  const stats = workspaceStats(workspace);
-  const recentWorks = [...workspace.works]
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 4);
-  const statCards = [
-    {
-      label: t("statUniverses"),
-      value: stats.universes,
-      icon: "world" as const,
-    },
-    { label: t("statNovels"), value: stats.works, icon: "book" as const },
-    {
-      label: t("statChapters"),
-      value: stats.chapters,
-      icon: "layers" as const,
-    },
-    { label: t("statWords"), value: stats.words, icon: "file" as const },
-    {
-      label: t("statRelationships"),
-      value: stats.relationships,
-      icon: "graph" as const,
-    },
-  ];
-
   return (
     <div className="view dashboard-view">
       <section className="hero-panel">
@@ -65,11 +40,8 @@ export function Dashboard({
           <h1>{t("dashboardTitle")}</h1>
           <p>{t("dashboardLead")}</p>
           <div className="hero-actions">
-            <Button variant="primary" icon="plus" onClick={onNewWorld}>
+            <Button variant="primary" icon="plus" onClick={() => onNewWorld()}>
               {t("buildWorld")}
-            </Button>
-            <Button icon="book" onClick={onNewNovel}>
-              {t("writeNovel")}
             </Button>
           </div>
           <div className="hero-trust">
@@ -116,39 +88,79 @@ export function Dashboard({
         </div>
       </section>
 
-      <section className="stat-strip">
-        {statCards.map((stat) => (
-          <article className="stat-card" key={stat.label}>
-            <span className="stat-icon">
-              <Icon name={stat.icon} size={18} />
+      <section>
+        <SectionTitle eyebrow="TEMPLATES / 起点" title={t("templates")} />
+        <p className="template-gallery-lead">{t("templateLead")}</p>
+        <div className="template-gallery">
+          <button
+            type="button"
+            className="template-card blank"
+            onClick={() => onNewWorld()}
+          >
+            <span className="template-card-glyph">
+              <Icon name="plus" size={20} />
             </span>
-            <span>
-              <strong>{formatNumber(stat.value, locale)}</strong>
-              <small>{stat.label}</small>
+            <span className="template-card-copy">
+              <strong>{t("templateBlank")}</strong>
+              <small>{t("templateBlankLead")}</small>
             </span>
-          </article>
-        ))}
+            <span className="template-card-go">
+              {t("buildWorld")}
+              <Icon name="arrow" size={15} />
+            </span>
+          </button>
+          {WORLD_TEMPLATES.map((template) => (
+            <button
+              type="button"
+              className="template-card"
+              key={template.id}
+              style={
+                { "--accent-card": template.accent } as React.CSSProperties
+              }
+              onClick={() => onNewWorld(template.id)}
+            >
+              <span className="template-card-glyph">
+                {displayText(template.name, locale).slice(0, 1)}
+              </span>
+              <span className="template-card-copy">
+                <strong>{displayText(template.name, locale)}</strong>
+                <small>{displayText(template.summary, locale)}</small>
+              </span>
+              <span className="template-card-tags">
+                <TagList values={template.genres} max={3} />
+              </span>
+              <span className="template-card-go">
+                {t("templateUse")}
+                <Icon name="arrow" size={15} />
+              </span>
+            </button>
+          ))}
+        </div>
       </section>
 
-      {!workspace.universes.length ? (
-        <EmptyState
-          icon="world"
-          title={t("emptyDashboard")}
-          action={
-            <Button variant="primary" icon="plus" onClick={onNewWorld}>
-              {t("buildWorld")}
-            </Button>
-          }
-        >
-          {t("emptyDashboardLead")}
-        </EmptyState>
-      ) : (
-        <section>
-          <SectionTitle eyebrow="WORLDS / 宇宙" title={t("universes")}>
-            <Button variant="ghost" onClick={onNewWorld} icon="plus">
-              {t("new")}
-            </Button>
-          </SectionTitle>
+      <section>
+        <SectionTitle eyebrow="WORLDS / 世界" title={t("universes")}>
+          <Button variant="ghost" onClick={() => onNewWorld()} icon="plus">
+            {t("new")}
+          </Button>
+        </SectionTitle>
+        {!workspace.universes.length ? (
+          <EmptyState
+            icon="world"
+            title={t("emptyDashboard")}
+            action={
+              <Button
+                variant="primary"
+                icon="plus"
+                onClick={() => onNewWorld()}
+              >
+                {t("buildWorld")}
+              </Button>
+            }
+          >
+            {t("emptyDashboardLead")}
+          </EmptyState>
+        ) : (
           <div className="world-grid">
             {workspace.universes.map((universe, index) => {
               const works = workspace.works.filter(
@@ -205,126 +217,7 @@ export function Dashboard({
               );
             })}
           </div>
-        </section>
-      )}
-
-      <section className="dashboard-lower">
-        <div>
-          <SectionTitle eyebrow="RECENT / 最近" title={t("recentNovels")} />
-          <div className="novel-list">
-            {recentWorks.map((work) => {
-              const universe = workspace.universes.find(
-                (item) => item.id === work.universeId,
-              );
-              const words = workWords(work);
-              return (
-                <button
-                  type="button"
-                  className="novel-row"
-                  key={work.id}
-                  onClick={() => onOpenWork(work.id)}
-                >
-                  <Cover
-                    title={displayText(work.title, locale)}
-                    accent={work.coverColor}
-                    size="small"
-                  />
-                  <span className="novel-row-copy">
-                    <span className="novel-row-world">
-                      {universe
-                        ? displayText(universe.name, locale)
-                        : t("novel")}
-                    </span>
-                    <strong>{displayText(work.title, locale)}</strong>
-                    <small>{displayText(work.logline, locale)}</small>
-                  </span>
-                  <span className="novel-row-progress">
-                    <span>
-                      <b>{formatNumber(words, locale)}</b>
-                      <small>{t("words")}</small>
-                    </span>
-                    <ProgressBar
-                      value={words}
-                      max={work.targetWords}
-                      color={work.coverColor}
-                    />
-                  </span>
-                  <Icon name="chevron" size={17} />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <aside className="pipeline-card">
-          <span className="eyebrow">PIPELINE / 流水线</span>
-          <h3>{t("pipeline")}</h3>
-          <div className="pipeline-flow">
-            <span className="pipeline-node">
-              <i>
-                <Icon name="world" />
-              </i>
-              <b>{t("pipelineWorld")}</b>
-              <small>{t("pipelineWorldCopy")}</small>
-            </span>
-            <span className="pipeline-arrow">
-              <Icon name="arrow" size={16} />
-            </span>
-            <span className="pipeline-node">
-              <i>
-                <Icon name="book" />
-              </i>
-              <b>{t("pipelineNovel")}</b>
-              <small>{t("pipelineNovelCopy")}</small>
-            </span>
-            <span className="pipeline-arrow">
-              <Icon name="arrow" size={16} />
-            </span>
-            <span className="pipeline-node">
-              <i>
-                <Icon name="package" />
-              </i>
-              <b>{t("pipelineScreen")}</b>
-              <small>{t("pipelineScreenCopy")}</small>
-            </span>
-          </div>
-          <div className="pipeline-note">
-            <Icon name="sparkles" size={16} />
-            <span>{t("draftNote")}</span>
-          </div>
-        </aside>
-      </section>
-
-      <section className="recent-status">
-        <div className="section-title compact">
-          <h2>{t("allNovels")}</h2>
-        </div>
-        <div className="mini-novel-grid">
-          {workspace.works.map((work) => (
-            <button
-              type="button"
-              key={work.id}
-              className="mini-novel"
-              onClick={() => onOpenWork(work.id)}
-            >
-              <span
-                className="mini-cover"
-                style={{ background: work.coverColor }}
-              >
-                {displayText(work.title, locale).slice(0, 1)}
-              </span>
-              <span>
-                <strong>{displayText(work.title, locale)}</strong>
-                <small>
-                  {work.chapters.length} {t("chapters")} ·{" "}
-                  {formatNumber(workWords(work), locale)} {t("words")}
-                </small>
-              </span>
-              <Badge tone={work.status === "complete" ? "green" : "neutral"}>
-                {statusLabels[locale][work.status]}
-              </Badge>
-            </button>
-          ))}
-        </div>
+        )}
       </section>
     </div>
   );

@@ -28,6 +28,7 @@ import type {
   WorkStatus,
 } from "../core/types.ts";
 import { taskCycleRiskIds } from "../core/workflow.ts";
+import { findWorldTemplate, WORLD_TEMPLATES } from "../core/world-templates.ts";
 import {
   loreLabels,
   relationshipLabels,
@@ -309,21 +310,41 @@ export function UniverseModal({
   open,
   onClose,
   t,
+  locale,
   initial,
+  templateId,
   onSave,
 }: ModalBase & {
   initial?: StoryUniverse;
-  onSave: (universe: StoryUniverse) => boolean;
+  /** Starting template picked before the dialog opened (create only). */
+  templateId?: string;
+  /**
+   * Receives the world and the template actually chosen in the dialog
+   * (`undefined` for a blank world), so a switch made after opening — to a
+   * template or back to blank — decides what gets seeded.
+   */
+  onSave: (universe: StoryUniverse, templateId?: string) => boolean;
 }) {
+  const startTemplate = initial ? undefined : findWorldTemplate(templateId);
+  const [template, setTemplate] = useState<string | undefined>(
+    startTemplate?.id,
+  );
   const [nameZh, setNameZh] = useState(initial?.name.zh ?? "");
   const [nameEn, setNameEn] = useState(initial?.name.en ?? "");
   const [taglineZh, setTaglineZh] = useState(initial?.tagline.zh ?? "");
   const [taglineEn, setTaglineEn] = useState(initial?.tagline.en ?? "");
   const [summaryZh, setSummaryZh] = useState(initial?.summary.zh ?? "");
   const [summaryEn, setSummaryEn] = useState(initial?.summary.en ?? "");
-  const [genres, setGenres] = useState((initial?.genres ?? []).join(", "));
-  const [themes, setThemes] = useState((initial?.themes ?? []).join(", "));
-  const [accent, setAccent] = useState(initial?.accent ?? "#2f7567");
+  const [genres, setGenres] = useState(
+    (initial?.genres ?? startTemplate?.genres ?? []).join(", "),
+  );
+  const [themes, setThemes] = useState(
+    (initial?.themes ?? startTemplate?.themes ?? []).join(", "),
+  );
+  const [accent, setAccent] = useState(
+    initial?.accent ?? startTemplate?.accent ?? "#2f7567",
+  );
+  const chosenTemplate = findWorldTemplate(template);
   return (
     <Modal
       open={open}
@@ -343,17 +364,23 @@ export function UniverseModal({
             disabled={!nameZh.trim() && !nameEn.trim()}
             onClick={() => {
               const now = new Date().toISOString();
-              const saved = onSave({
-                id: initial?.id ?? createId("uni"),
-                name: { zh: nameZh.trim(), en: nameEn.trim() },
-                tagline: { zh: taglineZh.trim(), en: taglineEn.trim() },
-                summary: { zh: summaryZh.trim(), en: summaryEn.trim() },
-                genres: splitTags(genres),
-                themes: splitTags(themes),
-                accent,
-                createdAt: initial?.createdAt ?? now,
-                updatedAt: now,
-              });
+              const saved = onSave(
+                {
+                  id: initial?.id ?? createId("uni"),
+                  name: { zh: nameZh.trim(), en: nameEn.trim() },
+                  tagline: { zh: taglineZh.trim(), en: taglineEn.trim() },
+                  summary: { zh: summaryZh.trim(), en: summaryEn.trim() },
+                  genres: splitTags(genres),
+                  themes: splitTags(themes),
+                  accent,
+                  createdAt: initial?.createdAt ?? now,
+                  updatedAt: now,
+                },
+                // The dialog's own selection decides what gets seeded — a
+                // template picked after opening counts, and so does switching
+                // from a template back to blank.
+                initial ? undefined : template,
+              );
               if (saved) onClose();
             }}
           >
@@ -362,6 +389,60 @@ export function UniverseModal({
         </>
       }
     >
+      {initial ? null : (
+        <div className="template-picker">
+          <span className="eyebrow">{t("templateLabel")}</span>
+          <div
+            className="template-options"
+            role="radiogroup"
+            aria-label={t("templateLabel")}
+          >
+            <label className={`template-chip${template ? "" : " active"}`}>
+              <input
+                type="radio"
+                name="world-template"
+                value=""
+                checked={!template}
+                onChange={() => {
+                  // Back to blank means back to an empty form: the hint below
+                  // promises nothing is prefilled, so template metadata must
+                  // not linger in genres, themes or accent.
+                  setTemplate(undefined);
+                  setGenres("");
+                  setThemes("");
+                  setAccent("#2f7567");
+                }}
+              />
+              {t("templateBlank")}
+            </label>
+            {WORLD_TEMPLATES.map((item) => (
+              <label
+                key={item.id}
+                className={`template-chip${template === item.id ? " active" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="world-template"
+                  value={item.id}
+                  checked={template === item.id}
+                  onChange={() => {
+                    setTemplate(item.id);
+                    setGenres(item.genres.join(", "));
+                    setThemes(item.themes.join(", "));
+                    setAccent(item.accent);
+                  }}
+                />
+                {displayText(item.name, locale)}
+              </label>
+            ))}
+          </div>
+          <p className="template-picker-hint">
+            {chosenTemplate
+              ? displayText(chosenTemplate.summary, locale)
+              : t("templateBlankLead")}
+          </p>
+        </div>
+      )}
       <FieldGrid>
         <Field label={t("nameZh")}>
           <TextInput
@@ -1530,11 +1611,14 @@ export function StandardModal({
   workspace,
   initial,
   defaultKind,
+  defaultUniverseId,
   onSave,
 }: ModalBase & {
   workspace: StudioWorkspace;
   initial?: WorkspaceStandard;
   defaultKind?: StandardKind;
+  /** The world whose tab opened this dialog: its rules default to this scope. */
+  defaultUniverseId?: string;
   onSave: (standard: WorkspaceStandard) => boolean;
 }) {
   const [kind, setKind] = useState<StandardKind>(
@@ -1544,7 +1628,9 @@ export function StandardModal({
   const [titleEn, setTitleEn] = useState(initial?.title.en ?? "");
   const [bodyZh, setBodyZh] = useState(initial?.body.zh ?? "");
   const [bodyEn, setBodyEn] = useState(initial?.body.en ?? "");
-  const [universeId, setUniverseId] = useState(initial?.universeId ?? "");
+  const [universeId, setUniverseId] = useState(
+    initial?.universeId ?? defaultUniverseId ?? "",
+  );
   const changed = initial
     ? kind !== initial.kind ||
       titleZh.trim() !== initial.title.zh.trim() ||

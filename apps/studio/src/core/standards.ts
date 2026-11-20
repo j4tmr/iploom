@@ -336,15 +336,22 @@ export const MAX_STANDARD_CANDIDATES = 12;
 function premiseLines(
   workspace: Pick<StudioWorkspace, "name" | "universes" | "works">,
   locale: UiLocale,
+  universeId?: string,
 ): string[] {
   const zh = locale === "zh-CN";
   const lines: string[] = [`- ${zh ? "项目" : "Project"}: ${workspace.name}`];
-  for (const universe of workspace.universes.slice(0, 8)) {
+  const universes = universeId
+    ? workspace.universes.filter((universe) => universe.id === universeId)
+    : workspace.universes;
+  for (const universe of universes.slice(0, 8)) {
     lines.push(
       `- ${zh ? "世界" : "World"} **${standardTitle({ title: universe.name }, locale)}** (${universe.genres.join(" / ") || "—"}): ${standardBody({ body: universe.summary }, locale).slice(0, 600)}`,
     );
   }
-  for (const work of workspace.works.slice(0, 8)) {
+  const works = universeId
+    ? workspace.works.filter((work) => work.universeId === universeId)
+    : workspace.works;
+  for (const work of works.slice(0, 8)) {
     lines.push(
       `- ${zh ? "作品" : "Work"} **${standardTitle({ title: work.title }, locale)}**: ${standardBody({ body: work.logline }, locale).slice(0, 400)} — ${work.synopsis.slice(0, 800)}`,
     );
@@ -363,18 +370,27 @@ export function buildStandardDraftPrompt(
     "name" | "universes" | "works" | "standards"
   >,
   locale: UiLocale,
+  universeId?: string,
 ): string {
   const zh = locale === "zh-CN";
   const existing = workspace.standards.filter(
-    (standard) => standard.status !== "disabled",
+    (standard) =>
+      standard.status !== "disabled" &&
+      (!universeId ||
+        !standard.universeId ||
+        standard.universeId === universeId),
   );
   const kinds = STANDARD_KINDS.map(
     (kind) => `${kind} (${standardKindLabel(kind, locale)})`,
   ).join(", ");
   return [
     zh
-      ? "# 起草项目基础规则（候选）"
-      : "# Draft project foundation standards (candidates)",
+      ? universeId
+        ? "# 起草这个世界的基础规则（候选）"
+        : "# 起草项目基础规则（候选）"
+      : universeId
+        ? "# Draft this world's foundation standards (candidates)"
+        : "# Draft project foundation standards (candidates)",
     "",
     zh
       ? "你是这个项目的总编辑。请根据下面已登记的项目前提，提出可长期复用的基础规则候选。项目不限于小说：游戏场景、设定集、剧本或任何文字型项目都使用同一套规则。"
@@ -382,7 +398,7 @@ export function buildStandardDraftPrompt(
     "",
     zh ? "## 项目前提" : "## Project premise",
     "",
-    ...premiseLines(workspace, locale),
+    ...premiseLines(workspace, locale, universeId),
     "",
     zh ? "## 现有规则（不得重复）" : "## Existing standards (do not duplicate)",
     "",
