@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createId, displayText } from "../core/factory.ts";
 import { inferProductionTemplate } from "../core/production.ts";
+import { validateCharacterRuleBindings } from "../core/rule-layer.ts";
 import {
   STANDARD_KINDS,
   standardKindLabel,
@@ -10,6 +11,7 @@ import { CHAPTER_LIMITS, MAX_LOCALIZED_LENGTH } from "../core/types.ts";
 import type {
   Chapter,
   Character,
+  CharacterRuleBinding,
   LoreCategory,
   Relationship,
   RelationshipStatus,
@@ -88,7 +90,97 @@ export function CharacterModal({
   const [universeIds, setUniverseIds] = useState<string[]>(
     initial?.universeIds ?? (defaultUniverseId ? [defaultUniverseId] : []),
   );
-  const canSave = (nameZh.trim() || nameEn.trim()) && universeIds.length > 0;
+  const [bindingDrafts, setBindingDrafts] = useState<
+    Array<{
+      ruleSystemId: string;
+      tierId: string;
+      attributes: Record<string, string>;
+      abilityIds: string[];
+    }>
+  >(() =>
+    (initial?.ruleBindings ?? []).map((binding) => ({
+      ruleSystemId: binding.ruleSystemId,
+      tierId: binding.tierId ?? "",
+      attributes: Object.fromEntries(
+        Object.entries(binding.attributes).map(([key, value]) => [
+          key,
+          String(value),
+        ]),
+      ),
+      abilityIds: [...binding.abilityIds],
+    })),
+  );
+  const availableRuleSystems = useMemo(
+    () =>
+      workspace.ruleSystems.filter((system) =>
+        universeIds.includes(system.universeId),
+      ),
+    [workspace.ruleSystems, universeIds],
+  );
+  const activeBindingDrafts = useMemo(
+    () =>
+      bindingDrafts.filter((draft) =>
+        availableRuleSystems.some((system) => system.id === draft.ruleSystemId),
+      ),
+    [bindingDrafts, availableRuleSystems],
+  );
+  const builtRuleBindings = useMemo(() => {
+    const systemsById = new Map(
+      availableRuleSystems.map((system) => [system.id, system]),
+    );
+    const bindings: CharacterRuleBinding[] = [];
+    let invalidInput = false;
+    for (const draft of activeBindingDrafts) {
+      const system = systemsById.get(draft.ruleSystemId);
+      if (!system) continue;
+      const attributes: Record<string, number | string> = {};
+      for (const attribute of system.attributes) {
+        const raw = draft.attributes[attribute.key] ?? "";
+        if (attribute.type === "integer" || attribute.type === "decimal") {
+          if (!raw.trim()) continue;
+          const parsed = Number(raw.trim());
+          if (!Number.isFinite(parsed)) {
+            invalidInput = true;
+            continue;
+          }
+          attributes[attribute.key] = parsed;
+        } else if (raw !== "") {
+          attributes[attribute.key] = raw;
+        }
+      }
+      bindings.push({
+        ruleSystemId: draft.ruleSystemId,
+        ...(draft.tierId ? { tierId: draft.tierId } : {}),
+        attributes,
+        abilityIds: draft.abilityIds,
+      });
+    }
+    const abilitiesById = new Map(
+      workspace.abilityTemplates.map((item) => [item.id, item]),
+    );
+    const issues = invalidInput
+      ? [{ path: ["ruleBindings"], message: t("rulesBindingInvalid") }]
+      : validateCharacterRuleBindings(
+          { universeIds, ruleBindings: bindings },
+          systemsById,
+          abilitiesById,
+        );
+    return { bindings, issues };
+  }, [
+    activeBindingDrafts,
+    availableRuleSystems,
+    t,
+    universeIds,
+    workspace.abilityTemplates,
+  ]);
+  const unboundSystems = availableRuleSystems.filter(
+    (system) =>
+      !activeBindingDrafts.some((draft) => draft.ruleSystemId === system.id),
+  );
+  const canSave =
+    Boolean(nameZh.trim() || nameEn.trim()) &&
+    universeIds.length > 0 &&
+    builtRuleBindings.issues.length === 0;
   // The modal is mounted per edit session (app.tsx keys it), so the first
   // render is the untouched baseline. Everything after that is user input.
   const snapshot = JSON.stringify([
@@ -109,6 +201,7 @@ export function CharacterModal({
     color,
     reusable,
     universeIds,
+    activeBindingDrafts,
   ]);
   const baselineRef = useRef(snapshot);
   const requestClose = () => {
@@ -155,6 +248,9 @@ export function CharacterModal({
                 tags: splitTags(tags),
                 color,
                 reusable,
+                ...(builtRuleBindings.bindings.length
+                  ? { ruleBindings: builtRuleBindings.bindings }
+                  : {}),
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
@@ -301,6 +397,191 @@ export function CharacterModal({
             <small>{t("characterLead")}</small>
           </span>
         </label>
+        {availableRuleSystems.length > 0 ? (
+          <div className="card-field-editor field-wide">
+            <div className="card-field-editor-head">
+              <div>
+                <strong>{t("rulesCharacterBindingsTitle")}</strong>
+                <p className="hint">{t("rulesCharacterBindingsHint")}</p>
+              </div>
+              {unboundSystems.length > 0 ? (
+                <Select
+                  aria-label={t("rulesAddBinding")}
+                  value=""
+                  onChange={(event) => {
+                    const systemId = event.target.value;
+                    if (!systemId) return;
+                    const system = availableRuleSystems.find(
+                      (item) => item.id === systemId,
+                    );
+                    const defaults: Record<string, string> = {};
+                    for (const attribute of system?.attributes ?? []) {
+                      if (attribute.defaultValue !== undefined)
+                        defaults[attribute.key] = String(
+                          attribute.defaultValue,
+                        );
+                    }
+                    setBindingDrafts((current) => [
+                      ...current,
+                      {
+                        ruleSystemId: systemId,
+                        tierId: "",
+                        attributes: defaults,
+                        abilityIds: [],
+                      },
+                    ]);
+                  }}
+                >
+                  <option value="">+ {t("rulesAddBinding")}</option>
+                  {unboundSystems.map((system) => (
+                    <option key={system.id} value={system.id}>
+                      {displayText(system.title, locale)}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
+            </div>
+            {activeBindingDrafts.map((binding) => {
+              const system = availableRuleSystems.find(
+                (item) => item.id === binding.ruleSystemId,
+              );
+              if (!system) return null;
+              const systemAbilities = workspace.abilityTemplates.filter(
+                (ability) => ability.ruleSystemId === system.id,
+              );
+              const updateBinding = (
+                updater: (current: typeof binding) => typeof binding,
+              ) =>
+                setBindingDrafts((current) =>
+                  current.map((item) =>
+                    item.ruleSystemId === binding.ruleSystemId
+                      ? updater(item)
+                      : item,
+                  ),
+                );
+              return (
+                <div className="rule-binding-card" key={system.id}>
+                  <div className="card-field-editor-head">
+                    <strong>{displayText(system.title, locale)}</strong>
+                    <Button
+                      variant="ghost"
+                      icon="trash"
+                      onClick={() =>
+                        setBindingDrafts((current) =>
+                          current.filter(
+                            (item) => item.ruleSystemId !== system.id,
+                          ),
+                        )
+                      }
+                    >
+                      {t("rulesRemoveBinding")}
+                    </Button>
+                  </div>
+                  <FieldGrid>
+                    {system.tiers.length > 0 ? (
+                      <Field label={t("rulesSelectTier")} wide>
+                        <Select
+                          value={binding.tierId}
+                          onChange={(event) =>
+                            updateBinding((current) => ({
+                              ...current,
+                              tierId: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">{t("rulesNoTierOption")}</option>
+                          {[...system.tiers]
+                            .sort((a, b) => a.rank - b.rank)
+                            .map((tier) => (
+                              <option key={tier.id} value={tier.id}>
+                                #{tier.rank} {displayText(tier.name, locale)}
+                              </option>
+                            ))}
+                        </Select>
+                      </Field>
+                    ) : null}
+                    {system.attributes.map((attribute) => (
+                      <Field
+                        key={attribute.key}
+                        label={displayText(attribute.label, locale)}
+                        hint={attribute.unit || undefined}
+                      >
+                        {attribute.type === "enum" ? (
+                          <Select
+                            value={binding.attributes[attribute.key] ?? ""}
+                            onChange={(event) =>
+                              updateBinding((current) => ({
+                                ...current,
+                                attributes: {
+                                  ...current.attributes,
+                                  [attribute.key]: event.target.value,
+                                },
+                              }))
+                            }
+                          >
+                            <option value="">—</option>
+                            {attribute.enumValues.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </Select>
+                        ) : (
+                          <TextInput
+                            type={attribute.type === "text" ? "text" : "number"}
+                            step={attribute.type === "integer" ? "1" : "any"}
+                            min={attribute.min}
+                            max={attribute.max}
+                            value={binding.attributes[attribute.key] ?? ""}
+                            onChange={(event) =>
+                              updateBinding((current) => ({
+                                ...current,
+                                attributes: {
+                                  ...current.attributes,
+                                  [attribute.key]: event.target.value,
+                                },
+                              }))
+                            }
+                          />
+                        )}
+                      </Field>
+                    ))}
+                    {systemAbilities.length > 0 ? (
+                      <Field label={t("rulesSelectAbilities")} group wide>
+                        <div className="check-grid">
+                          {systemAbilities.map((ability) => (
+                            <label className="check-card" key={ability.id}>
+                              <input
+                                type="checkbox"
+                                checked={binding.abilityIds.includes(
+                                  ability.id,
+                                )}
+                                onChange={(event) =>
+                                  updateBinding((current) => ({
+                                    ...current,
+                                    abilityIds: event.target.checked
+                                      ? [...current.abilityIds, ability.id]
+                                      : current.abilityIds.filter(
+                                          (id) => id !== ability.id,
+                                        ),
+                                  }))
+                                }
+                              />
+                              {displayText(ability.name, locale)}
+                            </label>
+                          ))}
+                        </div>
+                      </Field>
+                    ) : null}
+                  </FieldGrid>
+                </div>
+              );
+            })}
+            {builtRuleBindings.issues.length > 0 ? (
+              <p className="form-error">{t("rulesBindingInvalid")}</p>
+            ) : null}
+          </div>
+        ) : null}
       </FieldGrid>
     </Modal>
   );

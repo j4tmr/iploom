@@ -108,6 +108,30 @@ function resolveEntity(
         | undefined;
       return named("entityStandard", item && displayText(item.title, locale));
     }
+    case "ruleSystems": {
+      const item = at(workspace?.ruleSystems) as
+        | StudioWorkspace["ruleSystems"][number]
+        | undefined;
+      return named("entityRuleSystem", item && displayText(item.title, locale));
+    }
+    case "abilityTemplates": {
+      const item = at(workspace?.abilityTemplates) as
+        | StudioWorkspace["abilityTemplates"][number]
+        | undefined;
+      return named(
+        "entityAbilityTemplate",
+        item && displayText(item.name, locale),
+      );
+    }
+    case "itemStatTemplates": {
+      const item = at(workspace?.itemStatTemplates) as
+        | StudioWorkspace["itemStatTemplates"][number]
+        | undefined;
+      return named(
+        "entityItemStatTemplate",
+        item && displayText(item.name, locale),
+      );
+    }
     case "workflowTasks": {
       const item = at(workspace?.workflowTasks) as
         | StudioWorkspace["workflowTasks"][number]
@@ -255,6 +279,19 @@ const FIELD_LABELS: Record<string, MessageKey> = {
   type: "relationType",
   label: "relationLabel",
   kind: "kind",
+  unit: "rulesUnit",
+  ruleSystemId: "rulesFieldRuleSystem",
+  tierId: "rulesFieldTier",
+  tiers: "rulesFieldTiers",
+  attributes: "rulesFieldAttributes",
+  effects: "rulesFieldEffects",
+  stats: "rulesFieldStats",
+  cost: "rulesFieldCost",
+  ruleBindings: "rulesFieldRuleBindings",
+  ruleBinding: "rulesFieldRuleBindings",
+  abilityIds: "rulesFieldAbilityIds",
+  itemStatTemplateId: "rulesFieldItemTemplate",
+  attributeKey: "rulesEffectAttribute",
 };
 
 function resolveField(segments: string[], t: Translate): string {
@@ -330,7 +367,11 @@ function describeCustomReason(message: string, t: Translate): string {
   if (message === "scene subject requires a chapter")
     return t("issueSceneSubjectNeedsChapter");
   if (message.endsWith("is required")) return t("issueRequired");
-  if (/^duplicate (id|standard|chapter):/.test(message))
+  if (
+    /^duplicate (id|standard|chapter|rule system|ability|tier id|tier rank|attribute key):/.test(
+      message,
+    )
+  )
     return t("issueDuplicate");
   if (/^unknown [a-z ]+: /.test(message)) {
     return t("issueUnknownNamed", {
@@ -343,6 +384,7 @@ function describeCustomReason(message: string, t: Translate): string {
   if (/^workflow cycle: /.test(message)) return t("issueCycle");
   if (/crosses universe boundaries/.test(message))
     return t("issueCrossUniverseRelation");
-  if (/belongs to another universe/.test(message)) return t("issueConflict");
+  if (/belongs to another (universe|rule system)/.test(message))
+    return t("issueConflict");
   return message;
 }

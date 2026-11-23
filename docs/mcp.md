@@ -20,28 +20,36 @@ Do not replace the command with `iploom-mcp` alone on macOS or Windows. A clean 
 
 ## Tools
 
-| Tool                     | Read-only | Purpose                                                                                                   |
-| ------------------------ | --------- | --------------------------------------------------------------------------------------------------------- |
-| `list_story_worlds`      | yes       | List universes and compact counts                                                                         |
-| `get_story_world`        | yes       | Read world rules, cast, places, story objects, factions, lore and relationships                           |
-| `list_novels`            | yes       | List novels, optionally filtered by universe                                                              |
-| `get_novel`              | yes       | Read novel metadata, chapter plans and statistics                                                         |
-| `get_chapter`            | yes       | Read a chapter's full prose, outline, beats and scenes                                                    |
-| `search_ip`              | yes       | Search the bilingual IP library                                                                           |
-| `get_relationship_graph` | yes       | Return graph nodes, edges, degrees and warnings                                                           |
-| `list_timeline_events`   | yes       | List story timeline events with world/novel/chapter/subject/status filters                                |
-| `list_workflow_tasks`    | yes       | List AI authoring tasks with readiness, blockers and optional world/novel/status filters                  |
-| `get_workflow_brief`     | yes       | Generate a deterministic, task-scoped bilingual Markdown brief, optionally with approved upstream outputs |
-| `get_workflow_result`    | yes       | Read a workflow task's bilingual result (full or windowed) and first pre-change snapshot                  |
-| `list_standards`         | yes       | List foundation standards with kind, status, scope and in-scope active standard count                     |
-| `get_standard`           | yes       | Read one standard, its scope, body windows and workflow tasks that reference its id                       |
-| `create_standard`        | no        | Register a foundation standard as a draft (or active) with schema validation                              |
-| `update_standard`        | no        | Update a standard; content changes bump its version, status-only changes do not                           |
-| `create_timeline_event`  | no        | Create a story timeline event; defaults to `proposed` and validates every reference                       |
-| `update_timeline_event`  | no        | Revise an event by id; omitted fields keep their values and references are re-validated                   |
-| `save_workflow_result`   | no        | Save produced result text to a workflow task and move it to review                                        |
+| Tool                        | Read-only | Purpose                                                                                                   |
+| --------------------------- | --------- | --------------------------------------------------------------------------------------------------------- |
+| `list_story_worlds`         | yes       | List universes and compact counts                                                                         |
+| `get_story_world`           | yes       | Read world rules, cast, places, story objects, factions, lore and relationships                           |
+| `list_novels`               | yes       | List novels, optionally filtered by universe                                                              |
+| `get_novel`                 | yes       | Read novel metadata, chapter plans and statistics                                                         |
+| `get_chapter`               | yes       | Read a chapter's full prose, outline, beats and scenes                                                    |
+| `search_ip`                 | yes       | Search the bilingual IP library                                                                           |
+| `get_relationship_graph`    | yes       | Return graph nodes, edges, degrees and warnings                                                           |
+| `list_timeline_events`      | yes       | List story timeline events with world/novel/chapter/subject/status filters                                |
+| `list_workflow_tasks`       | yes       | List AI authoring tasks with readiness, blockers and optional world/novel/status filters                  |
+| `get_workflow_brief`        | yes       | Generate a deterministic, task-scoped bilingual Markdown brief, optionally with approved upstream outputs |
+| `get_workflow_result`       | yes       | Read a workflow task's bilingual result (full or windowed) and first pre-change snapshot                  |
+| `list_standards`            | yes       | List foundation standards with kind, status, scope and in-scope active standard count                     |
+| `get_standard`              | yes       | Read one standard, its scope, body windows and workflow tasks that reference its id                       |
+| `list_rule_systems`         | yes       | List universe-scoped structured rule systems (power ladders, typed attributes) with counts                |
+| `get_rule_system`           | yes       | Read one rule system with its tiers, attributes, and paged abilities, item templates and bound entities   |
+| `check_rule_consistency`    | yes       | Check chapters, workflow results or pasted draft text for numbers outside active ladders/attribute bounds |
+| `create_standard`           | no        | Register a foundation standard as a draft (or active) with schema validation                              |
+| `update_standard`           | no        | Update a standard; content changes bump its version, status-only changes do not                           |
+| `create_timeline_event`     | no        | Create a story timeline event; defaults to `proposed` and validates every reference                       |
+| `update_timeline_event`     | no        | Revise an event by id; omitted fields keep their values and references are re-validated                   |
+| `save_workflow_result`      | no        | Save produced result text to a workflow task and move it to review                                        |
+| `create_rule_system`        | no        | Register a structured rule system in a story world (defaults to `draft`) with ladder/attribute validation |
+| `update_rule_system`        | no        | Update a rule system; content changes bump version, status-only changes do not; re-validates references   |
+| `upsert_ability_template`   | no        | Create or update an ability template under a rule system, validating tier and numeric attribute effects   |
+| `upsert_item_stat_template` | no        | Create or update an item stat template under a rule system, validating tier and numeric stat effects      |
+| `set_entity_rule_binding`   | no        | Bind or clear a character's tier/attributes/abilities or a story object's item stat template and stats    |
 
-Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The server registers 18 tools: thirteen read-only and five workspace writes (`create_standard`, `update_standard`, `create_timeline_event`, `update_timeline_event`, `save_workflow_result`). Those five are the only tools that can change local state; writes are serialized and re-validated against the workspace schema. Tool names and access levels come from `apps/studio/src/core/mcp-tools.ts`, the single source the server, the settings copy and the verification script all share.
+Tool schemas and descriptions are bilingual. Responses use stable JSON keys and include the workspace revision. The server registers 26 tools: sixteen read-only and ten workspace writes (`create_standard`, `update_standard`, `create_timeline_event`, `update_timeline_event`, `save_workflow_result`, `create_rule_system`, `update_rule_system`, `upsert_ability_template`, `upsert_item_stat_template`, `set_entity_rule_binding`). Those ten are the only tools that can change local state; writes are serialized and re-validated against the workspace schema. Tool names and access levels come from `apps/studio/src/core/mcp-tools.ts`, the single source the server, the settings copy and the verification script all share.
 
 ### Response shape and paging
 
@@ -74,7 +82,9 @@ Every collection response is a page rather than a bare array:
 Responses echo the fields a client needs for the next call, not every nested list:
 
 - Entity views cap repeated identifiers at 20 items and add the true size alongside: `character_ids`/`character_id_count`, `depends_on_ids`/`depends_on_id_count`, `pinned_by_task_ids`/`pinned_by_task_count`. The last pair belongs to `get_standard`; the field names are kept for compatibility, but they count workflow tasks whose `standardRefs` record that standard's `id` — informational references from task creation, not version pins. Prompts resolve the currently active standards, so a task listed here may record an older version than the one returned.
-- `get_story_world` returns every stored story-object field: `id`, `world_id`, `name`, `category`, `summary`, `visual_prompt`, `source_notes`, `created_at` and `updated_at`. The default compact view clips long values and names them in `truncated_fields`; `include_details` returns them in full. Story objects are enumerable with `next_offset` alone, without a search keyword.
+- `get_story_world` returns every stored story-object field: `id`, `world_id`, `name`, `category`, `summary`, `visual_prompt`, `source_notes`, `rule_binding`, `created_at` and `updated_at`, and each character carries its `rule_bindings`. The default compact view clips long values and names them in `truncated_fields`; `include_details` returns them in full. Story objects are enumerable with `next_offset` alone, without a search keyword.
+- `get_rule_system` pages four collections (`ability_templates`, `item_stat_templates`, `bound_characters`, `bound_objects`) with independent offsets (`offsets: { abilities, items, characters, objects }`), following the same byte-budgeted paging contract as `get_story_world`.
+- `create_rule_system` defaults to `status: "draft"`; `update_rule_system` bumps `version` on content changes (title, kind, summary, unit, tiers, attributes) and leaves `version` unchanged on status-only changes, rejecting removals that would leave abilities, items or entity bindings dangling. `check_rule_consistency` is read-only and scans chapters and workflow results in a world (or an explicit `text` snippet) against active rule systems.
 - The world record in `get_story_world` follows the same rule: the default view clips long `name`, `tagline` and `summary` values and names them in `truncated_fields`, so one verbose world cannot consume the budget its seven collections share; `include_details` returns the world in full.
 - `list_timeline_events` orders events by chapter, in-world time, order and creation time; its default view clips long state, evidence and prompt fields and names them in `truncated_fields`, while `include_details` returns the full record.
 - `list_workflow_tasks` previews at most 10 unfinished prerequisites in `blockers` and reports the full number in `blocker_count`; the summary object counts all of them.
@@ -154,7 +164,7 @@ bun run studio:verify-mcp
 
 ## Safety
 
-The server reads the workspace on every call. It only changes local state through `create_standard`, `update_standard`, `create_timeline_event`, `update_timeline_event` and `save_workflow_result`. It does not call a model, network service or cloud API. MCP clients can still read all text in the active workspace, so only connect clients you trust.
+The server reads the workspace on every call. It only changes local state through `create_standard`, `update_standard`, `create_timeline_event`, `update_timeline_event`, `save_workflow_result`, `create_rule_system`, `update_rule_system`, `upsert_ability_template`, `upsert_item_stat_template` and `set_entity_rule_binding`. It does not call a model, network service or cloud API. MCP clients can still read all text in the active workspace, so only connect clients you trust.
 
 That text includes imported manuscripts and lore, which are third-party content. `get_chapter` returns full prose, and the world and search tools return lore and asset text verbatim. Treat imported content as a prompt-injection surface: an MCP agent may read instructions embedded in it, and neither the server nor the app can prevent the client's model from acting on them. Expose the workspace only to agents whose behavior and permissions you accept, and treat their conclusions as proposals that need author review.
 

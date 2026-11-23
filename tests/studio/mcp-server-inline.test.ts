@@ -789,3 +789,340 @@ test("get_workflow_brief injects approved ancestor outputs only when opted in", 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("rule-layer MCP read/write tools validate references, page sub-collections and audit consistency", async () => {
+  const root = mkdtempSync(join(tmpdir(), "iploom-studio-inline-rules-"));
+  const workspacePath = join(root, "workspace.json");
+  await new WorkspaceStore(workspacePath).save(
+    createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z"),
+  );
+  const inline = await connectInline(workspacePath);
+  try {
+    // 1. Create a structured rule system (defaults to draft)
+    const created = await call(inline, "create_rule_system", {
+      world_id: "uni_mist_harbor",
+      title: { zh: "潮汐等级", en: "Tide ladder" },
+      kind: "power",
+      summary: "钟声强度分级",
+      unit: "级",
+      tiers: [
+        {
+          id: "tier_1",
+          name: { zh: "初响", en: "First chime" },
+          rank: 1,
+          min_value: 1,
+          max_value: 9,
+        },
+        {
+          id: "tier_2",
+          name: { zh: "深钟", en: "Deep bell" },
+          rank: 2,
+          min_value: 10,
+          max_value: 20,
+        },
+      ],
+      attributes: [
+        {
+          key: "resonance",
+          label: { zh: "共鸣", en: "Resonance" },
+          type: "integer",
+          unit: "点",
+          min: 0,
+          max: 100,
+          default_value: 10,
+        },
+      ],
+    });
+    expect(created.isError).toBe(false);
+    const system = created.body.rule_system as {
+      id: string;
+      status: string;
+      version: number;
+    };
+    expect(system.id.startsWith("rules_")).toBe(true);
+    expect(system.status).toBe("draft");
+    expect(system.version).toBe(1);
+
+    // Invalid rule system (missing range on power tier) is rejected with issues
+    const badSystem = await call(inline, "create_rule_system", {
+      world_id: "uni_mist_harbor",
+      title: { zh: "坏规则", en: "Broken" },
+      kind: "power",
+      tiers: [
+        { name: { zh: "一阶", en: "One" }, rank: 1 },
+        { name: { zh: "二阶", en: "Two" }, rank: 2 },
+      ],
+    });
+    expect(badSystem.isError).toBe(true);
+    expect((badSystem.body.error as { code: string }).code).toBe(
+      "invalid_arguments",
+    );
+
+    // Status-only update does not bump version; content update bumps version
+    const activated = await call(inline, "update_rule_system", {
+      rule_system_id: system.id,
+      status: "active",
+    });
+    expect(activated.isError).toBe(false);
+    expect(activated.body.version_bumped).toBe(false);
+
+    const revised = await call(inline, "update_rule_system", {
+      rule_system_id: system.id,
+      title: { en: "Tide Resonance Ladder" },
+    });
+    expect(revised.isError).toBe(false);
+    expect(revised.body.version_bumped).toBe(true);
+    expect((revised.body.rule_system as { version: number }).version).toBe(2);
+
+    const missingSystem = await call(inline, "update_rule_system", {
+      rule_system_id: "rules_missing",
+      status: "active",
+    });
+    expect(missingSystem.isError).toBe(true);
+    expect((missingSystem.body.error as { code: string }).code).toBe(
+      "not_found",
+    );
+
+    // 2. Upsert ability template (create + update + error cases)
+    const missingAbilitySys = await call(inline, "upsert_ability_template", {
+      name: { zh: "缺体系", en: "No system" },
+    });
+    expect(missingAbilitySys.isError).toBe(true);
+
+    const abilityCreated = await call(inline, "upsert_ability_template", {
+      rule_system_id: system.id,
+      name: { zh: "深钟共鸣", en: "Deep resonance" },
+      summary: { zh: "提升共鸣", en: "Boosts resonance" },
+      tier_id: "tier_2",
+      effects: [{ attribute_key: "resonance", operation: "add", value: 15 }],
+      cost: "一段记忆",
+    });
+    expect(abilityCreated.isError).toBe(false);
+    expect(abilityCreated.body.created).toBe(true);
+    const abilityId = (abilityCreated.body.ability_template as { id: string })
+      .id;
+
+    const abilityUpdated = await call(inline, "upsert_ability_template", {
+      ability_id: abilityId,
+      tier_id: null,
+      cost: "两段记忆",
+    });
+    expect(abilityUpdated.isError).toBe(false);
+    expect(abilityUpdated.body.created).toBe(false);
+    expect(
+      (abilityUpdated.body.ability_template as { tier_id: string | null })
+        .tier_id,
+    ).toBeNull();
+
+    const badAbilityEffect = await call(inline, "upsert_ability_template", {
+      rule_system_id: system.id,
+      name: { zh: "无效技能", en: "Bad ability" },
+      effects: [{ attribute_key: "unknown_attr", operation: "add", value: 1 }],
+    });
+    expect(badAbilityEffect.isError).toBe(true);
+
+    const missingAbilityUpdate = await call(inline, "upsert_ability_template", {
+      ability_id: "ability_missing",
+      cost: "none",
+    });
+    expect(missingAbilityUpdate.isError).toBe(true);
+    expect((missingAbilityUpdate.body.error as { code: string }).code).toBe(
+      "not_found",
+    );
+
+    // 3. Upsert item stat template (create + update + error cases)
+    const missingItemSys = await call(inline, "upsert_item_stat_template", {
+      name: { zh: "缺体系", en: "No system" },
+      category: { zh: "遗物", en: "Relic" },
+    });
+    expect(missingItemSys.isError).toBe(true);
+
+    const itemCreated = await call(inline, "upsert_item_stat_template", {
+      rule_system_id: system.id,
+      name: { zh: "铜钥模版", en: "Brass key stats" },
+      category: { zh: "遗物", en: "Relic" },
+      tier_id: "tier_1",
+      stats: [{ attribute_key: "resonance", operation: "add", value: 5 }],
+    });
+    expect(itemCreated.isError).toBe(false);
+    expect(itemCreated.body.created).toBe(true);
+    const itemTemplateId = (
+      itemCreated.body.item_stat_template as { id: string }
+    ).id;
+
+    const itemUpdated = await call(inline, "upsert_item_stat_template", {
+      item_template_id: itemTemplateId,
+      name: { en: "Notched key template" },
+      tier_id: "tier_2",
+    });
+    expect(itemUpdated.isError).toBe(false);
+    expect(itemUpdated.body.created).toBe(false);
+
+    const badItemStats = await call(inline, "upsert_item_stat_template", {
+      rule_system_id: system.id,
+      name: { zh: "坏物品", en: "Bad item" },
+      category: { zh: "遗物", en: "Relic" },
+      stats: [{ attribute_key: "resonance", operation: "set", value: 999 }],
+    });
+    expect(badItemStats.isError).toBe(true);
+
+    const missingItemUpdate = await call(inline, "upsert_item_stat_template", {
+      item_template_id: "item_missing",
+    });
+    expect(missingItemUpdate.isError).toBe(true);
+    expect((missingItemUpdate.body.error as { code: string }).code).toBe(
+      "not_found",
+    );
+
+    // 4. Bind character & story object, plus validation & clear
+    const charBound = await call(inline, "set_entity_rule_binding", {
+      entity_kind: "character",
+      entity_id: "char_lin",
+      rule_system_id: system.id,
+      tier_id: "tier_2",
+      attributes: { resonance: 60 },
+      ability_ids: [abilityId],
+    });
+    expect(charBound.isError).toBe(false);
+    expect((charBound.body.binding as { tier_id: string }).tier_id).toBe(
+      "tier_2",
+    );
+
+    const charOutOfBounds = await call(inline, "set_entity_rule_binding", {
+      entity_kind: "character",
+      entity_id: "char_lin",
+      rule_system_id: system.id,
+      attributes: { resonance: 500 },
+    });
+    expect(charOutOfBounds.isError).toBe(true);
+    expect((charOutOfBounds.body.error as { code: string }).code).toBe(
+      "invalid_arguments",
+    );
+
+    const missingChar = await call(inline, "set_entity_rule_binding", {
+      entity_kind: "character",
+      entity_id: "char_missing",
+      rule_system_id: system.id,
+    });
+    expect(missingChar.isError).toBe(true);
+    expect((missingChar.body.error as { code: string }).code).toBe("not_found");
+
+    const objBound = await call(inline, "set_entity_rule_binding", {
+      entity_kind: "object",
+      entity_id: "object_brass_key",
+      rule_system_id: system.id,
+      item_stat_template_id: itemTemplateId,
+      tier_id: "tier_1",
+      stats: [{ attribute_key: "resonance", operation: "add", value: 6 }],
+    });
+    expect(objBound.isError).toBe(false);
+    expect(
+      (objBound.body.binding as { item_stat_template_id: string })
+        .item_stat_template_id,
+    ).toBe(itemTemplateId);
+
+    const badObjBinding = await call(inline, "set_entity_rule_binding", {
+      entity_kind: "object",
+      entity_id: "object_brass_key",
+      rule_system_id: system.id,
+      tier_id: "tier_missing",
+    });
+    expect(badObjBinding.isError).toBe(true);
+
+    const missingObj = await call(inline, "set_entity_rule_binding", {
+      entity_kind: "object",
+      entity_id: "object_missing",
+      rule_system_id: system.id,
+    });
+    expect(missingObj.isError).toBe(true);
+
+    // Workspace-level validation blocks dropping a referenced tier via update_rule_system
+    const breakingUpdate = await call(inline, "update_rule_system", {
+      rule_system_id: system.id,
+      tiers: [
+        {
+          id: "tier_1",
+          name: { zh: "初响", en: "First chime" },
+          rank: 1,
+          min_value: 1,
+          max_value: 9,
+        },
+        {
+          id: "tier_replaced",
+          name: { zh: "新二阶", en: "New tier 2" },
+          rank: 2,
+          min_value: 10,
+          max_value: 20,
+        },
+      ],
+    });
+    expect(breakingUpdate.isError).toBe(true);
+    expect((breakingUpdate.body.error as { code: string }).code).toBe(
+      "invalid_arguments",
+    );
+
+    // 5. Read back with list_rule_systems, get_rule_system and check_rule_consistency
+    const listedSystems = await call(inline, "list_rule_systems", {
+      world_id: "uni_mist_harbor",
+      include_details: true,
+    });
+    expect(listedSystems.isError).toBe(false);
+    expect(listedSystems.body.active_applied).toBe(1);
+    expect(pageOf(listedSystems.body, "rule_systems").total).toBe(1);
+
+    const detail = await call(inline, "get_rule_system", {
+      rule_system_id: system.id,
+    });
+    expect(detail.isError).toBe(false);
+    expect(pageOf(detail.body, "ability_templates").total).toBe(1);
+    expect(pageOf(detail.body, "item_stat_templates").total).toBe(1);
+    expect(pageOf(detail.body, "bound_characters").total).toBe(1);
+    expect(pageOf(detail.body, "bound_objects").total).toBe(1);
+
+    const consistency = await call(inline, "check_rule_consistency", {
+      world_id: "uni_mist_harbor",
+      rule_system_id: system.id,
+      text: "对方已经达到28级，共鸣高达150点。",
+      locale: "zh-CN",
+    });
+    expect(consistency.isError).toBe(false);
+    const findingsPage = pageOf<{ kind: string }>(consistency.body, "findings");
+    expect(findingsPage.items.some((f) => f.kind === "above-ladder")).toBe(
+      true,
+    );
+    expect(
+      findingsPage.items.some((f) => f.kind === "attribute-above-max"),
+    ).toBe(true);
+
+    const wrongWorldConsistency = await call(inline, "check_rule_consistency", {
+      world_id: "uni_ninth_station",
+      rule_system_id: system.id,
+    });
+    expect(wrongWorldConsistency.isError).toBe(true);
+    expect((wrongWorldConsistency.body.error as { code: string }).code).toBe(
+      "invalid_arguments",
+    );
+
+    // 6. Clear bindings
+    const clearedChar = await call(inline, "set_entity_rule_binding", {
+      entity_kind: "character",
+      entity_id: "char_lin",
+      rule_system_id: system.id,
+      clear: true,
+    });
+    expect(clearedChar.isError).toBe(false);
+    expect(clearedChar.body.binding).toBeNull();
+
+    const clearedObj = await call(inline, "set_entity_rule_binding", {
+      entity_kind: "object",
+      entity_id: "object_brass_key",
+      rule_system_id: system.id,
+      clear: true,
+    });
+    expect(clearedObj.isError).toBe(false);
+    expect(clearedObj.body.binding).toBeNull();
+  } finally {
+    await inline.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

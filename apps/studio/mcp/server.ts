@@ -15,6 +15,27 @@ import {
   MCP_TOOL_NAMES,
   type McpToolName,
 } from "../src/core/mcp-tools.ts";
+import {
+  abilityTemplateSchema,
+  characterRuleBindingSchema,
+  checkRuleLayerConsistency,
+  itemStatTemplateSchema,
+  MAX_ABILITY_TEMPLATES,
+  MAX_ITEM_STAT_TEMPLATES,
+  MAX_RULE_ATTRIBUTES,
+  MAX_RULE_EFFECTS,
+  MAX_RULE_ENUM_VALUES,
+  MAX_RULE_SYSTEMS,
+  MAX_RULE_TIERS,
+  ruleAttributeValueSchema,
+  ruleKeySchema,
+  ruleSystemSchema,
+  storyObjectRuleBindingSchema,
+  validateAbilityTemplateRecord,
+  validateCharacterRuleBindings,
+  validateItemStatTemplateRecord,
+  validateStoryObjectRuleBinding,
+} from "../src/core/rule-layer.ts";
 import { standardSchema, timelineEventSchema } from "../src/core/schemas.ts";
 import { searchWorkspace } from "../src/core/search.ts";
 import { applicableStandards, STANDARD_KINDS } from "../src/core/standards.ts";
@@ -38,15 +59,23 @@ import {
 } from "../src/core/workflow.ts";
 import {
   MAX_WORKFLOW_RESULT_LENGTH,
+  type AbilityTemplate,
   type Chapter,
   type Character,
+  type CharacterRuleBinding,
+  type ItemStatTemplate,
   type LocalizedText,
   type LoreEntry,
   type Relationship,
+  type RuleAttribute,
+  type RuleEffect,
+  type RuleSystem,
+  type RuleTier,
   type SearchHit,
   type StoryFaction,
   type StoryLocation,
   type StoryObject,
+  type StoryObjectRuleBinding,
   type StoryScene,
   type StoryUniverse,
   type StoryWork,
@@ -56,6 +85,7 @@ import {
   type WorkspaceStandard,
   type WorkflowTask,
 } from "../src/core/types.ts";
+import { WorkspaceValidationError } from "../src/core/validate.ts";
 import { APP_VERSION } from "../src/core/version.ts";
 import {
   WorkspaceStore,
@@ -516,6 +546,93 @@ const timelineScenePatchSchema = z
     "新场景 ID；传 null 清除场景；省略时保持原值 / New scene ID; pass null to clear it; omit to keep the stored scene.",
   );
 
+const ruleSystemIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .describe("结构化规则体系 ID / Structured rule system ID.");
+const ruleSystemKindSchema = z
+  .enum(["power", "attribute", "custom"])
+  .describe(
+    "规则体系类型（power / attribute / custom）/ Rule system kind (power, attribute or custom).",
+  );
+const ruleTierInputSchema = z
+  .object({
+    id: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("可选等级 ID；省略时自动生成 / Optional tier ID."),
+    name: standardTitleSchema.describe("等级名称 / Localized tier name."),
+    rank: z
+      .number()
+      .int()
+      .positive()
+      .describe("从 1 连续递增的等级序号 / Consecutive rank starting at 1."),
+    min_value: z
+      .number()
+      .optional()
+      .describe("区间下限 / Lower numeric bound."),
+    max_value: z
+      .number()
+      .optional()
+      .describe("区间上限 / Upper numeric bound."),
+    summary: z
+      .string()
+      .trim()
+      .max(4_000)
+      .default("")
+      .describe("等级说明 / Tier summary."),
+  })
+  .strict();
+const ruleAttributeInputSchema = z
+  .object({
+    key: ruleKeySchema.describe(
+      "属性键，供技能与物品引用 / Attribute key cited by abilities and items.",
+    ),
+    label: standardTitleSchema.describe(
+      "属性名称 / Localized attribute label.",
+    ),
+    type: z
+      .enum(["integer", "decimal", "enum", "text"])
+      .describe("属性类型 / Attribute type."),
+    unit: z.string().trim().max(40).default("").describe("单位 / Unit."),
+    min: z.number().optional().describe("最小值 / Minimum bound."),
+    max: z.number().optional().describe("最大值 / Maximum bound."),
+    enum_values: z
+      .array(z.string().trim().min(1).max(100))
+      .max(MAX_RULE_ENUM_VALUES)
+      .default([])
+      .describe("枚举允许值 / Allowed enum values."),
+    default_value: z
+      .union([z.number(), z.string().trim().max(100)])
+      .optional()
+      .describe("默认值 / Default value."),
+    description: z
+      .string()
+      .trim()
+      .max(4_000)
+      .default("")
+      .describe("属性说明 / Attribute description."),
+  })
+  .strict();
+const ruleEffectInputSchema = z
+  .object({
+    attribute_key: ruleKeySchema.describe(
+      "目标数值属性键 / Target numeric attribute key.",
+    ),
+    operation: z
+      .enum(["add", "set", "multiply"])
+      .describe("运算方式 / Effect operation."),
+    value: z.number().describe("数值 / Numeric value."),
+  })
+  .strict();
+const nullableIdPatchSchema = z
+  .union([z.string().trim().min(1), z.null()])
+  .optional()
+  .describe("ID；传 null 清除，省略保持原值 / ID; null clears, omit keeps.");
+
 function pageLimitSchema(defaultLimit: number, maxLimit: number) {
   return z
     .number()
@@ -650,6 +767,12 @@ function worldStats(workspace: StudioWorkspace, worldId: string) {
     lore: workspace.lore.filter((entry) => entry.universeId === worldId).length,
     relationships: workspace.relationships.filter(
       (relationship) => relationship.universeId === worldId,
+    ).length,
+    rule_systems: workspace.ruleSystems.filter(
+      (system) => system.universeId === worldId,
+    ).length,
+    active_rule_systems: workspace.ruleSystems.filter(
+      (system) => system.universeId === worldId && system.status === "active",
     ).length,
   };
 }
@@ -831,6 +954,128 @@ function timelineEventView(
   };
 }
 
+function characterRuleBindingView(binding: CharacterRuleBinding) {
+  return {
+    rule_system_id: binding.ruleSystemId,
+    tier_id: binding.tierId ?? null,
+    attributes: binding.attributes,
+    ability_ids: binding.abilityIds.slice(0, COMPACT_ARRAY_ITEMS),
+    ability_id_count: binding.abilityIds.length,
+  };
+}
+
+function storyObjectRuleBindingView(binding: StoryObjectRuleBinding) {
+  return {
+    rule_system_id: binding.ruleSystemId,
+    item_stat_template_id: binding.itemStatTemplateId ?? null,
+    tier_id: binding.tierId ?? null,
+    stats: binding.stats.map(ruleEffectView),
+  };
+}
+
+function ruleEffectView(effect: RuleEffect) {
+  return {
+    attribute_key: effect.attributeKey,
+    operation: effect.operation,
+    value: effect.value,
+  };
+}
+
+function ruleTierView(tier: RuleTier) {
+  return {
+    id: tier.id,
+    name: tier.name,
+    rank: tier.rank,
+    min_value: tier.minValue ?? null,
+    max_value: tier.maxValue ?? null,
+    summary: tier.summary,
+  };
+}
+
+function ruleAttributeView(attribute: RuleAttribute) {
+  return {
+    key: attribute.key,
+    label: attribute.label,
+    type: attribute.type,
+    unit: attribute.unit,
+    min: attribute.min ?? null,
+    max: attribute.max ?? null,
+    enum_values: attribute.enumValues,
+    default_value: attribute.defaultValue ?? null,
+    description: attribute.description,
+  };
+}
+
+function ruleSystemListView(workspace: StudioWorkspace, system: RuleSystem) {
+  return {
+    id: system.id,
+    world_id: system.universeId,
+    title: system.title,
+    kind: system.kind,
+    status: system.status,
+    version: system.version,
+    unit: system.unit,
+    summary: previewText(system.summary, COMPACT_STRING_CHARS),
+    tier_count: system.tiers.length,
+    attribute_count: system.attributes.length,
+    ability_count: workspace.abilityTemplates.filter(
+      (item) => item.ruleSystemId === system.id,
+    ).length,
+    item_stat_count: workspace.itemStatTemplates.filter(
+      (item) => item.ruleSystemId === system.id,
+    ).length,
+    bound_character_count: workspace.characters.filter((character) =>
+      (character.ruleBindings ?? []).some(
+        (binding) => binding.ruleSystemId === system.id,
+      ),
+    ).length,
+    bound_object_count: workspace.storyObjects.filter(
+      (object) => object.ruleBinding?.ruleSystemId === system.id,
+    ).length,
+    created_at: system.createdAt,
+    updated_at: system.updatedAt,
+  };
+}
+
+function ruleSystemView(workspace: StudioWorkspace, system: RuleSystem) {
+  return {
+    ...ruleSystemListView(workspace, system),
+    summary: system.summary,
+    tiers: system.tiers.map(ruleTierView),
+    attributes: system.attributes.map(ruleAttributeView),
+  };
+}
+
+function abilityTemplateView(ability: AbilityTemplate) {
+  return {
+    id: ability.id,
+    world_id: ability.universeId,
+    rule_system_id: ability.ruleSystemId,
+    name: ability.name,
+    summary: ability.summary,
+    tier_id: ability.tierId ?? null,
+    effects: ability.effects.map(ruleEffectView),
+    cost: ability.cost,
+    created_at: ability.createdAt,
+    updated_at: ability.updatedAt,
+  };
+}
+
+function itemStatTemplateView(item: ItemStatTemplate) {
+  return {
+    id: item.id,
+    world_id: item.universeId,
+    rule_system_id: item.ruleSystemId,
+    name: item.name,
+    category: item.category,
+    summary: item.summary,
+    tier_id: item.tierId ?? null,
+    stats: item.stats.map(ruleEffectView),
+    created_at: item.createdAt,
+    updated_at: item.updatedAt,
+  };
+}
+
 function characterView(character: Character) {
   return {
     id: character.id,
@@ -848,6 +1093,7 @@ function characterView(character: Character) {
     tags: character.tags,
     color: character.color,
     reusable: character.reusable,
+    rule_bindings: (character.ruleBindings ?? []).map(characterRuleBindingView),
   };
 }
 
@@ -870,6 +1116,9 @@ function storyObjectView(object: StoryObject) {
     summary: object.summary,
     visual_prompt: object.visualPrompt,
     source_notes: object.sourceNotes,
+    rule_binding: object.ruleBinding
+      ? storyObjectRuleBindingView(object.ruleBinding)
+      : null,
     created_at: object.createdAt,
     updated_at: object.updatedAt,
   };
@@ -1109,6 +1358,80 @@ function findStandard(
   return standard;
 }
 
+function findRuleSystem(
+  workspace: StudioWorkspace,
+  ruleSystemId: string,
+): RuleSystem {
+  const system = workspace.ruleSystems.find((item) => item.id === ruleSystemId);
+  if (!system)
+    throw new ToolError(
+      "not_found",
+      `Structured rule system not found: ${ruleSystemId}`,
+    );
+  return system;
+}
+
+function parseZodRecord<T>(
+  schema: z.ZodType<T>,
+  value: unknown,
+  label: string,
+  fallbackPath: string,
+): T {
+  const parsed = schema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  const issues = parsed.error.issues
+    .slice(0, 5)
+    .map(
+      (issue) => `${issue.path.join(".") || fallbackPath}: ${issue.message}`,
+    );
+  throw new ToolError(
+    "invalid_arguments",
+    `Invalid ${label}: ${issues.join("; ") || "validation failed"}`,
+    issues,
+  );
+}
+
+function toRuleTiers(
+  inputs: readonly z.output<typeof ruleTierInputSchema>[],
+): RuleTier[] {
+  return inputs.map((tier) => ({
+    id: tier.id ?? createId("tier"),
+    name: tier.name,
+    rank: tier.rank,
+    ...(tier.min_value === undefined ? {} : { minValue: tier.min_value }),
+    ...(tier.max_value === undefined ? {} : { maxValue: tier.max_value }),
+    summary: tier.summary,
+  }));
+}
+
+function toRuleAttributes(
+  inputs: readonly z.output<typeof ruleAttributeInputSchema>[],
+): RuleAttribute[] {
+  return inputs.map((attribute) => ({
+    key: attribute.key,
+    label: attribute.label,
+    type: attribute.type,
+    unit: attribute.unit,
+    ...(attribute.min === undefined ? {} : { min: attribute.min }),
+    ...(attribute.max === undefined ? {} : { max: attribute.max }),
+    enumValues: attribute.enum_values,
+    ...(attribute.default_value === undefined
+      ? {}
+      : { defaultValue: attribute.default_value }),
+    description: attribute.description,
+  }));
+}
+
+function toRuleEffects(
+  inputs: readonly z.output<typeof ruleEffectInputSchema>[],
+): RuleEffect[] {
+  return inputs.map((effect) => ({
+    attributeKey: effect.attribute_key,
+    operation: effect.operation,
+    value: effect.value,
+  }));
+}
+
 function invalidTimelineEvent(error: unknown): ToolError {
   if (error instanceof z.ZodError) {
     const issues = error.issues
@@ -1296,6 +1619,24 @@ function ok(value: unknown): CallToolResult {
 }
 
 function fail(error: unknown): CallToolResult {
+  if (error instanceof WorkspaceValidationError) {
+    const issues = error.issues.slice(0, 5);
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            error: {
+              code: "invalid_arguments",
+              message: `Workspace validation failed: ${issues.join("; ")}`,
+              issues,
+            },
+          }),
+        },
+      ],
+    };
+  }
   const message = errorMessage(error);
   const code = error instanceof ToolError ? error.code : errorCode(message);
   const issues = error instanceof ToolError ? error.issues : undefined;
@@ -1331,8 +1672,8 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
     { name: "IPloom Studio", version: APP_VERSION },
     {
       instructions:
-        `IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节、关系、AI 工作流与项目基础规则；search_ip 支持中英双语子串检索。共 ${total} 个工具：前 ${read} 个只读查询、${write} 个工作区写入。列表类工具统一返回分页对象 { total, offset, count, next_offset, truncated, items }，next_offset 为 null 表示已到末页，默认单次结果不超过 50 KB。create_standard 与 update_standard 修改基础规则；create_timeline_event 与 update_timeline_event 新建或修订故事时间线事件，canon_status 默认为 proposed，只有显式传 canon 才标记为正典；save_workflow_result 把中英文结果写回 AI 任务并置为 review 待审阅，已 done 的任务需先在应用内重新打开。\n` +
-        `IPloom Studio local IP memory: list story worlds before reading novels, chapters, relationships, AI workflow and foundation standards. ${total} tools: the first ${read} are read-only queries and ${write} write workspace records. Every list tool returns a page object { total, offset, count, next_offset, truncated, items }; next_offset === null ends paging, and a default response stays under 50 KB. create_standard and update_standard change foundation standards; create_timeline_event and update_timeline_event create or revise story timeline events, with canon_status defaulting to proposed unless canon is explicit; save_workflow_result writes Chinese and/or English result text to a workflow task and moves it to review, while a done task must be reopened in the app first.`,
+        `IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节、关系、AI 工作流、基础规则与结构化规则层（等级、属性、技能与物品模板）；search_ip 支持中英双语子串检索。共 ${total} 个工具：前 ${read} 个只读查询、${write} 个工作区写入。列表类工具统一返回分页对象 { total, offset, count, next_offset, truncated, items }，next_offset 为 null 表示已到末页，默认单次结果不超过 50 KB。create_standard 与 update_standard 修改基础规则；create_timeline_event 与 update_timeline_event 新建或修订故事时间线事件，canon_status 默认为 proposed，只有显式传 canon 才标记为正典；save_workflow_result 把中英文结果写回 AI 任务并置为 review 待审阅，已 done 的任务需先在应用内重新打开；create_rule_system、update_rule_system、upsert_ability_template、upsert_item_stat_template 与 set_entity_rule_binding 管理结构化规则层与角色/物件绑定，新建规则体系默认保存为 draft；check_rule_consistency 只读检查章节或待审文本中越界数值。\n` +
+        `IPloom Studio local IP memory: list story worlds before reading novels, chapters, relationships, AI workflow, foundation standards and structured rule systems (tiers, attributes, abilities and item stats). ${total} tools: the first ${read} are read-only queries and ${write} write workspace records. Every list tool returns a page object { total, offset, count, next_offset, truncated, items }; next_offset === null ends paging, and a default response stays under 50 KB. create_standard and update_standard change foundation standards; create_timeline_event and update_timeline_event create or revise story timeline events, with canon_status defaulting to proposed unless canon is explicit; save_workflow_result writes Chinese and/or English result text to a workflow task and moves it to review, while a done task must be reopened in the app first; create_rule_system, update_rule_system, upsert_ability_template, upsert_item_stat_template and set_entity_rule_binding manage the structured rule layer and character/object bindings (new rule systems default to draft); check_rule_consistency checks prose or draft text against registered ladders without writing.`,
     },
   );
 
@@ -2348,6 +2689,249 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
   );
 
   register(
+    "list_rule_systems",
+    {
+      title: "结构化规则体系列表 / Structured rule systems",
+      description:
+        "分页列出故事世界的结构化规则体系（等级、属性、技能与物品模板统计）；可按故事世界、类型和状态过滤，include_details 返回完整等级和属性定义。List structured rule systems (tier ladders, typed attributes, and linked template counts), optionally filtered by world, kind and status; include_details returns full tiers and attributes.",
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    z.object({
+      world_id: worldIdSchema
+        .optional()
+        .describe(
+          "只看该故事世界的规则体系 / Only rule systems in this world.",
+        ),
+      kind: ruleSystemKindSchema.optional(),
+      status: standardStatusSchema
+        .optional()
+        .describe("只看指定状态 / Only this status."),
+      offset: pageOffsetSchema,
+      limit: pageLimit,
+      include_details: detailSchema,
+    }),
+    async (args) => {
+      const loaded = await store.load();
+      const { workspace } = loaded;
+      if (args.world_id) findWorld(workspace, args.world_id);
+      const systems = workspace.ruleSystems.filter(
+        (system) =>
+          (!args.world_id || system.universeId === args.world_id) &&
+          (!args.kind || system.kind === args.kind) &&
+          (!args.status || system.status === args.status),
+      );
+      const activeApplied = workspace.ruleSystems.filter(
+        (system) =>
+          system.status === "active" &&
+          (!args.world_id || system.universeId === args.world_id),
+      ).length;
+      const meta = workspaceMeta(loaded);
+      return {
+        schema: MCP_SCHEMA,
+        workspace: meta,
+        active_applied: activeApplied,
+        rule_systems: pageOf(
+          systems.map((system) =>
+            args.include_details
+              ? ruleSystemView(workspace, system)
+              : ruleSystemListView(workspace, system),
+          ),
+          {
+            offset: args.offset,
+            limit: args.limit,
+            budget: remainingBudget(meta, activeApplied),
+          },
+        ),
+      };
+    },
+  );
+
+  register(
+    "get_rule_system",
+    {
+      title: "读取结构化规则体系 / Read structured rule system",
+      description:
+        "读取一个结构化规则体系的完整等级与属性定义，并分页返回关联的技能模板、物品属性模板以及已绑定的角色与故事物件；每一类都支持通过 offsets 独立翻页。Read one structured rule system with its full tiers and attributes, plus independently paged ability templates, item stat templates, bound characters and bound story objects.",
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    z.object({
+      rule_system_id: ruleSystemIdSchema,
+      offsets: z
+        .object({
+          abilities: pageOffsetSchema,
+          items: pageOffsetSchema,
+          characters: pageOffsetSchema,
+          objects: pageOffsetSchema,
+        })
+        .partial()
+        .strict()
+        .optional()
+        .describe(
+          "四个子集合各自的分页起点 / Independent zero-based offsets for abilities, items, characters and objects.",
+        ),
+      limit: pageLimit,
+      include_details: detailSchema,
+    }),
+    async (args) => {
+      const loaded = await store.load();
+      const { workspace } = loaded;
+      const system = findRuleSystem(workspace, args.rule_system_id);
+      const meta = workspaceMeta(loaded);
+      const systemPayload = ruleSystemView(workspace, system);
+      const shape = (record: object) =>
+        args.include_details ? record : compactRecord(record);
+      const budget = Math.max(
+        1_000,
+        Math.floor(remainingBudget(meta, systemPayload) / 4),
+      );
+      const abilities = workspace.abilityTemplates
+        .filter((item) => item.ruleSystemId === system.id)
+        .map((item) => shape(abilityTemplateView(item)));
+      const items = workspace.itemStatTemplates
+        .filter((item) => item.ruleSystemId === system.id)
+        .map((item) => shape(itemStatTemplateView(item)));
+      const boundCharacters = workspace.characters.flatMap((character) => {
+        const binding = (character.ruleBindings ?? []).find(
+          (entry) => entry.ruleSystemId === system.id,
+        );
+        if (!binding) return [];
+        return [
+          {
+            character_id: character.id,
+            name: character.name,
+            ...characterRuleBindingView(binding),
+          },
+        ];
+      });
+      const boundObjects = workspace.storyObjects
+        .filter((object) => object.ruleBinding?.ruleSystemId === system.id)
+        .map((object) => ({
+          object_id: object.id,
+          name: object.name,
+          ...storyObjectRuleBindingView(object.ruleBinding!),
+        }));
+      return {
+        schema: MCP_SCHEMA,
+        workspace: meta,
+        rule_system: systemPayload,
+        ability_templates: pageOf(abilities, {
+          offset: args.offsets?.abilities,
+          limit: args.limit,
+          budget,
+        }),
+        item_stat_templates: pageOf(items, {
+          offset: args.offsets?.items,
+          limit: args.limit,
+          budget,
+        }),
+        bound_characters: pageOf(boundCharacters, {
+          offset: args.offsets?.characters,
+          limit: args.limit,
+          budget,
+        }),
+        bound_objects: pageOf(boundObjects, {
+          offset: args.offsets?.objects,
+          limit: args.limit,
+          budget,
+        }),
+      };
+    },
+  );
+
+  register(
+    "check_rule_consistency",
+    {
+      title: "检查规则数值一致性 / Check rule consistency",
+      description:
+        "只读检查指定故事世界的章节正文、AI 任务结果或传入的待审文本，报告超出已登记等级区间、落入等级断层或超出属性上下限的数值引用，以及等级区间断层/重叠提示。Read-only check of a story world's chapters, workflow results or supplied draft text against registered rule systems, reporting out-of-ladder values, ladder gaps and out-of-bounds attributes.",
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    z.object({
+      world_id: worldIdSchema,
+      rule_system_id: ruleSystemIdSchema
+        .optional()
+        .describe("只检查某一套规则体系 / Optional rule system filter."),
+      text: z
+        .string()
+        .max(200_000)
+        .optional()
+        .describe(
+          "可选待审文本；传入时仅检查该文本，省略则扫描世界内的章节与任务结果 / Optional draft text to inspect instead of scanning stored chapters and workflow results.",
+        ),
+      include_draft_systems: z
+        .boolean()
+        .default(false)
+        .describe(
+          "是否包含草稿状态的规则体系（默认仅检查 active）/ Include draft rule systems in addition to active ones.",
+        ),
+      locale: localeSchema,
+      offset: pageOffsetSchema,
+      limit: pageLimit,
+    }),
+    async (args) => {
+      const loaded = await store.load();
+      const { workspace } = loaded;
+      findWorld(workspace, args.world_id);
+      if (args.rule_system_id) {
+        const system = findRuleSystem(workspace, args.rule_system_id);
+        if (system.universeId !== args.world_id)
+          throw new ToolError(
+            "invalid_arguments",
+            `Rule system ${args.rule_system_id} belongs to another story world.`,
+          );
+      }
+      const locale: UiLocale = args.locale ?? workspace.settings.locale;
+      const report = checkRuleLayerConsistency(workspace, args.world_id, {
+        ruleSystemId: args.rule_system_id,
+        includeDraftSystems: args.include_draft_systems,
+        text: args.text,
+        locale,
+      });
+      const meta = workspaceMeta(loaded);
+      const summary = {
+        active_rule_systems: report.summary.activeRuleSystems,
+        draft_rule_systems: report.summary.draftRuleSystems,
+        checked_rule_systems: report.summary.checkedRuleSystems,
+        chapters_scanned: report.summary.chaptersScanned,
+        workflow_tasks_scanned: report.summary.workflowTasksScanned,
+        bound_characters: report.summary.boundCharacters,
+        total_characters: report.summary.totalCharacters,
+        bound_objects: report.summary.boundObjects,
+        total_objects: report.summary.totalObjects,
+        total_findings: report.summary.totalFindings,
+      };
+      return {
+        schema: MCP_SCHEMA,
+        workspace: meta,
+        world_id: args.world_id,
+        summary,
+        findings: pageOf(
+          report.findings.map((finding) => ({
+            kind: finding.kind,
+            severity: finding.severity,
+            rule_system_id: finding.ruleSystemId,
+            source_kind: finding.sourceKind,
+            source_id: finding.sourceId,
+            source_label: finding.sourceLabel,
+            excerpt: finding.excerpt,
+            ...(finding.value === undefined ? {} : { value: finding.value }),
+            ...(finding.unit ? { unit: finding.unit } : {}),
+            ...(finding.attributeKey
+              ? { attribute_key: finding.attributeKey }
+              : {}),
+            message: finding.message,
+          })),
+          {
+            offset: args.offset,
+            limit: args.limit,
+            budget: remainingBudget(meta, summary),
+          },
+        ),
+      };
+    },
+  );
+
+  register(
     "create_standard",
     {
       title: "新建基础规则 / Create foundation standard",
@@ -2759,6 +3343,651 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
         schema: MCP_SCHEMA,
         revision: workspace.revision,
         task: workflowTaskSummaryView(workspace, updated),
+      };
+    },
+  );
+
+  register(
+    "create_rule_system",
+    {
+      title: "新建结构化规则体系 / Create structured rule system",
+      description:
+        "在指定故事世界登记一套结构化规则体系（等级阶梯、类型化属性与单位），默认保存为 draft；保存前完整校验等级顺序、数值区间与属性定义。Register a universe-scoped structured rule system (ordered tiers, typed attributes and unit), saved as draft by default after strict schema and semantic validation.",
+      annotations: WORKSPACE_WRITE_ANNOTATIONS,
+    },
+    z.object({
+      world_id: worldIdSchema,
+      title: standardTitleSchema,
+      kind: ruleSystemKindSchema,
+      summary: z
+        .string()
+        .trim()
+        .max(10_000)
+        .default("")
+        .describe("规则体系说明 / Rule system summary."),
+      unit: z
+        .string()
+        .trim()
+        .max(40)
+        .default("")
+        .describe("等级刻度单位 / Ladder unit."),
+      tiers: z
+        .array(ruleTierInputSchema)
+        .max(MAX_RULE_TIERS)
+        .default([])
+        .describe("按 rank 从 1 连续排列的等级列表 / Ordered tiers."),
+      attributes: z
+        .array(ruleAttributeInputSchema)
+        .max(MAX_RULE_ATTRIBUTES)
+        .default([])
+        .describe("类型化属性列表 / Typed attributes."),
+      status: standardStatusSchema
+        .default("draft")
+        .describe("省略时保存为 draft / Defaults to draft."),
+    }),
+    async (args) => {
+      const now = new Date().toISOString();
+      const system = parseZodRecord(
+        ruleSystemSchema,
+        {
+          id: createId("rules"),
+          universeId: args.world_id,
+          title: args.title,
+          kind: args.kind,
+          summary: args.summary,
+          unit: args.unit,
+          tiers: toRuleTiers(args.tiers),
+          attributes: toRuleAttributes(args.attributes),
+          status: args.status,
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        },
+        "rule system",
+        "ruleSystem",
+      );
+      const workspace = await store.update((current) => {
+        if (current.ruleSystems.length >= MAX_RULE_SYSTEMS)
+          throw new ToolError(
+            "invalid_arguments",
+            `The workspace already contains the maximum of ${MAX_RULE_SYSTEMS} rule systems.`,
+          );
+        findWorld(current, args.world_id);
+        current.ruleSystems.push(system);
+        current.updatedAt = now;
+      });
+      return {
+        schema: MCP_SCHEMA,
+        revision: workspace.revision,
+        rule_system: ruleSystemView(workspace, system),
+      };
+    },
+  );
+
+  register(
+    "update_rule_system",
+    {
+      title: "更新结构化规则体系 / Update structured rule system",
+      description:
+        "按 rule_system_id 更新结构化规则体系；标题、类型、说明、单位、等级或属性变化时版本号加一，仅修改状态不改版本；保存前重新校验全工作区引用。Update a structured rule system; content changes bump its version while status-only changes do not, and all linked templates and entity bindings are re-validated before saving.",
+      annotations: WORKSPACE_WRITE_ANNOTATIONS,
+    },
+    z.object({
+      rule_system_id: ruleSystemIdSchema,
+      title: standardTitlePatchSchema.optional(),
+      kind: ruleSystemKindSchema.optional(),
+      summary: z.string().trim().max(10_000).optional(),
+      unit: z.string().trim().max(40).optional(),
+      tiers: z.array(ruleTierInputSchema).max(MAX_RULE_TIERS).optional(),
+      attributes: z
+        .array(ruleAttributeInputSchema)
+        .max(MAX_RULE_ATTRIBUTES)
+        .optional(),
+      status: standardStatusSchema.optional(),
+    }),
+    async (args) => {
+      const now = new Date().toISOString();
+      let updated: RuleSystem | undefined;
+      let versionBumped = false;
+      const workspace = await store.update((current) => {
+        const index = current.ruleSystems.findIndex(
+          (item) => item.id === args.rule_system_id,
+        );
+        if (index < 0)
+          throw new ToolError(
+            "not_found",
+            `Structured rule system not found: ${args.rule_system_id}`,
+          );
+        const existing = current.ruleSystems[index]!;
+        const title = {
+          zh: args.title?.zh ?? existing.title.zh,
+          en: args.title?.en ?? existing.title.en,
+        };
+        const kind = args.kind ?? existing.kind;
+        const summary = args.summary ?? existing.summary;
+        const unit = args.unit ?? existing.unit;
+        const tiers =
+          args.tiers !== undefined ? toRuleTiers(args.tiers) : existing.tiers;
+        const attributes =
+          args.attributes !== undefined
+            ? toRuleAttributes(args.attributes)
+            : existing.attributes;
+        const contentChanged =
+          title.zh !== existing.title.zh ||
+          title.en !== existing.title.en ||
+          kind !== existing.kind ||
+          summary !== existing.summary ||
+          unit !== existing.unit ||
+          JSON.stringify(tiers) !== JSON.stringify(existing.tiers) ||
+          JSON.stringify(attributes) !== JSON.stringify(existing.attributes);
+        const next = parseZodRecord(
+          ruleSystemSchema,
+          {
+            ...existing,
+            title,
+            kind,
+            summary,
+            unit,
+            tiers,
+            attributes,
+            status: args.status ?? existing.status,
+            version: existing.version + (contentChanged ? 1 : 0),
+            updatedAt: now,
+          },
+          "rule system",
+          "ruleSystem",
+        );
+        current.ruleSystems[index] = next;
+        current.updatedAt = now;
+        updated = next;
+        versionBumped = contentChanged;
+      });
+      return {
+        schema: MCP_SCHEMA,
+        revision: workspace.revision,
+        rule_system: ruleSystemView(workspace, updated!),
+        version_bumped: versionBumped,
+      };
+    },
+  );
+
+  register(
+    "upsert_ability_template",
+    {
+      title: "新建或更新技能模板 / Upsert ability template",
+      description:
+        "在规则体系下新建技能模板（省略 ability_id）或更新已有模板（传 ability_id）；会校验目标等级与全部数值效果引用的属性键。Create an ability template under a rule system (omit ability_id) or update one by ability_id, validating its tier and attribute effects.",
+      annotations: WORKSPACE_WRITE_ANNOTATIONS,
+    },
+    z.object({
+      ability_id: z
+        .string()
+        .trim()
+        .min(1)
+        .optional()
+        .describe(
+          "已有技能模板 ID；省略时新建 / Existing ability ID to update.",
+        ),
+      rule_system_id: ruleSystemIdSchema
+        .optional()
+        .describe(
+          "所属规则体系 ID（新建必填）/ Rule system ID (required on create).",
+        ),
+      name: standardTitlePatchSchema
+        .optional()
+        .describe("双语技能名 / Ability name."),
+      summary: standardTitlePatchSchema
+        .optional()
+        .describe("双语技能说明 / Ability summary."),
+      tier_id: nullableIdPatchSchema,
+      effects: z
+        .array(ruleEffectInputSchema)
+        .max(MAX_RULE_EFFECTS)
+        .optional()
+        .describe("数值效果列表 / Numeric effects."),
+      cost: z
+        .string()
+        .trim()
+        .max(2_000)
+        .optional()
+        .describe("消耗说明 / Cost."),
+    }),
+    async (args) => {
+      const now = new Date().toISOString();
+      let saved: AbilityTemplate | undefined;
+      let created = false;
+      const workspace = await store.update((current) => {
+        if (args.ability_id) {
+          const index = current.abilityTemplates.findIndex(
+            (item) => item.id === args.ability_id,
+          );
+          if (index < 0)
+            throw new ToolError(
+              "not_found",
+              `Ability template not found: ${args.ability_id}`,
+            );
+          const existing = current.abilityTemplates[index]!;
+          const system = findRuleSystem(current, existing.ruleSystemId);
+          const tierId =
+            args.tier_id === undefined
+              ? existing.tierId
+              : (args.tier_id ?? undefined);
+          const next = parseZodRecord(
+            abilityTemplateSchema,
+            {
+              ...existing,
+              name: {
+                zh: args.name?.zh ?? existing.name.zh,
+                en: args.name?.en ?? existing.name.en,
+              },
+              summary: {
+                zh: args.summary?.zh ?? existing.summary.zh,
+                en: args.summary?.en ?? existing.summary.en,
+              },
+              ...(tierId ? { tierId } : { tierId: undefined }),
+              effects:
+                args.effects !== undefined
+                  ? toRuleEffects(args.effects)
+                  : existing.effects,
+              cost: args.cost ?? existing.cost,
+              updatedAt: now,
+            },
+            "ability template",
+            "ability",
+          );
+          const semantic = validateAbilityTemplateRecord(next, system);
+          if (semantic.length)
+            throw new ToolError(
+              "invalid_arguments",
+              `Invalid ability template: ${semantic.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+              semantic.map((i) => `${i.path.join(".")}: ${i.message}`),
+            );
+          current.abilityTemplates[index] = next;
+          current.updatedAt = now;
+          saved = next;
+          return;
+        }
+        if (!args.rule_system_id)
+          throw new ToolError(
+            "invalid_arguments",
+            "rule_system_id is required when creating an ability template.",
+          );
+        if (current.abilityTemplates.length >= MAX_ABILITY_TEMPLATES)
+          throw new ToolError(
+            "invalid_arguments",
+            `The workspace already contains the maximum of ${MAX_ABILITY_TEMPLATES} ability templates.`,
+          );
+        const system = findRuleSystem(current, args.rule_system_id);
+        const next = parseZodRecord(
+          abilityTemplateSchema,
+          {
+            id: createId("ability"),
+            universeId: system.universeId,
+            ruleSystemId: system.id,
+            name: { zh: args.name?.zh ?? "", en: args.name?.en ?? "" },
+            summary: { zh: args.summary?.zh ?? "", en: args.summary?.en ?? "" },
+            ...(args.tier_id ? { tierId: args.tier_id } : {}),
+            effects: toRuleEffects(args.effects ?? []),
+            cost: args.cost ?? "",
+            createdAt: now,
+            updatedAt: now,
+          },
+          "ability template",
+          "ability",
+        );
+        const semantic = validateAbilityTemplateRecord(next, system);
+        if (semantic.length)
+          throw new ToolError(
+            "invalid_arguments",
+            `Invalid ability template: ${semantic.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+            semantic.map((i) => `${i.path.join(".")}: ${i.message}`),
+          );
+        current.abilityTemplates.push(next);
+        current.updatedAt = now;
+        saved = next;
+        created = true;
+      });
+      return {
+        schema: MCP_SCHEMA,
+        revision: workspace.revision,
+        created,
+        ability_template: abilityTemplateView(saved!),
+      };
+    },
+  );
+
+  register(
+    "upsert_item_stat_template",
+    {
+      title: "新建或更新物品属性模板 / Upsert item stat template",
+      description:
+        "在规则体系下新建物品属性模板（省略 item_template_id）或更新已有模板；校验名称、类别、等级与属性数值效果。Create an item stat template under a rule system (omit item_template_id) or update one by item_template_id, validating its tier and stat effects.",
+      annotations: WORKSPACE_WRITE_ANNOTATIONS,
+    },
+    z.object({
+      item_template_id: z
+        .string()
+        .trim()
+        .min(1)
+        .optional()
+        .describe(
+          "已有物品模板 ID；省略时新建 / Existing item template ID to update.",
+        ),
+      rule_system_id: ruleSystemIdSchema
+        .optional()
+        .describe(
+          "所属规则体系 ID（新建必填）/ Rule system ID (required on create).",
+        ),
+      name: standardTitlePatchSchema
+        .optional()
+        .describe("双语物品名 / Item name."),
+      category: standardTitlePatchSchema
+        .optional()
+        .describe("双语物品类别 / Item category."),
+      summary: standardTitlePatchSchema
+        .optional()
+        .describe("双语物品说明 / Item summary."),
+      tier_id: nullableIdPatchSchema,
+      stats: z
+        .array(ruleEffectInputSchema)
+        .max(MAX_RULE_EFFECTS)
+        .optional()
+        .describe("物品属性效果列表 / Item stat effects."),
+    }),
+    async (args) => {
+      const now = new Date().toISOString();
+      let saved: ItemStatTemplate | undefined;
+      let created = false;
+      const workspace = await store.update((current) => {
+        if (args.item_template_id) {
+          const index = current.itemStatTemplates.findIndex(
+            (item) => item.id === args.item_template_id,
+          );
+          if (index < 0)
+            throw new ToolError(
+              "not_found",
+              `Item stat template not found: ${args.item_template_id}`,
+            );
+          const existing = current.itemStatTemplates[index]!;
+          const system = findRuleSystem(current, existing.ruleSystemId);
+          const tierId =
+            args.tier_id === undefined
+              ? existing.tierId
+              : (args.tier_id ?? undefined);
+          const next = parseZodRecord(
+            itemStatTemplateSchema,
+            {
+              ...existing,
+              name: {
+                zh: args.name?.zh ?? existing.name.zh,
+                en: args.name?.en ?? existing.name.en,
+              },
+              category: {
+                zh: args.category?.zh ?? existing.category.zh,
+                en: args.category?.en ?? existing.category.en,
+              },
+              summary: {
+                zh: args.summary?.zh ?? existing.summary.zh,
+                en: args.summary?.en ?? existing.summary.en,
+              },
+              ...(tierId ? { tierId } : { tierId: undefined }),
+              stats:
+                args.stats !== undefined
+                  ? toRuleEffects(args.stats)
+                  : existing.stats,
+              updatedAt: now,
+            },
+            "item stat template",
+            "item",
+          );
+          const semantic = validateItemStatTemplateRecord(next, system);
+          if (semantic.length)
+            throw new ToolError(
+              "invalid_arguments",
+              `Invalid item stat template: ${semantic.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+              semantic.map((i) => `${i.path.join(".")}: ${i.message}`),
+            );
+          current.itemStatTemplates[index] = next;
+          current.updatedAt = now;
+          saved = next;
+          return;
+        }
+        if (!args.rule_system_id)
+          throw new ToolError(
+            "invalid_arguments",
+            "rule_system_id is required when creating an item stat template.",
+          );
+        if (current.itemStatTemplates.length >= MAX_ITEM_STAT_TEMPLATES)
+          throw new ToolError(
+            "invalid_arguments",
+            `The workspace already contains the maximum of ${MAX_ITEM_STAT_TEMPLATES} item stat templates.`,
+          );
+        const system = findRuleSystem(current, args.rule_system_id);
+        const next = parseZodRecord(
+          itemStatTemplateSchema,
+          {
+            id: createId("item"),
+            universeId: system.universeId,
+            ruleSystemId: system.id,
+            name: { zh: args.name?.zh ?? "", en: args.name?.en ?? "" },
+            category: {
+              zh: args.category?.zh ?? "",
+              en: args.category?.en ?? "",
+            },
+            summary: { zh: args.summary?.zh ?? "", en: args.summary?.en ?? "" },
+            ...(args.tier_id ? { tierId: args.tier_id } : {}),
+            stats: toRuleEffects(args.stats ?? []),
+            createdAt: now,
+            updatedAt: now,
+          },
+          "item stat template",
+          "item",
+        );
+        const semantic = validateItemStatTemplateRecord(next, system);
+        if (semantic.length)
+          throw new ToolError(
+            "invalid_arguments",
+            `Invalid item stat template: ${semantic.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+            semantic.map((i) => `${i.path.join(".")}: ${i.message}`),
+          );
+        current.itemStatTemplates.push(next);
+        current.updatedAt = now;
+        saved = next;
+        created = true;
+      });
+      return {
+        schema: MCP_SCHEMA,
+        revision: workspace.revision,
+        created,
+        item_stat_template: itemStatTemplateView(saved!),
+      };
+    },
+  );
+
+  register(
+    "set_entity_rule_binding",
+    {
+      title: "绑定实体规则数值 / Bind entity to rule system",
+      description:
+        "为角色（character）设置或清除某套规则体系下的等级、属性值与已掌握技能，或为故事物件（object）设置或清除物品属性模板、等级与属性加成；保存前校验宇宙范围、类型和上下限。Set or clear a character's tier/attributes/abilities or a story object's item stat template/tier/stats under a rule system, validating universe scope, attribute types and bounds.",
+      annotations: WORKSPACE_WRITE_ANNOTATIONS,
+    },
+    z.object({
+      entity_kind: z
+        .enum(["character", "object"])
+        .describe("目标实体类型（character 或 object）/ Target entity kind."),
+      entity_id: z
+        .string()
+        .trim()
+        .min(1)
+        .describe("角色或物件 ID / Character or story object ID."),
+      rule_system_id: ruleSystemIdSchema,
+      clear: z
+        .boolean()
+        .default(false)
+        .describe("为 true 时移除该绑定 / Remove the binding when true."),
+      tier_id: nullableIdPatchSchema,
+      attributes: z
+        .record(ruleKeySchema, ruleAttributeValueSchema)
+        .optional()
+        .describe("角色属性值（character 专用）/ Character attribute values."),
+      ability_ids: z
+        .array(z.string().trim().min(1))
+        .max(100)
+        .optional()
+        .describe(
+          "角色技能模板 ID（character 专用）/ Character ability template IDs.",
+        ),
+      item_stat_template_id: nullableIdPatchSchema.describe(
+        "物件关联的物品属性模板 ID（object 专用）/ Item stat template ID (object only).",
+      ),
+      stats: z
+        .array(ruleEffectInputSchema)
+        .max(MAX_RULE_EFFECTS)
+        .optional()
+        .describe(
+          "物件自定义属性效果（object 专用）/ Object stat effects (object only).",
+        ),
+    }),
+    async (args) => {
+      const now = new Date().toISOString();
+      let resultBinding: unknown = null;
+      const workspace = await store.update((current) => {
+        const system = findRuleSystem(current, args.rule_system_id);
+        const systemsById = new Map(
+          current.ruleSystems.map((item) => [item.id, item]),
+        );
+        if (args.entity_kind === "character") {
+          const character = current.characters.find(
+            (item) => item.id === args.entity_id,
+          );
+          if (!character)
+            throw new ToolError(
+              "not_found",
+              `Unknown character: ${args.entity_id}`,
+            );
+          if (args.clear) {
+            const kept = (character.ruleBindings ?? []).filter(
+              (item) => item.ruleSystemId !== system.id,
+            );
+            if (kept.length) character.ruleBindings = kept;
+            else delete character.ruleBindings;
+            character.updatedAt = now;
+            current.updatedAt = now;
+            resultBinding = null;
+            return;
+          }
+          const existing = (character.ruleBindings ?? []).find(
+            (item) => item.ruleSystemId === system.id,
+          );
+          const tierId =
+            args.tier_id === undefined
+              ? existing?.tierId
+              : (args.tier_id ?? undefined);
+          const binding = parseZodRecord(
+            characterRuleBindingSchema,
+            {
+              ruleSystemId: system.id,
+              ...(tierId ? { tierId } : {}),
+              attributes: args.attributes ?? existing?.attributes ?? {},
+              abilityIds: args.ability_ids ?? existing?.abilityIds ?? [],
+            },
+            "character rule binding",
+            "ruleBinding",
+          );
+          const nextBindings = [
+            ...(character.ruleBindings ?? []).filter(
+              (item) => item.ruleSystemId !== system.id,
+            ),
+            binding,
+          ];
+          const abilitiesById = new Map(
+            current.abilityTemplates.map((item) => [item.id, item]),
+          );
+          const issues = validateCharacterRuleBindings(
+            { universeIds: character.universeIds, ruleBindings: nextBindings },
+            systemsById,
+            abilitiesById,
+          );
+          if (issues.length)
+            throw new ToolError(
+              "invalid_arguments",
+              `Invalid character rule binding: ${issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+              issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+            );
+          character.ruleBindings = nextBindings;
+          character.updatedAt = now;
+          current.updatedAt = now;
+          resultBinding = characterRuleBindingView(binding);
+          return;
+        }
+        const object = current.storyObjects.find(
+          (item) => item.id === args.entity_id,
+        );
+        if (!object)
+          throw new ToolError(
+            "not_found",
+            `Unknown story object: ${args.entity_id}`,
+          );
+        if (args.clear) {
+          if (object.ruleBinding?.ruleSystemId === system.id)
+            delete object.ruleBinding;
+          object.updatedAt = now;
+          current.updatedAt = now;
+          resultBinding = null;
+          return;
+        }
+        const existing =
+          object.ruleBinding?.ruleSystemId === system.id
+            ? object.ruleBinding
+            : undefined;
+        const templateId =
+          args.item_stat_template_id === undefined
+            ? existing?.itemStatTemplateId
+            : (args.item_stat_template_id ?? undefined);
+        const tierId =
+          args.tier_id === undefined
+            ? existing?.tierId
+            : (args.tier_id ?? undefined);
+        const binding = parseZodRecord(
+          storyObjectRuleBindingSchema,
+          {
+            ruleSystemId: system.id,
+            ...(templateId ? { itemStatTemplateId: templateId } : {}),
+            ...(tierId ? { tierId } : {}),
+            stats:
+              args.stats !== undefined
+                ? toRuleEffects(args.stats)
+                : (existing?.stats ?? []),
+          },
+          "story object rule binding",
+          "ruleBinding",
+        );
+        const itemsById = new Map(
+          current.itemStatTemplates.map((item) => [item.id, item]),
+        );
+        const issues = validateStoryObjectRuleBinding(
+          { universeId: object.universeId, ruleBinding: binding },
+          systemsById,
+          itemsById,
+        );
+        if (issues.length)
+          throw new ToolError(
+            "invalid_arguments",
+            `Invalid story object rule binding: ${issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+            issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+          );
+        object.ruleBinding = binding;
+        object.updatedAt = now;
+        current.updatedAt = now;
+        resultBinding = storyObjectRuleBindingView(binding);
+      });
+      return {
+        schema: MCP_SCHEMA,
+        revision: workspace.revision,
+        entity_kind: args.entity_kind,
+        entity_id: args.entity_id,
+        binding: resultBinding,
       };
     },
   );

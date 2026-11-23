@@ -139,6 +139,16 @@ export function migrateWorkspace(value: unknown): unknown {
   if (value.schema_version === 11) {
     return migrateWorkspace({
       ...dropArcReelExportFields(value),
+      schema_version: 12,
+      revision:
+        typeof value.revision === "number"
+          ? value.revision + 1
+          : value.revision,
+    });
+  }
+  if (value.schema_version === 12) {
+    return migrateWorkspace({
+      ...value,
       schema_version: WORKSPACE_SCHEMA_VERSION,
       revision:
         typeof value.revision === "number"

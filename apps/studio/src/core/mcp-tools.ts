@@ -27,11 +27,19 @@ export const MCP_TOOLS = [
   { name: "get_workflow_result", access: "read" },
   { name: "list_standards", access: "read" },
   { name: "get_standard", access: "read" },
+  { name: "list_rule_systems", access: "read" },
+  { name: "get_rule_system", access: "read" },
+  { name: "check_rule_consistency", access: "read" },
   { name: "create_standard", access: "write" },
   { name: "update_standard", access: "write" },
   { name: "create_timeline_event", access: "write" },
   { name: "update_timeline_event", access: "write" },
   { name: "save_workflow_result", access: "write" },
+  { name: "create_rule_system", access: "write" },
+  { name: "update_rule_system", access: "write" },
+  { name: "upsert_ability_template", access: "write" },
+  { name: "upsert_item_stat_template", access: "write" },
+  { name: "set_entity_rule_binding", access: "write" },
 ] as const satisfies readonly McpToolDefinition[];
 
 export type McpToolName = (typeof MCP_TOOLS)[number]["name"];

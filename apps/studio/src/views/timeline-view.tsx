@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { displayText } from "../core/factory.ts";
+import { formatStoryObjectRuleBinding } from "../core/rule-layer.ts";
 import {
   sortTimelineEvents,
   timelineAnchorLabel,
@@ -437,28 +438,39 @@ export function TimelineView({
           </div>
           <p>{t("timelineObjectsLead")}</p>
           <div className="timeline-object-list">
-            {objects.map((object) => (
-              <article key={object.id}>
-                <div>
-                  <span>
-                    {displayText(object.category, locale) || t("timelineProp")}
-                  </span>
-                  <button type="button" onClick={() => onEditObject(object)}>
-                    {displayText(object.name, locale)}
-                  </button>
-                  <small>
-                    {t("timelineLinkCount", {
-                      count: objectUsage.get(object.id) ?? 0,
-                    })}
-                  </small>
-                </div>
-                <IconButton
-                  label={t("timelineDeleteProp")}
-                  icon="trash"
-                  onClick={() => onDeleteObject(object)}
-                />
-              </article>
-            ))}
+            {objects.map((object) => {
+              const statSummary = formatStoryObjectRuleBinding(
+                workspace,
+                object,
+                locale,
+              );
+              return (
+                <article key={object.id}>
+                  <div>
+                    <span>
+                      {displayText(object.category, locale) ||
+                        t("timelineProp")}
+                    </span>
+                    <button type="button" onClick={() => onEditObject(object)}>
+                      {displayText(object.name, locale)}
+                    </button>
+                    {statSummary ? (
+                      <small className="rule-object-stats">{statSummary}</small>
+                    ) : null}
+                    <small>
+                      {t("timelineLinkCount", {
+                        count: objectUsage.get(object.id) ?? 0,
+                      })}
+                    </small>
+                  </div>
+                  <IconButton
+                    label={t("timelineDeleteProp")}
+                    icon="trash"
+                    onClick={() => onDeleteObject(object)}
+                  />
+                </article>
+              );
+            })}
             {!objects.length ? (
               <button
                 type="button"

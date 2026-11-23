@@ -565,7 +565,7 @@ describe("universe scoping migrations", () => {
     delete legacy.cardEdges;
     delete legacy.constructs;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(12);
+    expect(migrated.schema_version).toBe(13);
     expect(migrated.cardTypes).toEqual([]);
     expect(migrated.cards).toEqual([]);
     expect(migrated.cardEdges).toEqual([]);
@@ -597,8 +597,8 @@ describe("universe scoping migrations", () => {
       },
     ];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(12);
-    expect(migrated.revision).toBe(23);
+    expect(migrated.schema_version).toBe(13);
+    expect(migrated.revision).toBe(24);
     expect(migrated.cardTypes[0]!.universeId).toBe("uni_mist_harbor");
     expect(migrated.constructs[0]!.universeId).toBe("uni_mist_harbor");
     expect(migrated.universes.map((universe) => universe.id)).toEqual([
@@ -624,7 +624,7 @@ describe("universe scoping migrations", () => {
       },
     ];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(12);
+    expect(migrated.schema_version).toBe(13);
     expect(migrated.universes).toHaveLength(1);
     expect(migrated.universes[0]!.id).toBe("universe_node_workshop");
     expect(migrated.cardTypes[0]!.universeId).toBe("universe_node_workshop");
@@ -636,7 +636,7 @@ describe("universe scoping migrations", () => {
     ) as unknown as Record<string, unknown>;
     legacy.schema_version = 9;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(12);
+    expect(migrated.schema_version).toBe(13);
     expect(migrated.universes).toEqual([]);
   });
 });

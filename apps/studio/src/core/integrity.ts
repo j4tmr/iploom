@@ -1,4 +1,5 @@
 import { migrateWorkspace } from "./migrations.ts";
+import { pruneCharacterRuleBindingsForUniverse } from "./rule-layer.ts";
 import type { StoryWork, StudioWorkspace, TimelineEvent } from "./types.ts";
 import {
   validateWorkspace,
@@ -403,6 +404,11 @@ export function unlinkCharacterFromUniverse(
     deleteCharacterFromDraft(draft, characterId);
     return;
   }
+  pruneCharacterRuleBindingsForUniverse(
+    character,
+    universeId,
+    draft.ruleSystems,
+  );
 
   draft.relationships = draft.relationships.filter(
     (relationship) =>
@@ -529,6 +535,13 @@ export function deleteUniverseFromDraft(
       universeIds: character.universeIds.filter((id) => id !== universeId),
     }))
     .filter((character) => character.universeIds.length > 0);
+  for (const character of draft.characters) {
+    pruneCharacterRuleBindingsForUniverse(
+      character,
+      universeId,
+      draft.ruleSystems,
+    );
+  }
 
   for (const work of draft.works) {
     for (const chapter of work.chapters) {
