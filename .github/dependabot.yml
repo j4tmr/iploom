@@ -20,5 +20,18 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: monthly
-    open-pull-requests-limit: 3
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      github-pages-actions:
+        patterns:
+          - actions/configure-pages
+          - actions/upload-pages-artifact
+          - actions/deploy-pages
+      github-actions:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - actions/configure-pages
+          - actions/upload-pages-artifact
+          - actions/deploy-pages
