@@ -150,12 +150,6 @@ function resolveEntity(
         | undefined;
       return named("entityLore", item && displayText(item.title, locale));
     }
-    case "exports": {
-      const item = at(workspace?.exports) as
-        | StudioWorkspace["exports"][number]
-        | undefined;
-      return named("entityExport", item?.workTitle);
-    }
     case "cardTypes": {
       const item = at(workspace?.cardTypes) as
         | StudioWorkspace["cardTypes"][number]

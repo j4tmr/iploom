@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
@@ -1221,31 +1221,5 @@ describe("MCP paging, scoping and bounded responses", () => {
       en: "Partial patch",
     });
     expect(patchedView.body_chars).toEqual({ zh: 4, en: 12 });
-  });
-
-  test("reports export totals while previewing long lists", async () => {
-    const result = await call(inline, "export_arcreel_bundle", {
-      novel_id: "work_tide_clock",
-    });
-    expect(result.isError).toBe(false);
-    expectWithinBudget(result, "export_arcreel_bundle");
-    expect(result.body.chapter_count).toBe(3 + BULK_CHAPTERS);
-    expect((result.body.chapters as unknown[]).length).toBe(50);
-    const pathCount = result.body.path_count as number;
-    expect(pathCount).toBe(result.body.files_written as number);
-    expect(pathCount).toBeGreaterThan(50);
-    expect((result.body.paths as unknown[]).length).toBe(50);
-    expect(result.body.warning_count).toBeGreaterThan(20);
-    expect((result.body.warnings as unknown[]).length).toBe(20);
-    const directory = result.body.directory as string;
-    expect(existsSync(join(directory, "manifest.json"))).toBe(true);
-    const manifest = JSON.parse(
-      readFileSync(join(directory, "manifest.json"), "utf8"),
-    ) as {
-      files: unknown[];
-      adaptation: { totals: { chapters: number } };
-    };
-    expect(manifest.files).toHaveLength(pathCount - 1);
-    expect(manifest.adaptation.totals.chapters).toBe(3 + BULK_CHAPTERS);
   });
 });

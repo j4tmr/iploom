@@ -267,8 +267,8 @@ describe("foundation standards", () => {
     delete legacy.standards;
     legacy.workflowTasks = [];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(11);
-    expect(migrated.revision).toBe(28);
+    expect(migrated.schema_version).toBe(12);
+    expect(migrated.revision).toBe(29);
     expect(migrated.standards).toEqual([]);
   });
 });

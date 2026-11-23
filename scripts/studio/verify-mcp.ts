@@ -121,17 +121,6 @@ try {
   if (!briefText?.includes("task_chapter_three")) {
     throw new Error("Bundled MCP workflow brief did not include the task");
   }
-  const exported = await client.callTool(
-    {
-      name: "export_arcreel_bundle",
-      arguments: {
-        novel_id: "work_tide_clock",
-        output_dir: "exports/bundle-export",
-      },
-    },
-    requestOptions,
-  );
-  if (exported.isError) throw new Error("Bundled MCP export failed");
   console.log(
     `[mcp] bundled Electron runtime ok: ${tools.tools.length} tools, ${binary}${
       arch ? ` (${arch})` : ""

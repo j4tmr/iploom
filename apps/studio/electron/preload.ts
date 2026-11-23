@@ -40,7 +40,6 @@ const api: StudioBridge = {
   },
   flushComplete: (requestId, error, workspace, stale) =>
     invoke("iploom:flush-complete", requestId, error, workspace, stale),
-  exportArcReel: (bundle) => invoke("iploom:export-arc-reel", bundle),
   appInfo: () => invoke("iploom:app-info"),
   checkForUpdates: () => invoke("iploom:check-update"),
   onNavigateRoute: (listener) => {
