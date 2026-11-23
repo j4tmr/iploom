@@ -1,5 +1,9 @@
 import { displayText } from "./factory.ts";
-import { ruleLayerPromptSection } from "./rule-layer.ts";
+import {
+  formatCharacterRuleBindings,
+  formatStoryObjectRuleBinding,
+  ruleLayerPromptSection,
+} from "./rule-layer.ts";
 import {
   standardRefNoticeSection,
   standardsPromptSection,
@@ -409,10 +413,18 @@ export function buildWorkflowBrief(
           }),
         ...workspace.storyObjects
           .filter((item) => item.universeId === world.id)
-          .map(
-            (item) =>
-              `- **${displayText(item.name, locale)}** (\`${item.id}\`, ${displayText(item.category, locale)}): ${displayText(item.summary, locale)}${item.visualPrompt ? `\n  - ${zh ? "视觉锚点" : "Visual anchor"}: ${item.visualPrompt}` : ""}`,
-          ),
+          .map((item) => {
+            const stats = formatStoryObjectRuleBinding(workspace, item, locale);
+            const details = [
+              stats
+                ? `${zh ? "结构化数值" : "Structured stats"}: ${stats}`
+                : "",
+              item.visualPrompt
+                ? `${zh ? "视觉锚点" : "Visual anchor"}: ${item.visualPrompt}`
+                : "",
+            ].filter(Boolean);
+            return `- **${displayText(item.name, locale)}** (\`${item.id}\`, ${displayText(item.category, locale)}): ${displayText(item.summary, locale)}${details.map((detail) => `\n  - ${detail}`).join("")}`;
+          }),
         ...workspace.factions
           .filter((item) => item.universeId === world.id)
           .map(
@@ -503,7 +515,18 @@ export function buildWorkflowBrief(
     lines.push(
       ...section(zh ? "人物锚点" : "Cast anchors", [
         ...cast.map((character) => {
+          const ruleLines = formatCharacterRuleBindings(
+            workspace,
+            character,
+            universeId,
+            locale,
+          );
           const anchors = [
+            ...(ruleLines.length
+              ? [
+                  `${zh ? "规则绑定" : "Rule standing"}: ${ruleLines.join("; ")}`,
+                ]
+              : []),
             `${zh ? "外形" : "Look"}: ${character.appearance || "—"}`,
             `${zh ? "视觉锚点" : "Visual anchor"}: ${character.visualPrompt || "—"}`,
             character.personality

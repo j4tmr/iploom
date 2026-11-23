@@ -9,11 +9,15 @@ import {
 } from "./types.ts";
 import {
   abilityTemplateSchema,
+  characterRuleBindingSchema,
   itemStatTemplateSchema,
   MAX_ABILITY_TEMPLATES,
+  MAX_CHARACTER_RULE_BINDINGS,
   MAX_ITEM_STAT_TEMPLATES,
   MAX_RULE_SYSTEMS,
   ruleSystemSchema,
+  storyObjectRuleBindingSchema,
+  validateRuleLayerWorkspace,
 } from "./rule-layer.ts";
 
 const identifier = z
@@ -215,6 +219,10 @@ export const characterSchema = z
     tags: z.array(z.string().max(100)).max(50).default([]),
     color: color,
     reusable: z.boolean().default(false),
+    ruleBindings: z
+      .array(characterRuleBindingSchema)
+      .max(MAX_CHARACTER_RULE_BINDINGS)
+      .optional(),
     createdAt: isoDate,
     updatedAt: isoDate,
   })
@@ -242,6 +250,7 @@ export const storyObjectSchema = z
     summary: localizedSchema,
     visualPrompt: z.string().max(20_000).default(""),
     sourceNotes: z.string().max(100_000).default(""),
+    ruleBinding: storyObjectRuleBindingSchema.optional(),
     createdAt: isoDate,
     updatedAt: isoDate,
   })
@@ -610,9 +619,6 @@ export const workspaceSchema = z
     const storyObjectsById = new Map(
       workspace.storyObjects.map((item) => [item.id, item]),
     );
-    const ruleSystemsById = new Map(
-      workspace.ruleSystems.map((item) => [item.id, item]),
-    );
     const worksById = new Map(workspace.works.map((work) => [work.id, work]));
 
     const issue = (path: (string | number)[], message: string) =>
@@ -868,82 +874,8 @@ export const workspaceSchema = z
       if (standard.universeId && !universes.has(standard.universeId))
         issue(["standards", index, "universeId"], "unknown universe");
     }
-    for (const [index, system] of workspace.ruleSystems.entries()) {
-      if (!universes.has(system.universeId))
-        issue(["ruleSystems", index, "universeId"], "unknown universe");
-    }
-    for (const [index, ability] of workspace.abilityTemplates.entries()) {
-      const system = ruleSystemsById.get(ability.ruleSystemId);
-      if (!universes.has(ability.universeId))
-        issue(["abilityTemplates", index, "universeId"], "unknown universe");
-      if (!system)
-        issue(
-          ["abilityTemplates", index, "ruleSystemId"],
-          "unknown rule system",
-        );
-      else {
-        if (system.universeId !== ability.universeId)
-          issue(
-            ["abilityTemplates", index, "ruleSystemId"],
-            "rule system belongs to another universe",
-          );
-        if (
-          ability.tierId &&
-          !system.tiers.some((tier) => tier.id === ability.tierId)
-        )
-          issue(["abilityTemplates", index, "tierId"], "unknown tier");
-        for (const [effectIndex, effect] of ability.effects.entries()) {
-          if (
-            !system.attributes.some(
-              (attribute) => attribute.key === effect.attributeKey,
-            )
-          )
-            issue(
-              [
-                "abilityTemplates",
-                index,
-                "effects",
-                effectIndex,
-                "attributeKey",
-              ],
-              `unknown attribute: ${effect.attributeKey}`,
-            );
-        }
-      }
-    }
-    for (const [index, item] of workspace.itemStatTemplates.entries()) {
-      const system = ruleSystemsById.get(item.ruleSystemId);
-      if (!universes.has(item.universeId))
-        issue(["itemStatTemplates", index, "universeId"], "unknown universe");
-      if (!system)
-        issue(
-          ["itemStatTemplates", index, "ruleSystemId"],
-          "unknown rule system",
-        );
-      else {
-        if (system.universeId !== item.universeId)
-          issue(
-            ["itemStatTemplates", index, "ruleSystemId"],
-            "rule system belongs to another universe",
-          );
-        if (
-          item.tierId &&
-          !system.tiers.some((tier) => tier.id === item.tierId)
-        )
-          issue(["itemStatTemplates", index, "tierId"], "unknown tier");
-        for (const [statIndex, stat] of item.stats.entries()) {
-          if (
-            !system.attributes.some(
-              (attribute) => attribute.key === stat.attributeKey,
-            )
-          )
-            issue(
-              ["itemStatTemplates", index, "stats", statIndex, "attributeKey"],
-              `unknown attribute: ${stat.attributeKey}`,
-            );
-        }
-      }
-    }
+    for (const found of validateRuleLayerWorkspace(workspace))
+      issue(found.path, found.message);
     for (const [index, character] of workspace.characters.entries()) {
       if (!character.universeIds.length)
         issue(["characters", index, "universeIds"], "at least one is required");

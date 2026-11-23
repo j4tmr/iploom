@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createId, displayText } from "../core/factory.ts";
+import { validateStoryObjectRuleBinding } from "../core/rule-layer.ts";
 import type {
   StoryObject,
+  StoryObjectRuleBinding,
   StudioWorkspace,
   TimelineCanonStatus,
   TimelineEvent,
@@ -9,6 +11,12 @@ import type {
   TimelineSubjectKind,
   UiLocale,
 } from "../core/types.ts";
+import {
+  draftsToEffects,
+  EffectsEditor,
+  effectsToDrafts,
+  type EffectDraft,
+} from "./rule-forms.tsx";
 import {
   Button,
   Field,
@@ -60,7 +68,64 @@ export function StoryObjectModal({
   const [summaryEn, setSummaryEn] = useState(initial?.summary.en ?? "");
   const [visualPrompt, setVisualPrompt] = useState(initial?.visualPrompt ?? "");
   const [sourceNotes, setSourceNotes] = useState(initial?.sourceNotes ?? "");
-  const canSave = Boolean(universeId && (nameZh.trim() || nameEn.trim()));
+  const [ruleSystemId, setRuleSystemId] = useState(
+    initial?.ruleBinding?.ruleSystemId ?? "",
+  );
+  const [itemStatTemplateId, setItemStatTemplateId] = useState(
+    initial?.ruleBinding?.itemStatTemplateId ?? "",
+  );
+  const [tierId, setTierId] = useState(initial?.ruleBinding?.tierId ?? "");
+  const [statDrafts, setStatDrafts] = useState<EffectDraft[]>(() =>
+    effectsToDrafts(initial?.ruleBinding?.stats ?? []),
+  );
+  const availableRuleSystems = useMemo(
+    () =>
+      workspace.ruleSystems.filter((item) => item.universeId === universeId),
+    [universeId, workspace.ruleSystems],
+  );
+  const selectedRuleSystem = availableRuleSystems.find(
+    (item) => item.id === ruleSystemId,
+  );
+  const availableItemTemplates = useMemo(
+    () =>
+      selectedRuleSystem
+        ? workspace.itemStatTemplates.filter(
+            (item) => item.ruleSystemId === selectedRuleSystem.id,
+          )
+        : [],
+    [selectedRuleSystem, workspace.itemStatTemplates],
+  );
+  const parsedStats = useMemo(() => draftsToEffects(statDrafts), [statDrafts]);
+  const builtRuleBinding = useMemo<{
+    binding?: StoryObjectRuleBinding;
+    valid: boolean;
+  }>(() => {
+    if (!selectedRuleSystem) return { valid: true };
+    if (parsedStats.invalidValue) return { valid: false };
+    const binding: StoryObjectRuleBinding = {
+      ruleSystemId: selectedRuleSystem.id,
+      ...(itemStatTemplateId ? { itemStatTemplateId } : {}),
+      ...(tierId ? { tierId } : {}),
+      stats: parsedStats.effects,
+    };
+    const issues = validateStoryObjectRuleBinding(
+      { universeId, ruleBinding: binding },
+      new Map(availableRuleSystems.map((item) => [item.id, item])),
+      new Map(availableItemTemplates.map((item) => [item.id, item])),
+    );
+    return { binding, valid: issues.length === 0 };
+  }, [
+    availableItemTemplates,
+    availableRuleSystems,
+    itemStatTemplateId,
+    parsedStats,
+    selectedRuleSystem,
+    tierId,
+    universeId,
+  ]);
+  const canSave = Boolean(
+    universeId && (nameZh.trim() || nameEn.trim()) && builtRuleBinding.valid,
+  );
 
   return (
     <Modal
@@ -89,6 +154,9 @@ export function StoryObjectModal({
                 summary: { zh: summaryZh.trim(), en: summaryEn.trim() },
                 visualPrompt,
                 sourceNotes,
+                ...(builtRuleBinding.binding
+                  ? { ruleBinding: builtRuleBinding.binding }
+                  : {}),
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
@@ -109,7 +177,13 @@ export function StoryObjectModal({
           <Select
             value={universeId}
             disabled={Boolean(initial)}
-            onChange={(event) => setUniverseId(event.target.value)}
+            onChange={(event) => {
+              setUniverseId(event.target.value);
+              setRuleSystemId("");
+              setItemStatTemplateId("");
+              setTierId("");
+              setStatDrafts([]);
+            }}
           >
             {workspace.universes.map((item) => (
               <option key={item.id} value={item.id}>
@@ -175,6 +249,83 @@ export function StoryObjectModal({
             onChange={(event) => setSourceNotes(event.target.value)}
           />
         </Field>
+        {availableRuleSystems.length > 0 ? (
+          <div className="card-field-editor field-wide">
+            <strong>{t("rulesObjectBindingTitle")}</strong>
+            <FieldGrid>
+              <Field label={t("rulesObjectBindingSystem")} wide>
+                <Select
+                  value={ruleSystemId}
+                  onChange={(event) => {
+                    setRuleSystemId(event.target.value);
+                    setItemStatTemplateId("");
+                    setTierId("");
+                    setStatDrafts([]);
+                  }}
+                >
+                  <option value="">{t("rulesNoSystemOption")}</option>
+                  {availableRuleSystems.map((system) => (
+                    <option key={system.id} value={system.id}>
+                      {displayText(system.title, locale)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              {selectedRuleSystem ? (
+                <>
+                  <Field label={t("rulesObjectBindingTemplate")}>
+                    <Select
+                      value={itemStatTemplateId}
+                      onChange={(event) => {
+                        const nextId = event.target.value;
+                        setItemStatTemplateId(nextId);
+                        const tpl = availableItemTemplates.find(
+                          (item) => item.id === nextId,
+                        );
+                        if (tpl?.tierId && !tierId) setTierId(tpl.tierId);
+                      }}
+                    >
+                      <option value="">{t("rulesNoTemplateOption")}</option>
+                      {availableItemTemplates.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {displayText(template.name, locale)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={t("rulesSelectTier")}>
+                    <Select
+                      value={tierId}
+                      onChange={(event) => setTierId(event.target.value)}
+                    >
+                      <option value="">{t("rulesNoTierOption")}</option>
+                      {[...selectedRuleSystem.tiers]
+                        .sort((a, b) => a.rank - b.rank)
+                        .map((tier) => (
+                          <option key={tier.id} value={tier.id}>
+                            #{tier.rank} {displayText(tier.name, locale)}
+                          </option>
+                        ))}
+                    </Select>
+                  </Field>
+                </>
+              ) : null}
+            </FieldGrid>
+            {selectedRuleSystem ? (
+              <EffectsEditor
+                system={selectedRuleSystem}
+                drafts={statDrafts}
+                onChange={setStatDrafts}
+                title={t("rulesObjectBindingStats")}
+                locale={locale}
+                t={t}
+              />
+            ) : null}
+            {!builtRuleBinding.valid ? (
+              <p className="form-error">{t("rulesBindingInvalid")}</p>
+            ) : null}
+          </div>
+        ) : null}
       </FieldGrid>
     </Modal>
   );

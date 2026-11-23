@@ -19,12 +19,15 @@ import {
   type FoundationCheckTarget,
 } from "../core/foundation-readiness.ts";
 import { buildRelationshipGraph } from "../core/graph.ts";
+import { formatCharacterRuleBindings } from "../core/rule-layer.ts";
 import type { StandardCandidate } from "../core/standards.ts";
 import type {
+  AbilityTemplate,
   Card,
   CardEdge,
   CardType,
   Character,
+  ItemStatTemplate,
   LoreEntry,
   Relationship,
   RuleStatus,
@@ -89,9 +92,18 @@ export function UniverseView({
   onNewStandard,
   onEditStandard,
   onStatusChange,
+  onRegisterCandidates,
+  onNewRuleSystem,
+  onEditRuleSystem,
   onRuleSystemStatusChange,
   onDeleteRuleSystem,
-  onRegisterCandidates,
+  onNewAbility,
+  onEditAbility,
+  onDeleteAbility,
+  onNewItemTemplate,
+  onEditItemTemplate,
+  onDeleteItemTemplate,
+  onOpenFoundationSkill,
   onOpenWorkflow,
   onOpenSettings,
   onNewTask,
@@ -154,9 +166,18 @@ export function UniverseView({
   onNewStandard: () => void;
   onEditStandard: (standard: WorkspaceStandard) => void;
   onStatusChange: (standard: WorkspaceStandard, status: StandardStatus) => void;
-  onRuleSystemStatusChange?: (system: RuleSystem, status: RuleStatus) => void;
-  onDeleteRuleSystem?: (system: RuleSystem) => void;
   onRegisterCandidates: (candidates: StandardCandidate[]) => void;
+  onNewRuleSystem: () => void;
+  onEditRuleSystem: (system: RuleSystem) => void;
+  onRuleSystemStatusChange: (system: RuleSystem, status: RuleStatus) => void;
+  onDeleteRuleSystem: (system: RuleSystem) => void;
+  onNewAbility: (ruleSystemId: string) => void;
+  onEditAbility: (ability: AbilityTemplate) => void;
+  onDeleteAbility: (ability: AbilityTemplate) => void;
+  onNewItemTemplate: (ruleSystemId: string) => void;
+  onEditItemTemplate: (item: ItemStatTemplate) => void;
+  onDeleteItemTemplate: (item: ItemStatTemplate) => void;
+  onOpenFoundationSkill: () => void;
   onOpenWorkflow: () => void;
   onOpenSettings: () => void;
   onNewTask: () => void;
@@ -205,6 +226,9 @@ export function UniverseView({
   const standardCount = workspace.standards.filter(
     (standard) => !standard.universeId || standard.universeId === universe.id,
   ).length;
+  const ruleSystemCount = workspace.ruleSystems.filter(
+    (system) => system.universeId === universe.id,
+  ).length;
   const foundationReport = useMemo(
     () => evaluateUniverseFoundation(workspace, universe.id),
     [workspace, universe.id],
@@ -250,7 +274,11 @@ export function UniverseView({
     },
     { id: "graph", label: t("graph"), count: graph.edges.length },
     { id: "timeline", label: t("timeline"), count: timelineCount },
-    { id: "foundation", label: t("foundation"), count: standardCount },
+    {
+      id: "foundation",
+      label: t("foundation"),
+      count: standardCount + ruleSystemCount,
+    },
     { id: "stories", label: t("stories"), count: works.length },
     { id: "workflow", label: t("workflow"), count: worldTasks.length },
   ];
@@ -549,6 +577,23 @@ export function UniverseView({
                   <p className="cast-summary">
                     {displayText(character.summary, locale)}
                   </p>
+                  {(() => {
+                    const standing = formatCharacterRuleBindings(
+                      workspace,
+                      character,
+                      universe.id,
+                      locale,
+                    );
+                    return standing.length ? (
+                      <div className="rule-chip-list">
+                        {standing.map((line) => (
+                          <span className="rule-standing-chip" key={line}>
+                            {line}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
                   <TagList values={character.tags} max={4} />
                   <div className="cast-links">
                     <Icon name="link" size={14} />
@@ -857,12 +902,21 @@ export function UniverseView({
           onNewStandard={onNewStandard}
           onEditStandard={onEditStandard}
           onStatusChange={onStatusChange}
-          onRuleSystemStatusChange={onRuleSystemStatusChange}
-          onDeleteRuleSystem={onDeleteRuleSystem}
           onSelectChecklistTarget={handleChecklistTarget}
           onRegisterCandidates={(candidates) =>
             onRegisterCandidates(candidates)
           }
+          onNewRuleSystem={onNewRuleSystem}
+          onEditRuleSystem={onEditRuleSystem}
+          onRuleSystemStatusChange={onRuleSystemStatusChange}
+          onDeleteRuleSystem={onDeleteRuleSystem}
+          onNewAbility={onNewAbility}
+          onEditAbility={onEditAbility}
+          onDeleteAbility={onDeleteAbility}
+          onNewItemTemplate={onNewItemTemplate}
+          onEditItemTemplate={onEditItemTemplate}
+          onDeleteItemTemplate={onDeleteItemTemplate}
+          onOpenFoundationSkill={onOpenFoundationSkill}
           onOpenWorkflow={onOpenWorkflow}
           onOpenSettings={onOpenSettings}
         />

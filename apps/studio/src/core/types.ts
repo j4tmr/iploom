@@ -1,4 +1,4 @@
-export const WORKSPACE_SCHEMA_VERSION = 14 as const;
+export const WORKSPACE_SCHEMA_VERSION = 15 as const;
 /** Longest result text the workspace stores per language. */
 export const MAX_WORKFLOW_RESULT_LENGTH = 200_000 as const;
 /** Longest text a localized name, tagline or summary field may hold per language. */
@@ -224,6 +224,8 @@ export interface Character {
   tags: string[];
   color: string;
   reusable: boolean;
+  /** Optional per-rule-system tier, attribute values and learned abilities. */
+  ruleBindings?: CharacterRuleBinding[];
   createdAt: string;
   updatedAt: string;
 }
@@ -247,6 +249,8 @@ export interface StoryObject {
   summary: LocalizedText;
   visualPrompt: string;
   sourceNotes: string;
+  /** Optional structured stat block linked to a universe rule system. */
+  ruleBinding?: StoryObjectRuleBinding;
   createdAt: string;
   updatedAt: string;
 }
@@ -409,6 +413,29 @@ export interface ItemStatTemplate {
   summary: LocalizedText;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * A character's structured standing under one universe-scoped rule system.
+ * Meaning (tier bounds, attribute types, units) lives once on the rule system
+ * rather than being restated per character.
+ */
+export interface CharacterRuleBinding {
+  ruleSystemId: string;
+  tierId?: string;
+  attributes: Record<string, number | string>;
+  abilityIds: string[];
+}
+
+/**
+ * Structured stat block linking a story object to a universe rule system and
+ * optional item stat template.
+ */
+export interface StoryObjectRuleBinding {
+  ruleSystemId: string;
+  itemStatTemplateId?: string;
+  tierId?: string;
+  stats: RuleEffect[];
 }
 
 export type CardFieldType = "integer" | "decimal" | "text" | "enum";

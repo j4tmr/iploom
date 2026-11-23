@@ -23,6 +23,12 @@ import { Icon } from "./components/icon.tsx";
 import { ManuscriptImport } from "./components/manuscript-import.tsx";
 import { SearchOverlay } from "./components/search-overlay.tsx";
 import {
+  AbilityTemplateModal,
+  ItemStatTemplateModal,
+  RuleSystemModal,
+  WorldFoundationSkillModal,
+} from "./components/rule-forms.tsx";
+import {
   StoryObjectModal,
   TimelineEventModal,
 } from "./components/timeline-forms.tsx";
@@ -51,7 +57,6 @@ import {
 import {
   deleteChapterFromDraft,
   deleteCharacterFromDraft,
-  deleteRuleSystemFromDraft,
   deleteUniverseFromDraft,
   deleteWorkFromDraft,
   reassignStandardUniverse,
@@ -65,6 +70,12 @@ import {
 import { MCP_TOOL_NAMES, mcpToolsNote } from "./core/mcp-tools.ts";
 import { quickBuildWork } from "./core/quick-build.ts";
 import {
+  deleteAbilityTemplateFromDraft,
+  deleteItemStatTemplateFromDraft,
+  deleteRuleSystemFromDraft,
+  reconcileRuleSystemUpdate,
+} from "./core/rule-layer.ts";
+import {
   attachOverlayKeyboard,
   isComposingEvent,
   overlayStack,
@@ -76,12 +87,14 @@ import {
   findWorldTemplate,
 } from "./core/world-templates.ts";
 import type {
+  AbilityTemplate,
   Card,
   CardEdge,
   CardType,
   Chapter,
   Character,
   FoundationBypassRecord,
+  ItemStatTemplate,
   LoreEntry,
   Relationship,
   RuleStatus,
@@ -154,6 +167,18 @@ type ModalState =
     }
   | { kind: "mcp" }
   | { kind: "standard"; initial?: WorkspaceStandard; universeId?: string }
+  | { kind: "ruleSystem"; universeId: string; initial?: RuleSystem }
+  | {
+      kind: "abilityTemplate";
+      ruleSystemId: string;
+      initial?: AbilityTemplate;
+    }
+  | {
+      kind: "itemStatTemplate";
+      ruleSystemId: string;
+      initial?: ItemStatTemplate;
+    }
+  | { kind: "foundationSkill"; universeId: string }
   | {
       kind: "cardType";
       universeId: string;
@@ -834,25 +859,6 @@ export function App() {
     });
   };
 
-  const changeRuleSystemStatus = (system: RuleSystem, status: RuleStatus) => {
-    mutateChecked((draft) => {
-      const target = draft.ruleSystems.find((item) => item.id === system.id);
-      if (!target || target.status === status) return;
-      target.status = status;
-      target.updatedAt = new Date().toISOString();
-    });
-  };
-
-  const deleteRuleSystem = (system: RuleSystem) => {
-    const message = t("foundationRuleSystemDeleteConfirm", {
-      name: displayText(system.title, locale),
-    });
-    if (!window.confirm(message)) return;
-    if (!mutateChecked((draft) => deleteRuleSystemFromDraft(draft, system.id)))
-      return;
-    notify(t("saved"));
-  };
-
   const registerStandardCandidates = (
     candidates: StandardCandidate[],
     universeId?: string,
@@ -888,6 +894,102 @@ export function App() {
         ? t("foundationLimitReached")
         : t("foundationRegistered"),
     );
+  };
+
+  const saveRuleSystem = (next: RuleSystem): boolean => {
+    const applied = mutateChecked((draft) => {
+      const index = draft.ruleSystems.findIndex((item) => item.id === next.id);
+      if (index >= 0) {
+        draft.ruleSystems[index] = {
+          ...next,
+          universeId: draft.ruleSystems[index]!.universeId,
+        };
+        reconcileRuleSystemUpdate(draft, draft.ruleSystems[index]!);
+      } else {
+        draft.ruleSystems.push(next);
+      }
+    });
+    if (applied) notify(t("saved"));
+    return applied;
+  };
+
+  const changeRuleSystemStatus = (system: RuleSystem, status: RuleStatus) => {
+    mutate((draft) => {
+      const target = draft.ruleSystems.find((item) => item.id === system.id);
+      if (!target || target.status === status) return;
+      target.status = status;
+      target.updatedAt = new Date().toISOString();
+    });
+  };
+
+  const deleteRuleSystem = (system: RuleSystem) => {
+    const message = t("rulesDeleteSystemConfirm", {
+      name: displayText(system.title, locale),
+    });
+    if (!window.confirm(message)) return;
+    if (mutateChecked((draft) => deleteRuleSystemFromDraft(draft, system.id)))
+      notify(t("saved"));
+  };
+
+  const saveAbilityTemplate = (next: AbilityTemplate): boolean => {
+    const applied = mutateChecked((draft) => {
+      const index = draft.abilityTemplates.findIndex(
+        (item) => item.id === next.id,
+      );
+      if (index >= 0) draft.abilityTemplates[index] = next;
+      else draft.abilityTemplates.push(next);
+    });
+    if (applied) notify(t("saved"));
+    return applied;
+  };
+
+  const deleteAbilityTemplate = (ability: AbilityTemplate) => {
+    const message = t("rulesDeleteAbilityConfirm", {
+      name: displayText(ability.name, locale),
+    });
+    if (!window.confirm(message)) return;
+    if (
+      mutateChecked((draft) =>
+        deleteAbilityTemplateFromDraft(draft, ability.id),
+      )
+    )
+      notify(t("saved"));
+  };
+
+  const saveItemStatTemplate = (next: ItemStatTemplate): boolean => {
+    const applied = mutateChecked((draft) => {
+      const index = draft.itemStatTemplates.findIndex(
+        (item) => item.id === next.id,
+      );
+      if (index >= 0) draft.itemStatTemplates[index] = next;
+      else draft.itemStatTemplates.push(next);
+    });
+    if (applied) notify(t("saved"));
+    return applied;
+  };
+
+  const deleteItemStatTemplate = (item: ItemStatTemplate) => {
+    const message = t("rulesDeleteItemConfirm", {
+      name: displayText(item.name, locale),
+    });
+    if (!window.confirm(message)) return;
+    if (
+      mutateChecked((draft) => deleteItemStatTemplateFromDraft(draft, item.id))
+    )
+      notify(t("saved"));
+  };
+
+  const commitFoundationSkillWorkspace = (
+    nextWorkspace: StudioWorkspace,
+  ): boolean => {
+    const applied = mutateChecked((draft) => {
+      draft.standards = nextWorkspace.standards;
+      draft.ruleSystems = nextWorkspace.ruleSystems;
+      draft.abilityTemplates = nextWorkspace.abilityTemplates;
+      draft.itemStatTemplates = nextWorkspace.itemStatTemplates;
+    });
+    if (applied) notify(t("rulesSkillRegistered"));
+    return applied;
   };
 
   const deleteAtlas = (kind: "location" | "faction" | "lore", id: string) => {
@@ -1217,10 +1319,45 @@ export function App() {
                 setModal({ kind: "standard", initial })
               }
               onStatusChange={changeStandardStatus}
-              onRuleSystemStatusChange={changeRuleSystemStatus}
-              onDeleteRuleSystem={deleteRuleSystem}
               onRegisterCandidates={(candidates) =>
                 registerStandardCandidates(candidates, universe.id)
+              }
+              onNewRuleSystem={() =>
+                setModal({ kind: "ruleSystem", universeId: universe.id })
+              }
+              onEditRuleSystem={(initial) =>
+                setModal({
+                  kind: "ruleSystem",
+                  universeId: initial.universeId,
+                  initial,
+                })
+              }
+              onRuleSystemStatusChange={changeRuleSystemStatus}
+              onDeleteRuleSystem={deleteRuleSystem}
+              onNewAbility={(ruleSystemId) =>
+                setModal({ kind: "abilityTemplate", ruleSystemId })
+              }
+              onEditAbility={(initial) =>
+                setModal({
+                  kind: "abilityTemplate",
+                  ruleSystemId: initial.ruleSystemId,
+                  initial,
+                })
+              }
+              onDeleteAbility={deleteAbilityTemplate}
+              onNewItemTemplate={(ruleSystemId) =>
+                setModal({ kind: "itemStatTemplate", ruleSystemId })
+              }
+              onEditItemTemplate={(initial) =>
+                setModal({
+                  kind: "itemStatTemplate",
+                  ruleSystemId: initial.ruleSystemId,
+                  initial,
+                })
+              }
+              onDeleteItemTemplate={deleteItemStatTemplate}
+              onOpenFoundationSkill={() =>
+                setModal({ kind: "foundationSkill", universeId: universe.id })
               }
               onOpenWorkflow={() => replaceRoute({ ...route, tab: "workflow" })}
               onOpenSettings={() => navigate({ name: "settings" })}
@@ -1610,6 +1747,64 @@ export function App() {
           initial={modal.initial}
           defaultUniverseId={modal.universeId}
           onSave={saveStandard}
+        />
+      ) : null}
+      {modal?.kind === "ruleSystem" ? (
+        <RuleSystemModal
+          key={`rule-system-${modal.initial?.id ?? "new"}`}
+          open
+          onClose={() => setModal(null)}
+          t={t}
+          locale={locale}
+          universeId={modal.universeId}
+          initial={modal.initial}
+          onSave={saveRuleSystem}
+        />
+      ) : null}
+      {modal?.kind === "abilityTemplate" &&
+      workspace.ruleSystems.find((item) => item.id === modal.ruleSystemId) ? (
+        <AbilityTemplateModal
+          key={`ability-${modal.initial?.id ?? "new"}-${modal.ruleSystemId}`}
+          open
+          onClose={() => setModal(null)}
+          t={t}
+          locale={locale}
+          system={
+            workspace.ruleSystems.find(
+              (item) => item.id === modal.ruleSystemId,
+            )!
+          }
+          initial={modal.initial}
+          onSave={saveAbilityTemplate}
+        />
+      ) : null}
+      {modal?.kind === "itemStatTemplate" &&
+      workspace.ruleSystems.find((item) => item.id === modal.ruleSystemId) ? (
+        <ItemStatTemplateModal
+          key={`item-stat-${modal.initial?.id ?? "new"}-${modal.ruleSystemId}`}
+          open
+          onClose={() => setModal(null)}
+          t={t}
+          locale={locale}
+          system={
+            workspace.ruleSystems.find(
+              (item) => item.id === modal.ruleSystemId,
+            )!
+          }
+          initial={modal.initial}
+          onSave={saveItemStatTemplate}
+        />
+      ) : null}
+      {modal?.kind === "foundationSkill" ? (
+        <WorldFoundationSkillModal
+          key={`foundation-skill-${modal.universeId}`}
+          open
+          onClose={() => setModal(null)}
+          t={t}
+          locale={locale}
+          workspace={workspace}
+          universeId={modal.universeId}
+          onCommitWorkspace={commitFoundationSkillWorkspace}
         />
       ) : null}
       {modal?.kind === "cardType" ? (

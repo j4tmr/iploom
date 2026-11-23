@@ -260,8 +260,8 @@ describe("schema v14 migration and foundationBypass validation", () => {
 
     const migrated = validateWorkspace(legacy);
     expect(migrated.schema_version).toBe(WORKSPACE_SCHEMA_VERSION);
-    expect(migrated.schema_version).toBe(14);
-    expect(migrated.revision).toBe(16);
+    expect(migrated.schema_version).toBe(15);
+    expect(migrated.revision).toBe(17);
     expect(migrated.works[0]?.foundationBypass).toBeUndefined();
     expect(migrated.works[0]?.chapters[0]?.foundationBypass).toBeUndefined();
   });

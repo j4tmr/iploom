@@ -186,6 +186,51 @@ describe("validation messages", () => {
       name: { zh: "刷子游戏", en: "Looter game" },
       appliedAt: NOW,
     });
+    edited.ruleSystems.push({
+      id: "rules_msg",
+      universeId,
+      title: { zh: "潮汐等级", en: "Tide tiers" },
+      kind: "attribute",
+      summary: "",
+      unit: "",
+      tiers: [],
+      attributes: [
+        {
+          key: "res",
+          label: { zh: "共鸣", en: "Resonance" },
+          type: "integer",
+          unit: "点",
+          enumValues: [],
+          description: "",
+        },
+      ],
+      status: "draft",
+      version: 1,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    edited.abilityTemplates.push({
+      id: "ability_msg",
+      universeId,
+      ruleSystemId: "rules_msg",
+      name: { zh: "钟鸣", en: "Chime" },
+      summary: { zh: "", en: "" },
+      effects: [],
+      cost: "",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    edited.itemStatTemplates.push({
+      id: "item_msg",
+      universeId,
+      ruleSystemId: "rules_msg",
+      name: { zh: "铜钥", en: "Brass key" },
+      category: { zh: "遗物", en: "Relic" },
+      stats: [],
+      summary: { zh: "", en: "" },
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
     const workIndex = edited.works.findIndex(
       (item) => item.id === "work_tide_clock",
     );
@@ -197,6 +242,9 @@ describe("validation messages", () => {
       ["characters.0.name.zh", "人物"],
       ["relationships.0.label.zh", "人物关系"],
       ["standards.0.title.zh", "基础规则"],
+      ["ruleSystems.0.title.zh", "结构化规则体系"],
+      ["abilityTemplates.0.name.zh", "技能模板"],
+      ["itemStatTemplates.0.name.zh", "物品属性模板"],
       ["workflowTasks.0.title.zh", "AI 任务"],
       ["timelineEvents.0.title.zh", "时间线事件"],
       ["storyObjects.0.name.zh", "故事物件"],
