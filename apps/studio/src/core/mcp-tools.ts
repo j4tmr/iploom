@@ -27,6 +27,8 @@ export const MCP_TOOLS = [
   { name: "get_workflow_result", access: "read" },
   { name: "list_standards", access: "read" },
   { name: "get_standard", access: "read" },
+  { name: "list_card_types", access: "read" },
+  { name: "list_cards", access: "read" },
   { name: "list_rule_systems", access: "read" },
   { name: "get_rule_system", access: "read" },
   { name: "check_rule_consistency", access: "read" },

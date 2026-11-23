@@ -113,7 +113,9 @@ export function UniverseView({
   onDeleteCardType,
   onNewCard,
   onEditCard,
+  onSaveCards,
   onBatchCards,
+  onAiBatchCards,
   onNewCardEdge,
   onDeleteCard,
   onDeleteCardEdge,
@@ -185,7 +187,9 @@ export function UniverseView({
   onDeleteCardType: (type: CardType) => void;
   onNewCard: (typeId: string) => void;
   onEditCard: (card: Card) => void;
+  onSaveCards: (cards: Card[]) => boolean;
   onBatchCards: (typeId: string) => void;
+  onAiBatchCards: (typeId: string) => void;
   onNewCardEdge: (defaultSourceId?: string) => void;
   onDeleteCard: (card: Card) => void;
   onDeleteCardEdge: (edge: CardEdge) => void;
@@ -841,7 +845,9 @@ export function UniverseView({
           onDeleteType={onDeleteCardType}
           onNewCard={onNewCard}
           onEditCard={onEditCard}
+          onSaveCards={onSaveCards}
           onBatch={onBatchCards}
+          onAiBatch={onAiBatchCards}
           onNewEdge={onNewCardEdge}
           onDeleteCard={onDeleteCard}
           onDeleteEdge={onDeleteCardEdge}

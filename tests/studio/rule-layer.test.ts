@@ -795,7 +795,7 @@ describe("entity rule bindings, reconciliation and cascades", () => {
     ).toContain("item stat template belongs to another rule system");
   });
 
-  test("workspace validation enforces rule bindings, numeric effects and v12->v13 migration", () => {
+  test("workspace validation enforces rule bindings, numeric effects and v13->v14 migration", () => {
     const workspace = createDemoWorkspace("en", NOW);
     workspace.ruleSystems.push(powerSystem());
     workspace.abilityTemplates.push(ability());
@@ -826,13 +826,13 @@ describe("entity rule bindings, reconciliation and cascades", () => {
     brokenObject.storyObjects[0]!.ruleBinding!.tierId = "tier_nope";
     expect(() => validateWorkspace(brokenObject)).toThrow(/unknown tier/);
 
-    const legacyV12 = structuredClone(
+    const legacyV13 = structuredClone(
       createDemoWorkspace("en", NOW),
     ) as unknown as Record<string, unknown>;
-    legacyV12.schema_version = 12;
-    legacyV12.revision = 10;
-    const migrated = validateWorkspace(legacyV12);
-    expect(migrated.schema_version).toBe(13);
+    legacyV13.schema_version = 13;
+    legacyV13.revision = 10;
+    const migrated = validateWorkspace(legacyV13);
+    expect(migrated.schema_version).toBe(14);
     expect(migrated.revision).toBe(11);
   });
 

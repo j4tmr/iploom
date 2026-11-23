@@ -14,7 +14,10 @@ import {
   type IpcMainInvokeEvent,
   type WebContents,
 } from "electron";
-import { createDemoWorkspace } from "../src/core/factory.ts";
+import {
+  createDemoWorkspace,
+  createEmptyWorkspace,
+} from "../src/core/factory.ts";
 import {
   RELEASES_API_URL,
   buildUpdateCheck,
@@ -443,13 +446,14 @@ async function loadWorkspace(): Promise<LoadedWorkspace> {
     return loaded;
   } catch (error) {
     if (await exists(store.filePath)) throw error;
-    const workspace = createDemoWorkspace(defaultLocale());
+    const workspace = createEmptyWorkspace("", defaultLocale());
     applyMainLocale(workspace.settings.locale);
     try {
       await store.save(workspace);
     } catch {
-      // A read-only workspace directory must still open the demo in memory;
-      // the snapshot guard refuses destructive actions until a save succeeds.
+      // A read-only workspace directory must still open the blank workspace in
+      // memory; the snapshot guard refuses destructive actions until a save
+      // succeeds.
     }
     rememberFolders();
     return {
@@ -923,77 +927,88 @@ async function finishSmoke(window: BrowserWindow): Promise<void> {
     const result = (await window.webContents.executeJavaScript(
       `new Promise((resolve, reject) => {
         const deadline = Date.now() + ${smokeShellReadyMs};
+        const waitFor = async (test, message, budget = ${smokeWorkflowReadyMs}) => {
+          const until = Date.now() + budget;
+          while (!test()) {
+            if (Date.now() > until) throw new Error(message);
+            await new Promise((r) => setTimeout(r, 40));
+          }
+        };
+        const setValue = (element, value) => {
+          const proto = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+          Object.getOwnPropertyDescriptor(proto, "value").set.call(element, value);
+          element.dispatchEvent(new Event("input", { bubbles: true }));
+        };
         const check = async () => {
           const shell = document.querySelector(".studio-shell");
           const text = document.body.innerText.trim();
-          if (shell && text.length > 100) {
-            // Worlds are the only navigation now: open the first world from
-            // the sidebar, then its workflow tab.
-            const world = document.querySelector(".sidebar-worlds button");
-            if (!(world instanceof HTMLElement)) {
-              reject(new Error("world navigation did not render"));
-              return;
-            }
-            world.click();
-            await new Promise((resolveWorkflow, rejectWorkflow) => {
-              const workflowDeadline = Date.now() + ${smokeWorkflowReadyMs};
-              const timeout = setTimeout(() => {
-                rejectWorkflow(new Error("workflow view timed out"));
-              }, ${smokeWorkflowReadyMs});
-              const poll = () => {
-                const tab = document.querySelector('[data-tab="workflow"]');
-                if (tab instanceof HTMLElement) {
-                  tab.click();
-                }
-                if (
+          if (shell && text.length > 60) {
+            try {
+              const initialWorlds = document.querySelectorAll(".sidebar-worlds button").length;
+              if (initialWorlds !== 0) {
+                throw new Error("expected a blank-by-default workspace, found " + initialWorlds + " worlds");
+              }
+              const starter = document.querySelector('[data-template-id="novel-starter"]');
+              if (!(starter instanceof HTMLElement)) {
+                throw new Error("novel starter template card did not render");
+              }
+              starter.click();
+              await waitFor(() => document.querySelector('.modal-body input.input'), "create world modal did not open");
+              const worldNameInput = document.querySelector('.modal-body input.input');
+              setValue(worldNameInput, "Smoke World");
+              await waitFor(() => {
+                const saveBtn = document.querySelector('.modal-foot .button-primary');
+                return saveBtn && !saveBtn.disabled;
+              }, "create world save button stayed disabled");
+              document.querySelector('.modal-foot .button-primary').click();
+              await waitFor(() => document.querySelector('[data-tab="nodes"]'), "new world detail did not open");
+              document.querySelector('[data-tab="nodes"]').click();
+              await waitFor(() => document.querySelectorAll('.card-type-chip').length >= 5, "novel starter card types did not seed");
+              document.querySelector('[data-tab="workflow"]').click();
+              await waitFor(() => document.querySelector('[data-testid="workflow-new-task"]'), "workflow tab did not render");
+              document.querySelector('[data-testid="workflow-new-task"]').click();
+              await waitFor(() => document.querySelector('.modal-body input.input'), "new task modal did not open");
+              const taskTitleInput = document.querySelector('.modal-body input.input');
+              setValue(taskTitleInput, "Smoke Task");
+              await waitFor(() => {
+                const saveBtn = document.querySelector('.modal-foot .button-primary');
+                return saveBtn && !saveBtn.disabled;
+              }, "new task save button stayed disabled");
+              document.querySelector('.modal-foot .button-primary').click();
+              await waitFor(
+                () =>
                   document.querySelector(".workflow-view") &&
                   document.querySelector(".workflow-row") &&
-                  document.querySelector(".workflow-detail")
-                ) {
-                  clearTimeout(timeout);
-                  resolveWorkflow();
-                  return;
-                }
-                if (Date.now() >= workflowDeadline) {
-                  clearTimeout(timeout);
-                  rejectWorkflow(new Error("workflow view did not become ready"));
-                  return;
-                }
-                setTimeout(poll, 100);
-              };
-              poll();
-            });
-            const info = await window.iploom.appInfo();
-            const server = info.mcp?.mcpServers["iploom-studio"];
-            if (!info.desktop) {
-              reject(new Error("desktop bridge did not initialize"));
-              return;
-            }
-            if (!server) {
-              reject(
-                new Error(info.mcpError ?? "MCP config unavailable"),
+                  document.querySelector(".workflow-detail"),
+                "workflow view did not become ready",
               );
-              return;
-            }
-            if (server.env?.ELECTRON_RUN_AS_NODE !== "1") {
-              reject(
-                new Error(
+              const info = await window.iploom.appInfo();
+              const server = info.mcp?.mcpServers["iploom-studio"];
+              if (!info.desktop) {
+                throw new Error("desktop bridge did not initialize");
+              }
+              if (!server) {
+                throw new Error(info.mcpError ?? "MCP config unavailable");
+              }
+              if (server.env?.ELECTRON_RUN_AS_NODE !== "1") {
+                throw new Error(
                   "MCP is not using the Electron runtime: " +
                     JSON.stringify(server),
-                ),
-              );
-              return;
+                );
+              }
+              resolve({
+                title: document.title,
+                textLength: text.length,
+                shells: document.querySelectorAll(".studio-shell").length,
+                navigation: document.querySelectorAll("nav button, aside button").length,
+                workflowTasks:
+                  document.querySelectorAll(".workflow-row").length,
+                mcpCommand: server.command,
+                mcpScript: server.args[0]
+              });
+            } catch (err) {
+              reject(err);
             }
-            resolve({
-              title: document.title,
-              textLength: text.length,
-              shells: document.querySelectorAll(".studio-shell").length,
-              navigation: document.querySelectorAll("nav button, aside button").length,
-              workflowTasks:
-                document.querySelectorAll(".workflow-row").length,
-              mcpCommand: server.command,
-              mcpScript: server.args[0]
-            });
             return;
           }
           if (Date.now() >= deadline) {
