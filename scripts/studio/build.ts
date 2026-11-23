@@ -153,7 +153,7 @@ async function prepareAppDirectory(): Promise<void> {
     version: metadata.version,
     description:
       metadata.description ??
-      "IPloom Studio — build story universes, novels and 3D screen handoffs.",
+      "IPloom Studio — local-first story worlds, works and MCP workspace.",
     author: metadata.author ?? "j4tmr",
     license: metadata.license ?? "MIT",
     homepage: "https://github.com/j4tmr/iploom",

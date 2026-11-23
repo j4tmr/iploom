@@ -1,5 +1,5 @@
 import { createDemoWorkspace, createEmptyWorkspace } from "./core/factory.ts";
-import type { ArcReelBundle, StudioWorkspace, UiLocale } from "./core/types.ts";
+import type { StudioWorkspace, UiLocale } from "./core/types.ts";
 import {
   unavailableUpdateCheck,
   type UpdateCheckResult,
@@ -38,13 +38,6 @@ export interface WorkspaceSnapshotInfo {
   createdAt: string;
   bytes: number;
   reason: string;
-}
-
-export interface WrittenBundle {
-  directory: string;
-  files: number;
-  bytes: number;
-  canceled?: boolean;
 }
 
 export interface McpClientConfig {
@@ -94,7 +87,6 @@ export interface StudioBridge {
     workspace?: StudioWorkspace,
     stale?: boolean,
   ): Promise<void>;
-  exportArcReel(bundle: ArcReelBundle): Promise<WrittenBundle>;
   appInfo(): Promise<AppInfo>;
   checkForUpdates(): Promise<UpdateCheckResult>;
   onNavigateRoute?(
@@ -161,28 +153,6 @@ export const browserFallback: StudioBridge = {
     return () => undefined;
   },
   async flushComplete() {},
-  async exportArcReel(bundle) {
-    const payload = {
-      schema: bundle.schema,
-      generatedAt: bundle.generatedAt,
-      manifestSha256: bundle.manifestSha256,
-      files: bundle.files,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${bundle.workTitle}-arcreel-preview.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    return {
-      directory: "Browser downloads",
-      files: bundle.files.length,
-      bytes: blob.size,
-    };
-  },
   async appInfo() {
     return {
       version: APP_VERSION,

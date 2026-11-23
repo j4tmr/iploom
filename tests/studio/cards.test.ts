@@ -576,7 +576,7 @@ describe("universe scoping migrations", () => {
     delete legacy.cardEdges;
     delete legacy.constructs;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(12);
+    expect(migrated.schema_version).toBe(13);
     expect(migrated.cardTypes).toEqual([]);
     expect(migrated.cards).toEqual([]);
     expect(migrated.cardEdges).toEqual([]);
@@ -608,8 +608,8 @@ describe("universe scoping migrations", () => {
       },
     ];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(12);
-    expect(migrated.revision).toBe(23);
+    expect(migrated.schema_version).toBe(13);
+    expect(migrated.revision).toBe(24);
     expect(migrated.cardTypes[0]!.universeId).toBe("uni_mist_harbor");
     expect(migrated.cardTypes[0]!.icon).toBe("layers");
     expect(migrated.cardTypes[0]!.behavior).toBe("generic");
@@ -637,7 +637,7 @@ describe("universe scoping migrations", () => {
       },
     ];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(12);
+    expect(migrated.schema_version).toBe(13);
     expect(migrated.universes).toHaveLength(1);
     expect(migrated.universes[0]!.id).toBe("universe_node_workshop");
     expect(migrated.cardTypes[0]!.universeId).toBe("universe_node_workshop");
@@ -651,19 +651,19 @@ describe("universe scoping migrations", () => {
     ) as unknown as Record<string, unknown>;
     legacy.schema_version = 9;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(12);
+    expect(migrated.schema_version).toBe(13);
     expect(migrated.universes).toEqual([]);
   });
 
-  test("migrates v11 card types by backfilling default icon and behavior without clobbering custom keys", () => {
+  test("migrates v12 card types by backfilling default icon and behavior without clobbering custom keys", () => {
     const legacy = structuredClone(
       createDemoWorkspace("en", NOW),
     ) as unknown as Record<string, unknown>;
-    legacy.schema_version = 11;
+    legacy.schema_version = 12;
     legacy.revision = 5;
     legacy.cardTypes = [
       {
-        id: "ctype_v11",
+        id: "ctype_v12",
         universeId: "uni_mist_harbor",
         name: { zh: "旧节点", en: "Old node" },
         summary: { zh: "", en: "" },
@@ -686,7 +686,7 @@ describe("universe scoping migrations", () => {
       },
     ];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(12);
+    expect(migrated.schema_version).toBe(13);
     expect(migrated.revision).toBe(6);
     expect(migrated.cardTypes[0]!.icon).toBe("layers");
     expect(migrated.cardTypes[0]!.behavior).toBe("generic");

@@ -12,7 +12,6 @@ import {
   session,
   shell,
   type IpcMainInvokeEvent,
-  type OpenDialogOptions,
   type WebContents,
 } from "electron";
 import {
@@ -41,9 +40,7 @@ import {
   stripStaleWorkspaceMarker,
 } from "../src/save-errors.ts";
 import {
-  canonicalPath,
   isTrustedRendererUrl as isTrustedRendererValue,
-  parseArcReelBundle,
   parseDevUrl as parseDevUrlValue,
   revealKnownPath,
   safeExternalUrl,
@@ -81,7 +78,7 @@ import {
   type MainMessages,
 } from "../src/node/messages.ts";
 import type { AiConfig } from "../src/core/ai.ts";
-import type { AppInfo, WrittenBundle } from "../src/platform.ts";
+import type { AppInfo } from "../src/platform.ts";
 
 const APP_ID = "com.j4tmr.iploom.studio";
 const RENDERER_FILE = join(__dirname, "..", "renderer", "index.html");
@@ -429,8 +426,7 @@ async function exists(path: string): Promise<boolean> {
 
 function rememberFolders(): void {
   const store = requireStore();
-  // Only locations the main process itself created. `workspace.exports[]` is
-  // renderer-writable, so an outputPath from disk can never widen this list.
+  // Only locations the main process owns: the workspace directory and snapshots.
   for (const folder of workspaceRevealFolders(
     store.filePath,
     store.snapshotDirectory,
@@ -481,29 +477,6 @@ function mcpConfigState() {
     ],
     messages: mainMessages,
   });
-}
-
-async function exportArcReel(bundleInput: unknown): Promise<WrittenBundle> {
-  const bundle = parseArcReelBundle(bundleInput, mainMessages.guards);
-  const options: OpenDialogOptions = {
-    title:
-      bundle.workLanguage === "zh-CN"
-        ? "选择 ArcReel 导出目录"
-        : "Choose an ArcReel export folder",
-    buttonLabel: bundle.workLanguage === "zh-CN" ? "导出" : "Export",
-    defaultPath: app.getPath("documents"),
-    properties: ["openDirectory", "createDirectory"],
-  };
-  const selection = mainWindow
-    ? await dialog.showOpenDialog(mainWindow, options)
-    : await dialog.showOpenDialog(options);
-  const destination = selection.filePaths[0];
-  if (selection.canceled || !destination) {
-    return { directory: "", files: 0, bytes: 0, canceled: true };
-  }
-  const written = await requireStore().exportArcReel(bundle, destination);
-  allowedFolders.add(canonicalPath(written.directory));
-  return written;
 }
 
 function registerIpcHandlers(): void {
@@ -627,11 +600,6 @@ function registerIpcHandlers(): void {
       else waiter.resolve();
     },
   );
-
-  ipcMain.handle("iploom:export-arc-reel", async (event, bundle: unknown) => {
-    assertTrustedSender(event);
-    return exportArcReel(bundle);
-  });
 
   ipcMain.handle("iploom:app-info", async (event): Promise<AppInfo> => {
     assertTrustedSender(event);

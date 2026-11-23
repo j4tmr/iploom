@@ -37,10 +37,6 @@ import {
   isReportableAiError,
   runCompletion,
 } from "../../apps/studio/src/node/ai-client.ts";
-import {
-  arcReelSlug,
-  buildArcReelBundle,
-} from "../../apps/studio/src/core/arcreel.ts";
 
 const source =
   "前言\r\n第1章 灯塔\r\n阿青在灯塔遇到导师白舟。\r\n第2章 归途\r\n阿青离开灯塔。\r\n";
@@ -438,44 +434,6 @@ test("chunks never split surrogate pairs or start or end with a lone surrogate",
     expect(first >= 0xdc00 && first <= 0xdfff).toBe(false);
     expect(last >= 0xd800 && last <= 0xdbff).toBe(false);
   }
-});
-
-// TS 7 targets ES2023 here, whose lib omits the ES2024 String.prototype.isWellFormed typing.
-const isWellFormed = (value: string): boolean =>
-  (value as string & { isWellFormed: () => boolean }).isWellFormed();
-
-test("slug truncation never splits a surrogate pair at the 48-unit boundary", () => {
-  const astralLetters = [0x20000, 0x2a6d6, 0x10400];
-  for (const codePoint of astralLetters) {
-    const title = "字".repeat(47) + String.fromCodePoint(codePoint);
-    const result = arcReelSlug(title);
-    expect(result).toBe("字".repeat(47));
-    expect(result).toHaveLength(47);
-    expect(isWellFormed(result)).toBe(true);
-    expect(result).not.toMatch(
-      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/,
-    );
-  }
-  // A pair ending exactly on the boundary stays intact; a pair starting there is dropped.
-  expect(
-    arcReelSlug(
-      "字".repeat(46) + String.fromCodePoint(0x20000) + "字".repeat(8),
-    ),
-  ).toBe("字".repeat(46) + String.fromCodePoint(0x20000));
-  expect(
-    arcReelSlug(`ab${"字".repeat(45)}${String.fromCodePoint(0x20000)}`),
-  ).toBe(`ab${"字".repeat(45)}`);
-  expect(arcReelSlug("字".repeat(48) + String.fromCodePoint(0x20000))).toBe(
-    "字".repeat(48),
-  );
-});
-
-test("slug normalization output is unchanged for ordinary titles", () => {
-  expect(arcReelSlug("A Handover in the Rain")).toBe("a-handover-in-the-rain");
-  expect(arcReelSlug("  潮汐钟  ")).toBe("潮汐钟");
-  expect(arcReelSlug("x".repeat(60))).toBe("x".repeat(48));
-  expect(arcReelSlug("")).toBe("untitled");
-  expect(arcReelSlug("---")).toBe("untitled");
 });
 
 test("analysis preflight blocks over-limit runs before any request and warns about long chapters", () => {
@@ -1012,8 +970,8 @@ test("legacy workspaces without templates still validate and infer each stage", 
   legacy.schema_version = 6;
 
   const migrated = validateWorkspace(legacy);
-  expect(migrated.schema_version).toBe(12);
-  expect(migrated.revision).toBe(46);
+  expect(migrated.schema_version).toBe(13);
+  expect(migrated.revision).toBe(47);
   expect(migrated.workflowTasks.map((task) => task.template)).toEqual([
     "world",
     "character",
@@ -1423,42 +1381,6 @@ test("model client accepts complete JSON fallback and validates endpoint configu
       apiKey: "",
     }).success,
   ).toBe(true);
-});
-
-test("handoff includes hashed approved designs only for the exported work and chapters", async () => {
-  const workspace = createDemoWorkspace("en");
-  const work = workspace.works[0]!;
-  const tasks = createProductionTasks(
-    workspace,
-    { workId: work.id, chapterId: work.chapters[0]!.id },
-    "en",
-  );
-  tasks[0]!.status = "done";
-  tasks[0]!.result.en = "Approved world";
-  tasks[1]!.status = "review";
-  tasks[1]!.result.en = "Unapproved character";
-  workspace.workflowTasks.push(...tasks);
-  const bundle = await buildArcReelBundle(workspace, { workId: work.id });
-  const designs = JSON.parse(
-    bundle.files.find(
-      (file) => file.path === "production/approved-designs.json",
-    )!.content,
-  );
-  expect(designs.tasks.map((task: { id: string }) => task.id)).toContain(
-    tasks[0]!.id,
-  );
-  expect(designs.tasks.map((task: { id: string }) => task.id)).not.toContain(
-    tasks[1]!.id,
-  );
-  const manifest = JSON.parse(
-    bundle.files.find((file) => file.path === "manifest.json")!.content,
-  );
-  expect(
-    manifest.files.find(
-      (file: { path: string }) =>
-        file.path === "production/approved-designs.json",
-    ).sha256,
-  ).toHaveLength(64);
 });
 
 const fetchError = (

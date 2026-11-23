@@ -322,20 +322,6 @@ export const timelineEventSchema = z
     }
   });
 
-export const exportRecordSchema = z
-  .object({
-    id: identifier,
-    workId: identifier,
-    workTitle: z.string().max(500),
-    createdAt: isoDate,
-    chapterIds: z.array(identifier).max(1_000),
-    fileCount: nonNegativeInt,
-    bytes: nonNegativeInt,
-    manifestSha256: z.string().regex(/^[a-f0-9]{64}$/),
-    outputPath: z.string().max(10_000).optional(),
-  })
-  .strict();
-
 export const standardRefSchema = z
   .object({
     id: identifier,
@@ -558,8 +544,6 @@ export const settingsSchema = z
   .object({
     locale: uiLocaleSchema,
     theme: z.enum(["system", "light", "dark"]),
-    defaultAspectRatio: z.enum(["9:16", "16:9", "1:1"]),
-    exportApprovedOnly: z.boolean(),
   })
   .strict();
 
@@ -593,7 +577,6 @@ export const workspaceSchema = z
     timelineEvents: z.array(timelineEventSchema).max(100_000),
     workflowTasks: z.array(workflowTaskSchema).max(20_000),
     works: z.array(workSchema).max(20_000),
-    exports: z.array(exportRecordSchema).max(10_000),
   })
   .strict()
   .superRefine((workspace, ctx) => {
@@ -641,7 +624,6 @@ export const workspaceSchema = z
     unique(workspace.timelineEvents, "timelineEvents", (item) => item.id);
     unique(workspace.workflowTasks, "workflowTasks", (item) => item.id);
     unique(workspace.works, "works", (item) => item.id);
-    unique(workspace.exports, "exports", (item) => item.id);
     unique(workspace.cardTypes, "cardTypes", (item) => item.id);
     unique(workspace.cards, "cards", (item) => item.id);
     unique(workspace.cardEdges, "cardEdges", (item) => item.id);
@@ -1085,27 +1067,6 @@ export const workspaceSchema = z
             ["timelineEvents", index, "relatedObjectIds"],
             "object belongs to another universe",
           );
-      }
-    }
-    for (const [index, record] of workspace.exports.entries()) {
-      const work = worksById.get(record.workId);
-      if (!work) issue(["exports", index, "workId"], "unknown work");
-      else {
-        const chapterIds = new Set(work.chapters.map((chapter) => chapter.id));
-        const seenChapterIds = new Set<string>();
-        for (const chapterId of record.chapterIds) {
-          if (seenChapterIds.has(chapterId))
-            issue(
-              ["exports", index, "chapterIds"],
-              `duplicate chapter: ${chapterId}`,
-            );
-          seenChapterIds.add(chapterId);
-          if (!chapterIds.has(chapterId))
-            issue(
-              ["exports", index, "chapterIds"],
-              `unknown chapter: ${chapterId}`,
-            );
-        }
       }
     }
 

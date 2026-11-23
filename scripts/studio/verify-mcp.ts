@@ -137,17 +137,6 @@ try {
     requestOptions,
   );
   if (cards.isError) throw new Error("Bundled MCP list_cards failed");
-  const exported = await client.callTool(
-    {
-      name: "export_arcreel_bundle",
-      arguments: {
-        novel_id: "work_tide_clock",
-        output_dir: "exports/bundle-export",
-      },
-    },
-    requestOptions,
-  );
-  if (exported.isError) throw new Error("Bundled MCP export failed");
   console.log(
     `[mcp] bundled Electron runtime ok: ${tools.tools.length} tools, ${binary}${
       arch ? ` (${arch})` : ""
