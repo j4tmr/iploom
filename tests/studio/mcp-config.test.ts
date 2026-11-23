@@ -301,12 +301,12 @@ describe("createElectronMcpConfig", () => {
 describe("MCP tool registry", () => {
   test("partitions the registered tools by access level", () => {
     expect(MCP_TOOL_COUNTS).toEqual({
-      total: 18,
-      read: 13,
+      total: 20,
+      read: 15,
       write: 5,
     });
-    expect(MCP_TOOL_NAMES).toHaveLength(18);
-    expect(MCP_READ_TOOL_NAMES).toHaveLength(13);
+    expect(MCP_TOOL_NAMES).toHaveLength(20);
+    expect(MCP_READ_TOOL_NAMES).toHaveLength(15);
     expect(MCP_WRITE_TOOL_NAMES).toEqual([
       "create_standard",
       "update_standard",
@@ -321,10 +321,10 @@ describe("MCP tool registry", () => {
 
   test("describes the split for both interface languages", () => {
     expect(mcpToolsNote("en")).toBe(
-      "13 read-only query tools + 5 workspace writers.",
+      "15 read-only query tools + 5 workspace writers.",
     );
     expect(mcpToolsNote("zh-CN")).toBe(
-      "13 个只读查询工具 + 5 个工作区写入工具。",
+      "15 个只读查询工具 + 5 个工作区写入工具。",
     );
   });
 });

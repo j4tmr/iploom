@@ -30,10 +30,10 @@ test("browser migrates v1 manuscripts without altering the stored original", () 
   const raw = JSON.stringify(legacy);
   const storage = storageWith(raw);
   const { workspace } = loadBrowserWorkspace(storage, "en");
-  expect(workspace.schema_version).toBe(12);
+  expect(workspace.schema_version).toBe(13);
   expect(workspace.workflowTasks).toEqual([]);
   expect(workspace.works).toEqual(original.works);
-  expect(workspace.revision).toBe(Number(legacy.revision) + 11);
+  expect(workspace.revision).toBe(Number(legacy.revision) + 12);
   expect(storage.getItem(browserWorkspaceKey)).toBe(raw);
 });
 
@@ -49,12 +49,15 @@ test.each([
   expect(storage.getItem(browserWorkspaceKey)).toBe(raw);
 });
 
-test("browser initializes only absent storage and round-trips valid data", () => {
+test("browser initializes absent storage as a blank workspace and round-trips valid data", () => {
   const storage = storageWith();
   const { workspace } = loadBrowserWorkspace(storage, "zh-CN");
   expect(workspace.settings.locale).toBe("zh-CN");
-  // The initial demo is persisted right away, so the first destructive action
-  // has a healthy workspace to snapshot instead of a null refusal.
+  expect(workspace.universes).toEqual([]);
+  expect(workspace.works).toEqual([]);
+  expect(workspace.cardTypes).toEqual([]);
+  // The initial blank workspace is persisted right away, so the first
+  // destructive action has a healthy workspace to snapshot instead of a null refusal.
   expect(JSON.parse(storage.getItem(browserWorkspaceKey)!)).toEqual(workspace);
   expect(saveBrowserSnapshot(storage)).toBe(browserSnapshotKey);
   expect(loadBrowserSnapshot(storage)?.workspace).toEqual(workspace);
@@ -62,7 +65,7 @@ test("browser initializes only absent storage and round-trips valid data", () =>
   expect(loadBrowserWorkspace(storage, "en").workspace).toEqual(workspace);
 });
 
-test("unwritable browser storage still opens the demo but cannot snapshot", () => {
+test("unwritable browser storage still opens a blank workspace but cannot snapshot", () => {
   const storage = {
     getItem: () => null,
     setItem: () => {
@@ -70,7 +73,9 @@ test("unwritable browser storage still opens the demo but cannot snapshot", () =
     },
   };
   const { workspace } = loadBrowserWorkspace(storage, "en");
-  expect(workspace.works.length).toBeGreaterThan(0);
+  expect(workspace.universes).toEqual([]);
+  expect(workspace.works).toEqual([]);
+  expect(workspace.standards.length).toBeGreaterThan(0);
   expect(saveBrowserSnapshot(storage)).toBeNull();
 });
 

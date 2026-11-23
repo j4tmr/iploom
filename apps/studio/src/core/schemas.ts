@@ -414,6 +414,14 @@ const cardFieldKey = z
   .string()
   .trim()
   .regex(/^[A-Za-z][A-Za-z0-9_-]{0,39}$/, "invalid field key");
+const cardBehaviorKey = z
+  .string()
+  .trim()
+  .regex(/^[a-z][a-z0-9_-]{0,39}$/, "invalid card behavior key");
+const cardIconKey = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z][A-Za-z0-9_-]{0,39}$/, "invalid card icon key");
 const cardValueSchema = z.union([z.number(), z.string().max(10_000)]);
 
 export const cardFieldSchema = z
@@ -477,7 +485,9 @@ export const cardTypeSchema = z
     workId: identifier.optional(),
     name: localizedSchema,
     summary: localizedSchema,
+    icon: cardIconKey.default("layers"),
     color,
+    behavior: cardBehaviorKey.default("generic"),
     fields: z.array(cardFieldSchema).max(50),
     createdAt: isoDate,
     updatedAt: isoDate,

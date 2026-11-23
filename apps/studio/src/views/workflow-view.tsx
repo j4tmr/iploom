@@ -139,6 +139,8 @@ export function WorkflowView({
       !scoped.workflowTasks.some((task) => task.id === selectedId)
     ) {
       setSelectedId(scoped.workflowTasks[0]?.id ?? null);
+    } else if (!selectedId && scoped.workflowTasks[0]) {
+      setSelectedId(scoped.workflowTasks[0].id);
     }
   }, [selectedId, scoped.workflowTasks]);
 
@@ -292,7 +294,12 @@ export function WorkflowView({
           <h1>{t("workflowTitle")}</h1>
           <p>{t("workflowLead")}</p>
         </div>
-        <Button variant="primary" icon="plus" onClick={onNewTask}>
+        <Button
+          variant="primary"
+          icon="plus"
+          data-testid="workflow-new-task"
+          onClick={onNewTask}
+        >
           {t("newTask")}
         </Button>
       </header>
@@ -405,7 +412,12 @@ export function WorkflowView({
                 icon="sparkles"
                 title={t("workflowNoTasks")}
                 action={
-                  <Button variant="primary" icon="plus" onClick={onNewTask}>
+                  <Button
+                    variant="primary"
+                    icon="plus"
+                    data-testid="workflow-new-task"
+                    onClick={onNewTask}
+                  >
                     {t("newTask")}
                   </Button>
                 }

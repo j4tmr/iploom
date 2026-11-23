@@ -139,6 +139,17 @@ export function migrateWorkspace(value: unknown): unknown {
   if (value.schema_version === 11) {
     return migrateWorkspace({
       ...dropArcReelExportFields(value),
+      schema_version: 12,
+      revision:
+        typeof value.revision === "number"
+          ? value.revision + 1
+          : value.revision,
+    });
+  }
+  if (value.schema_version === 12) {
+    return migrateWorkspace({
+      ...value,
+      cardTypes: withCardTypeBehaviorAndIcon(value.cardTypes),
       schema_version: WORKSPACE_SCHEMA_VERSION,
       revision:
         typeof value.revision === "number"
@@ -150,10 +161,29 @@ export function migrateWorkspace(value: unknown): unknown {
 }
 
 /**
+ * v12 card types had no icon or behavior key. Missing fields default to
+ * `"layers"` and `"generic"` deterministically without guessing from
+ * user-edited titles; pre-existing invalid values stay untouched so strict
+ * schema validation still rejects them.
+ */
+function withCardTypeBehaviorAndIcon(cardTypes: unknown): unknown {
+  if (!Array.isArray(cardTypes)) return cardTypes;
+  return cardTypes.map((type) => {
+    if (!record(type)) return type;
+    if ("behavior" in type && "icon" in type) return type;
+    return {
+      ...type,
+      ...("icon" in type ? {} : { icon: "layers" }),
+      ...("behavior" in type ? {} : { behavior: "generic" }),
+    };
+  });
+}
+
+/**
  * Destructive migration: v12 removes the ArcReel exporter and its persisted
  * state. Saved export history (`exports`) and the export settings
  * (`defaultAspectRatio`, `exportApprovedOnly`) are dropped on upgrade so
- * older v1–v11 workspaces remain readable under the strict v12 schema.
+ * older v1–v11 workspaces remain readable under the strict v12+ schema.
  */
 function dropArcReelExportFields(
   value: Record<string, unknown>,

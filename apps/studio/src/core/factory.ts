@@ -154,14 +154,16 @@ export function emptyChapter(
 }
 
 export function createEmptyWorkspace(
-  name: string,
+  name = "",
   locale: UiLocale = "zh-CN",
   now = new Date().toISOString(),
 ): StudioWorkspace {
+  const workspaceName =
+    name.trim() || (locale === "en" ? "My Story Multiverse" : "我的故事宇宙");
   return {
     schema_version: WORKSPACE_SCHEMA_VERSION,
     id: createId("workspace"),
-    name,
+    name: workspaceName,
     revision: 1,
     createdAt: now,
     updatedAt: now,
