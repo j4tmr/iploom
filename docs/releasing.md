@@ -77,24 +77,18 @@ The Intel-slice commands require Rosetta 2 on Apple silicon. They launch the uni
 
 ## GitHub Actions
 
-Every `uses:` reference is pinned to a full commit SHA with a version comment; Dependabot updates the pins. All checkouts disable credential persistence.
+Every external `uses:` reference is pinned to a full commit SHA with a version comment (including the shared `.github/actions/setup-studio` composite action); Dependabot updates the pins. All checkouts disable credential persistence.
 
 `.github/workflows/studio-ci.yml` runs on pull requests, pushes to main and manual dispatch:
 
-- lint and format verification;
-- type checking;
-- domain and real stdio MCP tests on macOS and Windows;
-- release-input build and shared artifact checks;
-- documentation version sync;
-- bundled MCP through the Electron runtime;
-- macOS and Windows packaging;
-- packaged application smoke;
-- Intel-slice smoke and MCP verification through Rosetta;
-- unpacked-bundle checks for the exact macOS and Windows artifact layout.
+- `quality` runs on every trigger: lint, test-isolation guard, format verification, type checking, coverage tests, release-input build and shared artifact checks, documentation version sync, and bundled MCP through the Electron runtime;
+- `desktop-smoke` and `package-smoke` run in parallel after `quality` on macOS and Windows (domain and real stdio MCP tests, unpackaged and packaged application smoke, packaged MCP verification, and unpacked-bundle checks including `lipo -archs` on macOS);
+- Intel-slice smoke and MCP verification through Rosetta run unconditionally on pushes to `main`, manual dispatch, and any pull request touching Electron, MCP, packaging scripts, dependencies, or Studio workflows (`scripts/studio/ci-changes.ts`);
+- documentation- and `site/`-only pull requests keep all five required check names green while skipping macOS/Windows desktop and packaging steps.
 
 `.github/workflows/studio-release.yml` runs on `studio-v*` tags and on manual dispatch:
 
-- `verify` fetches the full history, requires the tagged commit to be an ancestor of `origin/main`, and rejects a tag/version mismatch;
+- `verify` fetches the full history, requires the tagged commit to be an ancestor of `origin/main`, rejects a tag/version mismatch before installing dependencies, and runs the full quality and coverage suite;
 - `package` builds macOS universal DMG/ZIP and Windows NSIS, verifies the exact installer names and versions, and runs the packaged smoke, MCP verification and Intel-slice checks;
 - `release` runs in the protected `release` environment, computes checksums, asserts the expected asset names, attests the `.dmg`, `.zip` and `.exe`, and creates or updates the GitHub Release.
 

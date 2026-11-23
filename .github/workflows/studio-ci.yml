@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: studio-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -22,17 +22,18 @@ jobs:
     name: lint, typecheck, tests and release inputs
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    outputs:
+      run_desktop: ${{ steps.changes.outputs.run_desktop }}
+      run_intel_smoke: ${{ steps.changes.outputs.run_intel_smoke }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 1 }}
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: .bun-version
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version-file: .node-version
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup-studio
+      - id: changes
+        name: Classify CI scope
+        run: bun scripts/studio/ci-changes.ts
       - run: bun run lint
       - name: Verify test isolation
         run: bun run studio:verify-test-isolation
@@ -55,56 +56,70 @@ jobs:
         os:
           - macos-latest
           - windows-latest
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ needs.quality.outputs.run_desktop == 'true' && matrix.os || 'ubuntu-latest' }}
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Skip desktop smoke for docs-only PR
+        if: needs.quality.outputs.run_desktop != 'true'
+        env:
+          TARGET_OS: ${{ matrix.os }}
+        run: |
+          echo "Skipping desktop smoke ($TARGET_OS): docs/site-only pull request"
+      - if: needs.quality.outputs.run_desktop == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: .bun-version
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version-file: .node-version
-      - run: bun install --frozen-lockfile
-      - run: bun run test
-      - run: bun run studio:build:release
-      - run: bun run studio:smoke
+      - if: needs.quality.outputs.run_desktop == 'true'
+        uses: ./.github/actions/setup-studio
+      - if: needs.quality.outputs.run_desktop == 'true'
+        run: bun run test
+      - if: needs.quality.outputs.run_desktop == 'true'
+        run: bun run studio:build:release
+      - if: needs.quality.outputs.run_desktop == 'true'
+        run: bun run studio:smoke
 
   package-smoke:
     name: package smoke (${{ matrix.os }})
-    needs: desktop-smoke
+    needs: quality
     strategy:
       fail-fast: false
       matrix:
         os:
           - macos-latest
           - windows-latest
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ needs.quality.outputs.run_desktop == 'true' && matrix.os || 'ubuntu-latest' }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Skip package smoke for docs-only PR
+        if: needs.quality.outputs.run_desktop != 'true'
+        env:
+          TARGET_OS: ${{ matrix.os }}
+        run: |
+          echo "Skipping package smoke ($TARGET_OS): docs/site-only pull request"
+      - if: needs.quality.outputs.run_desktop == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: .bun-version
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version-file: .node-version
-      - run: bun install --frozen-lockfile
-      - run: bun run studio:dir
+      - if: needs.quality.outputs.run_desktop == 'true'
+        uses: ./.github/actions/setup-studio
+      - if: needs.quality.outputs.run_desktop == 'true'
+        run: bun run studio:dir
       - name: Verify macOS package
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && needs.quality.outputs.run_desktop == 'true'
         run: bun scripts/studio/verify-release-inputs.ts dir --platform darwin
       - name: Verify Windows package
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && needs.quality.outputs.run_desktop == 'true'
         run: bun scripts/studio/verify-release-inputs.ts dir --platform win32
-      - run: bun run studio:smoke:package
-      - run: bun run studio:verify-mcp --packaged
+      - if: needs.quality.outputs.run_desktop == 'true'
+        run: bun run studio:smoke:package
+      - if: needs.quality.outputs.run_desktop == 'true'
+        run: bun run studio:verify-mcp --packaged
+      - name: Skip Rosetta Intel-slice smoke for app/test-only PR
+        if: runner.os == 'macOS' && needs.quality.outputs.run_desktop == 'true' && needs.quality.outputs.run_intel_smoke != 'true'
+        run: |
+          echo "Skipped Rosetta Intel-slice smoke: PR did not touch Electron, MCP, packaging, or dependencies (lipo universal slices and arm64 packaged smoke passed)."
       - name: Confirm Rosetta 2 is available for the Intel slice
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && needs.quality.outputs.run_desktop == 'true' && needs.quality.outputs.run_intel_smoke == 'true'
         run: |
           set -euo pipefail
           uname -m
@@ -112,17 +127,8 @@ jobs:
             sudo softwareupdate --install-rosetta --agree-to-license
           fi
       - name: Smoke the Intel slice
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && needs.quality.outputs.run_desktop == 'true' && needs.quality.outputs.run_intel_smoke == 'true'
         run: bun scripts/studio/smoke.ts --packaged --arch x86_64
       - name: Verify MCP through the Intel slice
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && needs.quality.outputs.run_desktop == 'true' && needs.quality.outputs.run_intel_smoke == 'true'
         run: bun scripts/studio/verify-mcp.ts --packaged --arch x86_64
-      - name: Upload package-smoke bundles
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: studio-ci-${{ runner.os }}-bundle
-          path: |
-            release/**/IPloom Studio.app/Contents/MacOS/IPloom Studio
-            release/win-unpacked/IPloom Studio.exe
-          if-no-files-found: error
-          retention-days: 7
