@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { countChapterWords, displayText, workWords } from "../core/factory.ts";
+import { evaluateUniverseFoundation } from "../core/foundation-readiness.ts";
 import { CHAPTER_LIMITS } from "../core/types.ts";
 import type {
   Chapter,
@@ -16,6 +17,10 @@ import {
   type Translate,
 } from "../i18n.ts";
 import { BeatsInput } from "../components/beats-input.tsx";
+import {
+  formatMissingItems,
+  FoundationWarningBanner,
+} from "../components/foundation-checklist.tsx";
 import { Icon } from "../components/icon.tsx";
 import { SceneEditor } from "../components/scene-editor.tsx";
 import {
@@ -43,6 +48,7 @@ export function WorkView({
   t,
   onBack,
   onOpenUniverse,
+  onOpenFoundation,
   onEditWork,
   onDeleteWork,
   onAddChapter,
@@ -57,6 +63,7 @@ export function WorkView({
   t: Translate;
   onBack: () => void;
   onOpenUniverse: () => void;
+  onOpenFoundation?: () => void;
   onEditWork: () => void;
   onDeleteWork: () => void;
   onAddChapter: () => void;
@@ -94,6 +101,10 @@ export function WorkView({
   );
   const selected = chapters.find((chapter) => chapter.id === selectedId);
   const words = workWords(work);
+  const foundationReport = useMemo(
+    () => evaluateUniverseFoundation(workspace, work.universeId),
+    [workspace, work.universeId],
+  );
 
   useEffect(() => {
     if (!chapters.some((chapter) => chapter.id === selectedId))
@@ -185,6 +196,15 @@ export function WorkView({
         </div>
       </header>
 
+      <FoundationWarningBanner
+        report={foundationReport}
+        bypass={work.foundationBypass}
+        locale={locale}
+        t={t}
+        mode="work"
+        onOpenFoundation={onOpenFoundation ?? onOpenUniverse}
+      />
+
       <nav className="tab-bar">
         {isGame ? (
           <button
@@ -267,6 +287,16 @@ export function WorkView({
                 <div className="chapter-title-edit">
                   <span className="chapter-kicker">
                     {t("chapterLabel", { n: selected.number })}
+                    {selected.foundationBypass ? (
+                      <Badge tone="amber">
+                        {t("foundationBypassRecordedChapter", {
+                          missing: formatMissingItems(
+                            selected.foundationBypass.missingItems,
+                            t,
+                          ),
+                        })}
+                      </Badge>
+                    ) : null}
                   </span>
                   <input
                     className="chapter-title-input"

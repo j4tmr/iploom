@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createId, displayText } from "../core/factory.ts";
+import {
+  createFoundationBypass,
+  evaluateUniverseFoundation,
+  type UniverseFoundationReport,
+} from "../core/foundation-readiness.ts";
 import { inferProductionTemplate } from "../core/production.ts";
 import { validateCharacterRuleBindings } from "../core/rule-layer.ts";
 import {
@@ -38,6 +43,7 @@ import {
   statusLabels,
   type Translate,
 } from "../i18n.ts";
+import { FoundationWarningBanner } from "./foundation-checklist.tsx";
 import {
   Button,
   Field,
@@ -722,6 +728,11 @@ export function UniverseModal({
               ? displayText(chosenTemplate.summary, locale)
               : t("templateBlankLead")}
           </p>
+          {chosenTemplate ? (
+            <small className="template-draft-note">
+              {t("templateDraftOnly")}
+            </small>
+          ) : null}
         </div>
       )}
       <FieldGrid>
@@ -803,11 +814,13 @@ export function NovelModal({
   workspace,
   defaultUniverseId,
   initial,
+  onOpenFoundation,
   onSave,
 }: ModalBase & {
   workspace: StudioWorkspace;
   defaultUniverseId?: string;
   initial?: StoryWork;
+  onOpenFoundation?: (universeId: string) => void;
   onSave: (work: StoryWork) => boolean;
 }) {
   const [universeId, setUniverseId] = useState(
@@ -835,6 +848,16 @@ export function NovelModal({
   const [coverColor, setCoverColor] = useState(
     initial?.coverColor ?? "#2f7567",
   );
+  const foundationReport = useMemo(
+    () =>
+      !initial && universeId
+        ? evaluateUniverseFoundation(workspace, universeId)
+        : undefined,
+    [initial, universeId, workspace],
+  );
+  const incompleteFoundation = Boolean(
+    foundationReport && !foundationReport.complete,
+  );
   return (
     <Modal
       open={open}
@@ -854,6 +877,11 @@ export function NovelModal({
             disabled={!universeId || (!titleZh.trim() && !titleEn.trim())}
             onClick={() => {
               const now = new Date().toISOString();
+              const foundationBypass = initial
+                ? initial.foundationBypass
+                : foundationReport
+                  ? createFoundationBypass(foundationReport, now)
+                  : undefined;
               const saved = onSave({
                 id: initial?.id ?? createId("work"),
                 universeId,
@@ -868,17 +896,36 @@ export function NovelModal({
                 targetWords: Math.max(1, Number(targetWords) || 120_000),
                 coverColor,
                 chapters: initial?.chapters ?? [],
+                ...(foundationBypass ? { foundationBypass } : {}),
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
               });
               if (saved) onClose();
             }}
           >
-            {t("save")}
+            {incompleteFoundation
+              ? t("foundationProceedCreateWork")
+              : t("save")}
           </Button>
         </>
       }
     >
+      {incompleteFoundation && foundationReport ? (
+        <FoundationWarningBanner
+          report={foundationReport}
+          locale={locale}
+          t={t}
+          mode="create"
+          onOpenFoundation={
+            onOpenFoundation && universeId
+              ? () => {
+                  onClose();
+                  onOpenFoundation(universeId);
+                }
+              : undefined
+          }
+        />
+      ) : null}
       <FieldGrid>
         <Field label={t("storyWorld")}>
           <Select
@@ -992,12 +1039,17 @@ export function ChapterModal({
   open,
   onClose,
   t,
+  locale,
   initialNumber,
   existingNumbers,
+  foundationReport,
+  onOpenFoundation,
   onSave,
 }: ModalBase & {
   initialNumber: number;
   existingNumbers: number[];
+  foundationReport?: UniverseFoundationReport;
+  onOpenFoundation?: () => void;
   onSave: (chapter: Chapter) => boolean;
 }) {
   const [number, setNumber] = useState(String(initialNumber));
@@ -1007,6 +1059,9 @@ export function ChapterModal({
   const parsedNumber = Math.max(1, Number(number) || initialNumber);
   const duplicateNumber = existingNumbers.includes(parsedNumber);
   const canSave = Boolean(title.trim()) && !duplicateNumber;
+  const incompleteFoundation = Boolean(
+    foundationReport && !foundationReport.complete,
+  );
   return (
     <Modal
       open={open}
@@ -1025,6 +1080,9 @@ export function ChapterModal({
             disabled={!canSave}
             onClick={() => {
               const now = new Date().toISOString();
+              const foundationBypass = foundationReport
+                ? createFoundationBypass(foundationReport, now)
+                : undefined;
               const saved = onSave({
                 id: createId("chapter"),
                 number: parsedNumber,
@@ -1039,6 +1097,7 @@ export function ChapterModal({
                 characterIds: [],
                 adaptationNotes: "",
                 scenes: [],
+                ...(foundationBypass ? { foundationBypass } : {}),
                 revision: 0,
                 createdAt: now,
                 updatedAt: now,
@@ -1046,11 +1105,27 @@ export function ChapterModal({
               if (saved) onClose();
             }}
           >
-            {t("add")}
+            {incompleteFoundation ? t("foundationProceedAddChapter") : t("add")}
           </Button>
         </>
       }
     >
+      {incompleteFoundation && foundationReport ? (
+        <FoundationWarningBanner
+          report={foundationReport}
+          locale={locale}
+          t={t}
+          mode="create"
+          onOpenFoundation={
+            onOpenFoundation
+              ? () => {
+                  onClose();
+                  onOpenFoundation();
+                }
+              : undefined
+          }
+        />
+      ) : null}
       <FieldGrid>
         <Field label={t("chapterNumber")}>
           <TextInput

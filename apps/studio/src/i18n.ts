@@ -946,6 +946,69 @@ const zh = {
   rulesFieldRuleBindings: "规则绑定",
   rulesFieldAbilityIds: "技能列表",
   rulesFieldItemTemplate: "物品模板",
+  templateDraftOnly:
+    "模板只生成可编辑草稿（规则、等级骨架与占位设定默认未启用），不会锁定正典。",
+  templateScaffoldBadge: "含战力/属性草案",
+  foundationChecklistTitle: "世界基础完整度",
+  foundationChecklistProgress: "已完成 {done}/{total} 项",
+  foundationChecklistReady: "基础齐备",
+  foundationChecklistDrafts: "有草稿待审",
+  foundationChecklistIncomplete: "基础未完成",
+  foundationCheckStatusDone: "已就绪",
+  foundationCheckStatusDraft: "草稿待启用",
+  foundationCheckStatusMissing: "未建立",
+  foundationCheck_summary: "世界简介",
+  foundationCheck_activeRules: "至少一套生效规则",
+  foundationCheck_cast: "核心人物",
+  foundationCheck_locationsFactions: "地点与势力",
+  foundationCheck_items: "物件与道具设计",
+  foundationCheck_canonStatus: "正典与提案状态",
+  foundationDetailSummaryDone: "已填写世界简介",
+  foundationDetailSummaryMissing: "尚未填写世界简介",
+  foundationDetailRulesActive: "{active} 套生效 · {draft} 套草稿",
+  foundationDetailRulesDraft: "{draft} 套草稿待审并启用",
+  foundationDetailRulesMissing: "还没有世界级规则或规则体系",
+  foundationDetailCast: "{count} 位人物",
+  foundationDetailAtlas: "{locations} 处地点 · {factions} 个势力",
+  foundationDetailItems: "{objects} 件物件 · {templates} 项数值模板",
+  foundationDetailItemsDraft: "{templates} 项数值模板仍在草稿体系中",
+  foundationDetailCanonDone: "{canon} 项已确认正典 · {proposed} 条时间线提案",
+  foundationDetailCanonDraft: "{drafts} 项规则草稿待审 · {proposed} 条提案",
+  foundationDetailCanonMissing: "尚未确立正典规则或时间线状态",
+  foundationHealthTitle: "基础结构健康度",
+  foundationHealthLead:
+    "区分哪些基础仍是纯文本描述，哪些已具备可解析的结构化定义。",
+  foundationHealthMode_structured: "结构化",
+  foundationHealthMode_proseOnly: "仅纯文本",
+  foundationHealthMode_missing: "空白",
+  foundationHealthAxis_rules: "世界规则与等级",
+  foundationHealthAxis_abilities: "技能与能力",
+  foundationHealthAxis_items: "物件与装备数值",
+  foundationHealthAxis_nodes: "世界节点结构",
+  foundationHealthCounts: "结构化 {structured} · 纯文本 {prose}",
+  foundationRuleSystemsTitle: "结构化规则体系",
+  foundationRuleSystemsEmpty:
+    "当前世界尚未建立结构化等级或属性体系；可从修仙、异能或科幻模板生成草案，或保持纯文本规则。",
+  foundationRuleSystemMeta:
+    "{tiers} 个等级 · {attributes} 项属性 · {abilities} 项技能 · {items} 项物件模板",
+  foundationRuleSystemDeleteConfirm:
+    "确定删除规则体系「{name}」及其关联的技能与物件数值模板吗？此操作不可撤销。",
+  foundationGateTitle: "基础设定尚未完成，确定直接开始吗？",
+  foundationGateLead:
+    "当前世界完成了 {done}/{total} 项基础检查。你可以先补齐设定，也可以主动继续；跳过状态会记录在新建作品中。",
+  foundationGateFinishFirst: "先去完善基础设定",
+  foundationGateProceedNovel: "仍要开始写小说",
+  foundationGateProceedGame: "仍要创建游戏",
+  foundationWarningIncomplete:
+    "当前世界的基础设定尚未完成（{done}/{total}）：{missing}。仍可继续创建，但会记录本次跳过状态。",
+  foundationWarningReviewAction: "查看基础设定",
+  foundationProceedAddChapter: "仍要新增章节",
+  foundationProceedCreateWork: "仍要创建作品",
+  foundationBypassRecordedWork:
+    "该作品创建时世界基础未完成（未完成项：{missing}，记录于 {at}）。",
+  foundationBypassRecordedChapter: "本章创建时基础未完成（{missing}）",
+  foundationLiveReminder:
+    "所属世界的基础设定仍未完成（{done}/{total}）：{missing}。",
 } as const;
 
 export type MessageKey = keyof typeof zh;
@@ -1943,6 +2006,75 @@ const en: Record<MessageKey, string> = {
   rulesFieldRuleBindings: "Rule bindings",
   rulesFieldAbilityIds: "Abilities",
   rulesFieldItemTemplate: "Item template",
+  templateDraftOnly:
+    "Templates seed editable drafts (rules, tier scaffolds and placeholders start unactivated), never locked canon.",
+  templateScaffoldBadge: "Draft power/stat scaffold",
+  foundationChecklistTitle: "Foundation completeness",
+  foundationChecklistProgress: "{done}/{total} complete",
+  foundationChecklistReady: "Foundation ready",
+  foundationChecklistDrafts: "Drafts to review",
+  foundationChecklistIncomplete: "Foundation unfinished",
+  foundationCheckStatusDone: "Ready",
+  foundationCheckStatusDraft: "Draft",
+  foundationCheckStatusMissing: "Missing",
+  foundationCheck_summary: "World summary",
+  foundationCheck_activeRules: "Active rule set",
+  foundationCheck_cast: "Cast",
+  foundationCheck_locationsFactions: "Locations & factions",
+  foundationCheck_items: "Item designs",
+  foundationCheck_canonStatus: "Canon vs. proposal status",
+  foundationDetailSummaryDone: "World summary recorded",
+  foundationDetailSummaryMissing: "Add a short world summary",
+  foundationDetailRulesActive: "{active} active · {draft} draft",
+  foundationDetailRulesDraft: "{draft} draft rule(s) waiting for activation",
+  foundationDetailRulesMissing: "No world-scoped standards or rule systems yet",
+  foundationDetailCast: "{count} character(s)",
+  foundationDetailAtlas: "{locations} location(s) · {factions} faction(s)",
+  foundationDetailItems:
+    "{objects} story object(s) · {templates} stat template(s)",
+  foundationDetailItemsDraft:
+    "{templates} item template(s) in draft rule systems",
+  foundationDetailCanonDone:
+    "{canon} confirmed canon · {proposed} timeline proposal(s)",
+  foundationDetailCanonDraft:
+    "{drafts} draft rule(s) to review · {proposed} proposal(s)",
+  foundationDetailCanonMissing:
+    "No active canon rules or reviewed timeline status yet",
+  foundationHealthTitle: "Foundation health",
+  foundationHealthLead:
+    "Shows which parts of this world are still prose-only and which are machine-readable structure.",
+  foundationHealthMode_structured: "Structured",
+  foundationHealthMode_proseOnly: "Prose-only",
+  foundationHealthMode_missing: "Empty",
+  foundationHealthAxis_rules: "World rules & tiers",
+  foundationHealthAxis_abilities: "Skills & abilities",
+  foundationHealthAxis_items: "Items & stat blocks",
+  foundationHealthAxis_nodes: "World node schemas",
+  foundationHealthCounts: "{structured} structured · {prose} prose",
+  foundationRuleSystemsTitle: "Structured rule systems",
+  foundationRuleSystemsEmpty:
+    "No structured tier or attribute rule systems in this world yet. Genre templates seed editable drafts, or you can stay prose-only.",
+  foundationRuleSystemMeta:
+    "{tiers} tier(s) · {attributes} attribute(s) · {abilities} ability template(s) · {items} item template(s)",
+  foundationRuleSystemDeleteConfirm:
+    'Delete rule system "{name}" and its linked ability and item templates? This cannot be undone.',
+  foundationGateTitle: "World foundation is unfinished — start anyway?",
+  foundationGateLead:
+    "This world has completed {done}/{total} foundation checks. You can finish the foundation first or proceed deliberately — the unfinished state will be recorded on the new work.",
+  foundationGateFinishFirst: "Finish foundation first",
+  foundationGateProceedNovel: "Start novel anyway",
+  foundationGateProceedGame: "Start game anyway",
+  foundationWarningIncomplete:
+    "This world's foundation is incomplete ({done}/{total}): {missing}. You can proceed deliberately, and this state will be recorded.",
+  foundationWarningReviewAction: "Review foundation",
+  foundationProceedAddChapter: "Add chapter anyway",
+  foundationProceedCreateWork: "Create anyway",
+  foundationBypassRecordedWork:
+    "Created before the world foundation was complete (unfinished: {missing}, recorded {at}).",
+  foundationBypassRecordedChapter:
+    "Chapter started with unfinished foundation ({missing})",
+  foundationLiveReminder:
+    "This world's foundation is still unfinished ({done}/{total}): {missing}.",
 };
 
 export const dictionaries: Record<UiLocale, Record<MessageKey, string>> = {

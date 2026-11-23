@@ -18,6 +18,7 @@ import {
   UniverseModal,
   WorkflowTaskModal,
 } from "./components/forms.tsx";
+import { FoundationGateModal } from "./components/foundation-checklist.tsx";
 import { Icon } from "./components/icon.tsx";
 import { ManuscriptImport } from "./components/manuscript-import.tsx";
 import { SearchOverlay } from "./components/search-overlay.tsx";
@@ -49,6 +50,10 @@ import {
   nextChapterNumber,
   workWords,
 } from "./core/factory.ts";
+import {
+  createFoundationBypass,
+  evaluateUniverseFoundation,
+} from "./core/foundation-readiness.ts";
 import {
   deleteChapterFromDraft,
   deleteCharacterFromDraft,
@@ -88,6 +93,7 @@ import type {
   CardType,
   Chapter,
   Character,
+  FoundationBypassRecord,
   ItemStatTemplate,
   LoreEntry,
   Relationship,
@@ -188,6 +194,11 @@ type ModalState =
       universeId: string;
       workId?: string;
       constructId: string;
+    }
+  | {
+      kind: "foundationGate";
+      universeId: string;
+      workKind: WorkKind;
     };
 
 export function App() {
@@ -419,14 +430,29 @@ export function App() {
    * a node board seeded with this game's own pack. Both run as one mutation so
    * a rejected change never leaves a half-built work behind.
    */
-  const quickBuild = (universeId: string, kind: WorkKind) => {
+  const createQuickWork = (
+    universeId: string,
+    kind: WorkKind,
+    foundationBypass?: FoundationBypassRecord,
+  ) => {
     let created: StoryWork | undefined;
     const applied = mutateChecked((draft) => {
-      created = quickBuildWork(draft, universeId, kind, locale);
+      created = quickBuildWork(draft, universeId, kind, locale, undefined, {
+        foundationBypass,
+      });
     });
     if (!applied || !created) return;
     navigate({ name: "work", workId: created.id });
     notify(kind === "game" ? t("gameCreated") : t("novelCreated"));
+  };
+
+  const quickBuild = (universeId: string, kind: WorkKind) => {
+    const report = evaluateUniverseFoundation(workspace, universeId);
+    if (!report.complete) {
+      setModal({ kind: "foundationGate", universeId, workKind: kind });
+      return;
+    }
+    createQuickWork(universeId, kind);
   };
 
   const deleteUniverse = async (target: StoryUniverse) => {
@@ -1405,6 +1431,13 @@ export function App() {
               onOpenUniverse={() =>
                 navigate({ name: "universe", id: work.universeId })
               }
+              onOpenFoundation={() =>
+                navigate({
+                  name: "universe",
+                  id: work.universeId,
+                  tab: "foundation",
+                })
+              }
               onEditWork={() => setModal({ kind: "novel", initial: work })}
               onDeleteWork={() => deleteNovel(work)}
               onAddChapter={() =>
@@ -1545,6 +1578,13 @@ export function App() {
           onImport={async (imported) => {
             if (!(await snapshotBefore("before-import-novel"))) return false;
             try {
+              const targetUniverseId = modal.universeId;
+              if (targetUniverseId && imported.works[0]) {
+                const bypass = createFoundationBypass(
+                  evaluateUniverseFoundation(workspace, targetUniverseId),
+                );
+                if (bypass) imported.works[0].foundationBypass = bypass;
+              }
               // Validate the combined snapshot before scheduling the mutation.
               mergeManuscriptImport(workspace, imported);
               mutate((draft) =>
@@ -1582,6 +1622,13 @@ export function App() {
           workspace={workspace}
           defaultUniverseId={modal.universeId ?? defaultUniverseId}
           initial={modal.initial}
+          onOpenFoundation={(targetUniverseId) =>
+            navigate({
+              name: "universe",
+              id: targetUniverseId,
+              tab: "foundation",
+            })
+          }
           onSave={saveNovel}
         />
       ) : null}
@@ -1664,6 +1711,24 @@ export function App() {
           }
           existingNumbers={
             chapterModalWork?.chapters.map((chapter) => chapter.number) ?? []
+          }
+          foundationReport={
+            chapterModalWork
+              ? evaluateUniverseFoundation(
+                  workspace,
+                  chapterModalWork.universeId,
+                )
+              : undefined
+          }
+          onOpenFoundation={
+            chapterModalWork
+              ? () =>
+                  navigate({
+                    name: "universe",
+                    id: chapterModalWork.universeId,
+                    tab: "foundation",
+                  })
+              : undefined
           }
           onSave={(chapter) => addChapter(modal.workId, chapter)}
         />
@@ -1840,6 +1905,32 @@ export function App() {
           defaultUniverseId={modal.universeId}
           defaultWorkId={modal.workId}
           onSave={saveWorkflowTask}
+        />
+      ) : null}
+      {modal?.kind === "foundationGate" ? (
+        <FoundationGateModal
+          open
+          kind={modal.workKind}
+          report={evaluateUniverseFoundation(workspace, modal.universeId)}
+          t={t}
+          onClose={() => setModal(null)}
+          onFinishFoundation={() => {
+            const targetUniverseId = modal.universeId;
+            setModal(null);
+            navigate({
+              name: "universe",
+              id: targetUniverseId,
+              tab: "foundation",
+            });
+          }}
+          onProceedAnyway={() => {
+            const { universeId: targetUniverseId, workKind } = modal;
+            const bypass = createFoundationBypass(
+              evaluateUniverseFoundation(workspace, targetUniverseId),
+            );
+            setModal(null);
+            createQuickWork(targetUniverseId, workKind, bypass);
+          }}
         />
       ) : null}
       {toast ? <Toast message={toast.message} tone={toast.tone} /> : null}

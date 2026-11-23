@@ -789,17 +789,22 @@ describe("FoundationView standards and structured rules modes", () => {
       expect(view.getByText(t("foundationNoMatch"))).toBeTruthy();
       fireEvent.change(stdSearch, { target: { value: "" } });
 
+      const detailPane = () =>
+        within(
+          view.container.querySelector(".foundation-detail") as HTMLElement,
+        );
+
       fireEvent.click(
         view.getByRole("button", { name: /Canon vs\. proposal separation/i }),
       );
-      fireEvent.click(view.getByRole("button", { name: t("edit") }));
+      fireEvent.click(detailPane().getByRole("button", { name: t("edit") }));
       expect(onEditStandard).toHaveBeenCalledTimes(1);
       fireEvent.click(
-        view.getByRole("button", { name: t("foundationDisable") }),
+        detailPane().getByRole("button", { name: t("foundationDisable") }),
       );
       expect(onStatusChange).toHaveBeenCalledTimes(1);
       fireEvent.click(
-        view.getByRole("button", { name: t("foundationCopyBody") }),
+        detailPane().getByRole("button", { name: t("foundationCopyBody") }),
       );
 
       fireEvent.click(
@@ -875,16 +880,16 @@ describe("FoundationView standards and structured rules modes", () => {
       fireEvent.click(view.getByRole("button", { name: t("rulesDeleteItem") }));
       expect(onDeleteItemTemplate).toHaveBeenCalledTimes(1);
 
-      fireEvent.click(view.getByRole("button", { name: t("edit") }));
+      fireEvent.click(detailPane().getByRole("button", { name: t("edit") }));
       expect(onEditRuleSystem).toHaveBeenCalledTimes(1);
       fireEvent.click(
-        view.getByRole("button", { name: t("foundationDisable") }),
+        detailPane().getByRole("button", { name: t("foundationDisable") }),
       );
       expect(onRuleSystemStatusChange).toHaveBeenCalledWith(
         expect.objectContaining({ id: "rules_tide" }),
         "disabled",
       );
-      fireEvent.click(view.getByRole("button", { name: t("delete") }));
+      fireEvent.click(detailPane().getByRole("button", { name: t("delete") }));
       expect(onDeleteRuleSystem).toHaveBeenCalledTimes(1);
 
       // Consistency panel catches workspace chapter out-of-range numbers AND pasted draft text
@@ -913,9 +918,12 @@ describe("FoundationView standards and structured rules modes", () => {
           name: new RegExp(t("foundationStatDraft"), "i"),
         }),
       );
-      fireEvent.click(view.getByText("Draft Attributes"));
+      const ruleList = within(
+        view.container.querySelector(".workflow-list") as HTMLElement,
+      );
+      fireEvent.click(ruleList.getByText("Draft Attributes"));
       fireEvent.click(
-        view.getByRole("button", { name: t("foundationActivate") }),
+        detailPane().getByRole("button", { name: t("foundationActivate") }),
       );
       expect(onRuleSystemStatusChange).toHaveBeenCalledWith(
         expect.objectContaining({ id: "rules_draft" }),

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { FoundationChecklistCard } from "../components/foundation-checklist.tsx";
 import { Icon } from "../components/icon.tsx";
 import { RelationshipCanvas } from "../components/relationship-graph.tsx";
 import {
@@ -13,6 +14,10 @@ import {
 } from "../components/ui.tsx";
 import type { AiConfigInfo } from "../core/ai.ts";
 import { displayText, workWords } from "../core/factory.ts";
+import {
+  evaluateUniverseFoundation,
+  type FoundationCheckTarget,
+} from "../core/foundation-readiness.ts";
 import { buildRelationshipGraph } from "../core/graph.ts";
 import { formatCharacterRuleBindings } from "../core/rule-layer.ts";
 import type { StandardCandidate } from "../core/standards.ts";
@@ -224,6 +229,17 @@ export function UniverseView({
   const ruleSystemCount = workspace.ruleSystems.filter(
     (system) => system.universeId === universe.id,
   ).length;
+  const foundationReport = useMemo(
+    () => evaluateUniverseFoundation(workspace, universe.id),
+    [workspace, universe.id],
+  );
+  const handleChecklistTarget = (target: FoundationCheckTarget) => {
+    if (target === "edit-world") {
+      onEditUniverse();
+      return;
+    }
+    setTab(target);
+  };
   const nodeTypes = useMemo(
     () => workspace.cardTypes.filter((type) => type.universeId === universe.id),
     [workspace.cardTypes, universe.id],
@@ -333,6 +349,11 @@ export function UniverseView({
 
       {tab === "overview" ? (
         <div className="universe-overview">
+          <FoundationChecklistCard
+            report={foundationReport}
+            t={t}
+            onSelectTarget={handleChecklistTarget}
+          />
           <section className="prose-card world-summary-card">
             <span className="eyebrow">WORLD BIBLE / 世界圣经</span>
             <h2>{t("worldDetails")}</h2>
@@ -881,6 +902,7 @@ export function UniverseView({
           onNewStandard={onNewStandard}
           onEditStandard={onEditStandard}
           onStatusChange={onStatusChange}
+          onSelectChecklistTarget={handleChecklistTarget}
           onRegisterCandidates={(candidates) =>
             onRegisterCandidates(candidates)
           }
