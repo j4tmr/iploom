@@ -60,7 +60,7 @@ The smoke test creates a temporary workspace, opens the real renderer in a hidde
 ## Source map
 
 ```text
-apps/studio/src/core/       pure domain, validation, graph, search, ArcReel
+apps/studio/src/core/       pure domain, validation, graph, search
 apps/studio/src/node/       workspace persistence and MCP configuration
 apps/studio/src/views/      workspace pages
 apps/studio/src/components/ forms, graph, shell, search
@@ -72,10 +72,9 @@ tests/studio/               domain, persistence and real stdio MCP tests
 
 ## Data rules
 
-- Do not commit `.studio/`, `workspace.json`, exports, manuscripts or private assets.
+- Do not commit `.studio/`, `workspace.json`, manuscripts or private assets.
 - New document fields require schema, factory defaults and migration behavior.
 - Validate at the persistence boundary, not only in forms.
-- Keep exports deterministic: stable ordering, explicit timestamps and hashes.
 - MCP query tools must remain read-only.
 - Any new write tool must document its local file scope and receive tests.
 

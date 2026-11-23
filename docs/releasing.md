@@ -2,7 +2,7 @@
 
 ## Version source
 
-`package.json.version` is the single application version. The UI, MCP server and handoff manifest read it through `apps/studio/src/core/version.ts`.
+`package.json.version` is the single application version. The UI and MCP server read it through `apps/studio/src/core/version.ts`.
 
 Before a release:
 

@@ -171,8 +171,6 @@ export function createEmptyWorkspace(
     settings: {
       locale,
       theme: "system",
-      defaultAspectRatio: "9:16",
-      exportApprovedOnly: false,
     },
     standards: createBaselineStandards(now),
     ruleSystems: [],
@@ -192,7 +190,6 @@ export function createEmptyWorkspace(
     timelineEvents: [],
     workflowTasks: [],
     works: [],
-    exports: [],
   };
 }
 
@@ -217,8 +214,6 @@ export function createDemoWorkspace(
     settings: {
       locale,
       theme: "system",
-      defaultAspectRatio: "9:16",
-      exportApprovedOnly: false,
     },
     standards: baselineStandards,
     ruleSystems: [],
@@ -913,8 +908,8 @@ export function createDemoWorkspace(
           "Turn approved chapters into reviewable shots for stylized 3D animation in 9:16 within the existing production boundary.",
         ),
         deliverable: localized(
-          "包含场景、镜头、角色锚点与风险的 ArcReel 交接草案。",
-          "An ArcReel handoff draft with scenes, shots, character anchors and risks.",
+          "包含场景、镜头、角色锚点与风险的改编交接草案。",
+          "A handoff draft with scenes, shots, character anchors and risks.",
         ),
         result: localized("", ""),
         kind: "adaptation",
@@ -929,7 +924,6 @@ export function createDemoWorkspace(
         updatedAt: createdAt,
       },
     ],
-    exports: [],
   };
   return validateWorkspace(demo);
 }

@@ -201,7 +201,6 @@ describe("validation messages", () => {
       ["locations.0.name.zh", "地点"],
       ["factions.0.name.zh", "势力"],
       ["lore.0.title.zh", "世界设定"],
-      ["exports.0.workTitle", "导出记录"],
       ["cardTypes.0.name.zh", "节点类型"],
       ["cards.0.title.zh", "节点卡片"],
       ["cardEdges.0.label.zh", "节点关系"],

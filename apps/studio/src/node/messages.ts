@@ -53,7 +53,6 @@ export interface MainMessages {
     invalidRequest: string;
   };
   store: {
-    unsafeExportPath(value: string): string;
     missingOrInvalid(detail: string): string;
     quarantineFailed(
       backup: string,
@@ -66,9 +65,6 @@ export interface MainMessages {
     noRecoveryCopyName(filePath: string): string;
     unsafeSnapshotReason(reason: string): string;
     notSnapshot(path: string): string;
-    exportDirectoryEscapes: string;
-    duplicateExportFile(relative: string): string;
-    exportPathEscapes(relative: string): string;
     staleSameRevision(path: string, revision: number): string;
     staleBaseBehind(
       path: string,
@@ -86,8 +82,6 @@ export interface MainMessages {
     revealPathDoesNotExist: string;
     revealNotFileOrDirectory: string;
     revealNotAccessible: string;
-    invalidArcReelBundle(where: string): string;
-    invalidArcReelBundleAt(path: string): string;
   };
   mcpConfig: {
     binaryMissing: string;
@@ -191,7 +185,6 @@ export const englishMainMessages: MainMessages = {
     invalidRequest: "The AI request is invalid. Shorten the prompt and retry.",
   },
   store: {
-    unsafeExportPath: (value) => `Unsafe export path: ${value}`,
     missingOrInvalid: (detail) => `Workspace is missing or invalid. ${detail}`,
     quarantineFailed: (backup, filePath, detail, reason) =>
       `Recovered from ${backup}, but could not isolate the unreadable file ${filePath}: ${detail}. ${reason}`,
@@ -203,9 +196,6 @@ export const englishMainMessages: MainMessages = {
       `Could not find a free recovery-copy name for ${filePath}`,
     unsafeSnapshotReason: (reason) => `Unsafe snapshot reason: ${reason}`,
     notSnapshot: (path) => `Not a workspace snapshot: ${path}`,
-    exportDirectoryEscapes: "Export directory escapes the selected destination",
-    duplicateExportFile: (relative) => `Duplicate export file: ${relative}`,
-    exportPathEscapes: (relative) => `Export path escapes package: ${relative}`,
     staleSameRevision: (path, revision) =>
       `Refusing to overwrite ${path} revision ${revision} with different ` +
       `content. Another process (for example the MCP server) changed the ` +
@@ -235,8 +225,6 @@ export const englishMainMessages: MainMessages = {
     revealPathDoesNotExist: "Path does not exist",
     revealNotFileOrDirectory: "Path is not a file or directory",
     revealNotAccessible: "Path is not accessible",
-    invalidArcReelBundle: (where) => `Invalid ArcReel bundle${where}`,
-    invalidArcReelBundleAt: (path) => ` at ${path}`,
   },
   mcpConfig: {
     binaryMissing: "Bundled MCP server is missing from this installation.",
@@ -342,7 +330,6 @@ export const zhMainMessages: MainMessages = {
     invalidRequest: "AI 请求无效。请缩短提示词后重试。",
   },
   store: {
-    unsafeExportPath: (value) => `不安全的导出路径：${value}`,
     missingOrInvalid: (detail) => `工作区缺失或无效。${detail}`,
     quarantineFailed: (backup, filePath, detail, reason) =>
       `已从 ${backup} 恢复，但无法隔离无法读取的文件 ${filePath}：${detail}。${reason}`,
@@ -353,9 +340,6 @@ export const zhMainMessages: MainMessages = {
       `找不到可用于 ${filePath} 恢复副本的空闲名称`,
     unsafeSnapshotReason: (reason) => `不安全的快照原因：${reason}`,
     notSnapshot: (path) => `不是工作区快照：${path}`,
-    exportDirectoryEscapes: "导出目录逃逸出所选目标位置",
-    duplicateExportFile: (relative) => `重复的导出文件：${relative}`,
-    exportPathEscapes: (relative) => `导出路径逃逸出程序包：${relative}`,
     staleSameRevision: (path, revision) =>
       `拒绝以不同内容覆盖 ${path} 的版本 ${revision}。另一个进程（例如 MCP 服务器）` +
       `修改了工作区。请重新载入工作区，从较新的文件继续；文件未被改动。`,
@@ -377,8 +361,6 @@ export const zhMainMessages: MainMessages = {
     revealPathDoesNotExist: "路径不存在",
     revealNotFileOrDirectory: "路径不是文件或目录",
     revealNotAccessible: "路径不可访问",
-    invalidArcReelBundle: (where) => `无效的 ArcReel 交付包${where}`,
-    invalidArcReelBundleAt: (path) => `（位置：${path}）`,
   },
   mcpConfig: {
     binaryMissing: "此安装缺少内置的 MCP 服务器。",

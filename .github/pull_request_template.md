@@ -6,7 +6,6 @@
 
 - [ ] World / cast / relationships
 - [ ] Manuscript / library / search
-- [ ] ArcReel handoff
 - [ ] MCP
 - [ ] Desktop / packaging / release
 - [ ] Documentation

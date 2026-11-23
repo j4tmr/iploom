@@ -10,22 +10,16 @@ import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { buildArcReelBundle } from "../../apps/studio/src/core/arcreel.ts";
-import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import {
-  ARC_REEL_EXPORT_LIMITS,
   canonicalPath,
   isBlockedShellTarget,
   isTrustedRendererUrl,
   isWithin,
-  parseArcReelBundle,
   parseDevUrl,
-  realPathWithExistingAncestor,
   revealKnownPath,
   safeExternalUrl,
   workspaceRevealFolders,
 } from "../../apps/studio/src/node/desktop-guards.ts";
-import { WorkspaceStore } from "../../apps/studio/src/node/workspace-store.ts";
 
 describe("desktop path guards", () => {
   test("isWithin treats the root as inside and sibling prefixes as outside", () => {
@@ -150,128 +144,8 @@ describe("desktop path guards", () => {
     expect(
       isBlockedShellTarget("/Applications/Evil.app/Contents/MacOS/Evil"),
     ).toBe(false);
-    expect(isBlockedShellTarget("/tmp/exports")).toBe(false);
+    expect(isBlockedShellTarget("/tmp/snapshots")).toBe(false);
     expect(isBlockedShellTarget("/tmp/my.app.backup")).toBe(false);
-  });
-
-  test("realPathWithExistingAncestor resolves the existing prefix and keeps the suffix", async () => {
-    const root = mkdtempSync(join(tmpdir(), "iploom-guards-real-"));
-    try {
-      const realRoot = await realpath(root);
-      expect(
-        await realPathWithExistingAncestor(join(root, "missing", "deeper")),
-      ).toBe(join(realRoot, "missing", "deeper"));
-      mkdirSync(join(root, "existing"));
-      expect(
-        await realPathWithExistingAncestor(
-          join(root, "existing", "child.json"),
-        ),
-      ).toBe(join(realRoot, "existing", "child.json"));
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-});
-
-describe("ArcReel bundle validation", () => {
-  const bundleFor = async () => {
-    const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
-    return buildArcReelBundle(workspace, {
-      workId: "work_tide_clock",
-      generatedAt: "2026-11-06T03:00:00.000Z",
-    });
-  };
-
-  test("accepts the bundle the exporter builds", async () => {
-    const bundle = await bundleFor();
-    expect(() => parseArcReelBundle(bundle)).not.toThrow();
-    expect(parseArcReelBundle(bundle).manifestSha256).toBe(
-      bundle.manifestSha256,
-    );
-  });
-
-  test("rejects payloads the directory name or writer would trust", async () => {
-    const bundle = await bundleFor();
-
-    const hashEscape = structuredClone(bundle);
-    hashEscape.manifestSha256 = "/../..//";
-    expect(() => parseArcReelBundle(hashEscape)).toThrow(
-      /Invalid ArcReel bundle/,
-    );
-
-    const shortHash = structuredClone(bundle);
-    shortHash.manifestSha256 = "abc";
-    expect(() => parseArcReelBundle(shortHash)).toThrow(
-      /Invalid ArcReel bundle/,
-    );
-
-    const badTimestamp = structuredClone(bundle);
-    badTimestamp.generatedAt = "not-a-date";
-    expect(() => parseArcReelBundle(badTimestamp)).toThrow(
-      /Invalid ArcReel bundle/,
-    );
-
-    const badWork = structuredClone(bundle);
-    badWork.workId = "../../etc";
-    expect(() => parseArcReelBundle(badWork)).toThrow(/Invalid ArcReel bundle/);
-
-    const badSchema = structuredClone(bundle) as unknown as { schema: string };
-    badSchema.schema = "iploom.arcreel.manifest/v0";
-    expect(() => parseArcReelBundle(badSchema)).toThrow(
-      /Invalid ArcReel bundle/,
-    );
-
-    const noFiles = structuredClone(bundle);
-    noFiles.files = [];
-    expect(() => parseArcReelBundle(noFiles)).toThrow(/Invalid ArcReel bundle/);
-
-    const longPath = structuredClone(bundle);
-    longPath.files[0]!.path = "a".repeat(
-      ARC_REEL_EXPORT_LIMITS.maxPathLength + 1,
-    );
-    expect(() => parseArcReelBundle(longPath)).toThrow(
-      /Invalid ArcReel bundle/,
-    );
-
-    const oversizedFile = structuredClone(bundle);
-    oversizedFile.files[0]!.content = "x".repeat(
-      ARC_REEL_EXPORT_LIMITS.maxFileBytes + 1,
-    );
-    expect(() => parseArcReelBundle(oversizedFile)).toThrow(
-      /Invalid ArcReel bundle/,
-    );
-
-    const tooManyFiles = structuredClone(bundle);
-    tooManyFiles.files = Array.from(
-      { length: ARC_REEL_EXPORT_LIMITS.maxFiles + 1 },
-      (_, index) => ({
-        path: `files/${index}.txt`,
-        content: "x",
-        mediaType: "text/plain" as const,
-      }),
-    );
-    expect(() => parseArcReelBundle(tooManyFiles)).toThrow(
-      /Invalid ArcReel bundle/,
-    );
-
-    const badMedia = structuredClone(bundle) as unknown as {
-      files: Array<{ mediaType: string }>;
-    };
-    badMedia.files[0]!.mediaType = "application/octet-stream";
-    expect(() => parseArcReelBundle(badMedia)).toThrow(
-      /Invalid ArcReel bundle/,
-    );
-
-    const extraKey = structuredClone(bundle) as unknown as Record<
-      string,
-      unknown
-    >;
-    extraKey.command = "rm -rf /";
-    expect(() => parseArcReelBundle(extraKey)).toThrow(
-      /Invalid ArcReel bundle/,
-    );
-
-    expect(() => parseArcReelBundle(null)).toThrow(/Invalid ArcReel bundle/);
   });
 });
 
@@ -280,9 +154,9 @@ describe("revealKnownPath", () => {
     const root = mkdtempSync(join(tmpdir(), "iploom-guards-reveal-"));
     const outside = mkdtempSync(join(tmpdir(), "iploom-guards-outside-"));
     try {
-      mkdirSync(join(root, "exports", "package"), { recursive: true });
+      mkdirSync(join(root, "notes"), { recursive: true });
       writeFileSync(join(root, "workspace.json"), "{}");
-      writeFileSync(join(root, "exports", "package", "manifest.json"), "{}");
+      writeFileSync(join(root, "notes", "readme.txt"), "ok");
       mkdirSync(join(root, "Evil.app"), { recursive: true });
       writeFileSync(join(outside, "secret.txt"), "secret");
 
@@ -296,17 +170,12 @@ describe("revealKnownPath", () => {
         showItemInFolder: (path: string) => shown.push(path),
       };
 
-      await expect(
-        revealKnownPath(join(root, "exports", "package"), deps),
-      ).resolves.toBe(await realpath(join(root, "exports", "package")));
-      await expect(
-        revealKnownPath(
-          join(root, "exports", "package", "manifest.json"),
-          deps,
-        ),
-      ).resolves.toBe(
-        await realpath(join(root, "exports", "package", "manifest.json")),
+      await expect(revealKnownPath(join(root, "notes"), deps)).resolves.toBe(
+        await realpath(join(root, "notes")),
       );
+      await expect(
+        revealKnownPath(join(root, "notes", "readme.txt"), deps),
+      ).resolves.toBe(await realpath(join(root, "notes", "readme.txt")));
       await expect(
         revealKnownPath(join(root, "workspace.json"), deps),
       ).resolves.toBe(await realpath(join(root, "workspace.json")));
@@ -334,82 +203,6 @@ describe("revealKnownPath", () => {
         await expect(revealKnownPath(attempt, deps)).rejects.toThrow();
       }
       expect(shown).toHaveLength(4);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-      rmSync(outside, { recursive: true, force: true });
-    }
-  });
-
-  test("a poisoned export record cannot widen the reveal locations", async () => {
-    const root = mkdtempSync(join(tmpdir(), "iploom-guards-poison-"));
-    const outside = mkdtempSync(join(tmpdir(), "iploom-guards-poison-out-"));
-    try {
-      writeFileSync(join(root, "workspace.json"), "{}");
-      writeFileSync(join(outside, "payload.txt"), "payload");
-      mkdirSync(join(root, "exports"), { recursive: true });
-
-      // `workspace.exports[].outputPath` is renderer-writable, so it is never
-      // used to build the allowlist; only main-process-created folders are.
-      const allowedFolders = workspaceRevealFolders(
-        join(root, "workspace.json"),
-        join(root, "snapshots"),
-      );
-      const shown: string[] = [];
-      await expect(
-        revealKnownPath(join(outside, "payload.txt"), {
-          allowedFolders,
-          showItemInFolder: (path: string) => shown.push(path),
-        }),
-      ).rejects.toThrow(/outside this workspace's known locations/);
-      expect(shown).toEqual([]);
-
-      await expect(
-        revealKnownPath(join(root, "exports"), {
-          allowedFolders,
-          showItemInFolder: (path: string) => shown.push(path),
-        }),
-      ).resolves.toBe(await realpath(join(root, "exports")));
-      expect(shown).toHaveLength(1);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-      rmSync(outside, { recursive: true, force: true });
-    }
-  });
-
-  test("a save/load roundtrip keeps a poisoned outputPath out of the allowlist", async () => {
-    const root = mkdtempSync(join(tmpdir(), "iploom-guards-roundtrip-"));
-    const outside = mkdtempSync(join(tmpdir(), "iploom-guards-roundtrip-out-"));
-    try {
-      const workspaceFile = join(root, "workspace.json");
-      const workspace = createDemoWorkspace("en", "2026-11-06T00:00:00.000Z");
-      workspace.exports.push({
-        id: "exp_poison",
-        workId: "work_tide_clock",
-        workTitle: "The Tide Clock",
-        createdAt: "2026-11-06T00:00:00.000Z",
-        chapterIds: [],
-        fileCount: 0,
-        bytes: 0,
-        manifestSha256: "a".repeat(64),
-        outputPath: outside,
-      });
-      const store = new WorkspaceStore(workspaceFile);
-      await store.save(workspace);
-      const loaded = await store.load();
-      const poisoned = loaded.workspace.exports[0]?.outputPath;
-      expect(poisoned).toBe(outside);
-
-      const shown: string[] = [];
-      await expect(
-        revealKnownPath(poisoned!, {
-          allowedFolders: workspaceRevealFolders(
-            workspaceFile,
-            join(root, "snapshots"),
-          ),
-          showItemInFolder: (path: string) => shown.push(path),
-        }),
-      ).rejects.toThrow(/outside this workspace's known locations/);
-      expect(shown).toEqual([]);
     } finally {
       rmSync(root, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });
@@ -497,12 +290,12 @@ describe("revealKnownPath", () => {
     };
 
     await expect(
-      revealKnownPath("/workspace/exports/book.txt", deps),
-    ).resolves.toBe("/workspace/exports/book.txt");
+      revealKnownPath("/workspace/snapshots/book.json", deps),
+    ).resolves.toBe("/workspace/snapshots/book.json");
     expect(calls.stat).toBe(1);
     // Once for the target and once for the allowed folder.
     expect(calls.realpath).toBe(2);
-    expect(shown).toEqual(["/workspace/exports/book.txt"]);
+    expect(shown).toEqual(["/workspace/snapshots/book.json"]);
   });
 
   test("still rejects an inside-looking path whose real path escapes", async () => {

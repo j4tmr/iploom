@@ -36,13 +36,13 @@ function pruneCharacterRefs(
  *
  * Workspaces written before universe ownership was validated can still contain
  * cast members or locations from another universe. The editor scopes its
- * pickers to the work universe, so those references are invisible there, and
- * exporters silently drop them. A strict validator alone would make such a
- * workspace impossible to save, so loading prunes them first: character ids
- * that do not exist or do not belong to the work universe are removed (first
- * occurrence kept), and location ids owned by another universe are cleared.
- * A location id that does not exist at all is left for validation to report
- * instead of silently dropping a likely typo.
+ * pickers to the work universe, so those references are invisible there. A
+ * strict validator alone would make such a workspace impossible to save, so
+ * loading prunes them first: character ids that do not exist or do not belong
+ * to the work universe are removed (first occurrence kept), and location ids
+ * owned by another universe are cleared. A location id that does not exist at
+ * all is left for validation to report instead of silently dropping a likely
+ * typo.
  *
  * The input is never mutated and `revision` is untouched, so loading a legacy
  * workspace does not look like an edit. Applying the function to its own
@@ -576,10 +576,6 @@ export function deleteUniverseFromDraft(
   }
   draft.timelineEvents = events;
 
-  draft.exports = draft.exports.filter(
-    (record) => !deletedWorks.has(record.workId),
-  );
-
   const removedStandards = new Set(
     draft.standards
       .filter((item) => item.universeId === universeId)
@@ -651,8 +647,8 @@ export function deleteUniverseFromDraft(
 
 /**
  * Delete a work and everything that only existed for it: its timeline events,
- * its workflow tasks (repairing parent and dependency links of survivors), its
- * own node pack with every card and relation in it, and its export history.
+ * its workflow tasks (repairing parent and dependency links of survivors), and
+ * its own node pack with every card and relation in it.
  * World-scoped tasks and the world's shared node types survive.
  */
 export function deleteWorkFromDraft(
@@ -702,7 +698,6 @@ export function deleteWorkFromDraft(
           : task.parentId,
       dependsOnIds: task.dependsOnIds.filter((id) => !removedTasks.has(id)),
     }));
-  draft.exports = draft.exports.filter((record) => record.workId !== workId);
   if (draft.lastOpenedWorkId === workId) draft.lastOpenedWorkId = undefined;
 }
 
@@ -755,8 +750,7 @@ export function deleteCharacterFromDraft(
  *
  * Chapter ids are only unique inside their work, so every cascade matches on
  * `workId` as well: a chapter that happens to share the id in another work
- * keeps its events and tasks. Export history for the work drops the removed
- * chapter from its chapter list.
+ * keeps its events and tasks.
  */
 export function deleteChapterFromDraft(
   draft: StudioWorkspace,
@@ -784,14 +778,6 @@ export function deleteChapterFromDraft(
           : task.parentId,
       dependsOnIds: task.dependsOnIds.filter((id) => !removedTasks.has(id)),
     }));
-  draft.exports = draft.exports.map((record) =>
-    record.workId === workId
-      ? {
-          ...record,
-          chapterIds: record.chapterIds.filter((id) => id !== chapterId),
-        }
-      : record,
-  );
 }
 
 /**

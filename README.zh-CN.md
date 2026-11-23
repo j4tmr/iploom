@@ -1,13 +1,13 @@
 # IPloom Studio · 造界工坊
 
-**先构建 IP 世界，再写小说，最后把同一份事实交给 3D 漫剧制作链。**
+**先构建 IP 世界，再写小说与作品，并通过本地 MCP 共享同一份事实来源。**
 
 [![Studio CI](https://github.com/j4tmr/iploom/actions/workflows/studio-ci.yml/badge.svg)](https://github.com/j4tmr/iploom/actions/workflows/studio-ci.yml)
 [![最新发行版](https://img.shields.io/github/v/release/j4tmr/iploom?display_name=tag&sort=semver)](https://github.com/j4tmr/iploom/releases)
 
-[English](README.md) · [功能说明站](https://j4tmr.github.io/iploom/) · [下载发行版](https://github.com/j4tmr/iploom/releases) · [架构](docs/architecture.md) · [MCP 接入](docs/mcp.md) · [ArcReel 交接](docs/arcreel-handoff.md)
+[English](README.md) · [功能说明站](https://j4tmr.github.io/iploom/) · [下载发行版](https://github.com/j4tmr/iploom/releases) · [架构](docs/architecture.md) · [MCP 接入](docs/mcp.md)
 
-IPloom Studio 是一个本地优先的桌面创作工作区。它把故事世界、可复用人物、关系图谱、小说、章节和漫剧改编资料放在同一套可追溯结构里。支持 macOS 与 Windows；内容保存在本机；本地 MCP 客户端可以读取同一份事实来源。
+IPloom Studio 是一个本地优先的桌面创作工作区。它把故事世界、可复用人物、关系图谱、小说、章节、游戏节点与代理任务放在同一套可追溯结构里。支持 macOS 与 Windows；内容保存在本机；本地 MCP 客户端可以读取和更新同一份事实来源。
 
 ![IPloom Studio 世界主页](docs/images/dashboard.png)
 
@@ -22,10 +22,10 @@ IP 宇宙
   ├─ 世界规则、地点、势力、设定
   ├─ 可跨宇宙复用的人物
   ├─ 人物关系图
-  └─ 小说
+  └─ 作品（小说与游戏）
        ├─ 大纲与章节卡
        ├─ 正文、节拍与修订状态
-       └─ 剧集与分镜交接包
+       └─ 供本地 MCP 代理读取的任务简报
 ```
 
 最终得到的不是一堆靠记忆关联的文件，而是一张小型、可检查的 IP 图谱。
@@ -40,9 +40,8 @@ IP 宇宙
 - **代理任务**：世界内的树形创作任务、显式依赖、可开始状态与结果回填，并可复制只含相关上下文的双语简报交给外部代理。本应用不运行模型。
 - **正文编辑器**：章节、摘要、大纲、节拍、视角、人物、地点、正文与定稿状态。
 - **本地持久化**：原子写入 `workspace.json`，保留 `.bak` 恢复副本，支持结构迁移、关闭前保存握手与保存状态。
-- **ArcReel 风格交接包**：把选定章节导出为世界、剧集、分镜 JSON 与 Markdown 交接说明。
-- **本地 MCP**：19 个工具，其中 13 个只读，5 个负责写入基础规则、时间线事件与 AI 任务结果，1 个负责本地导出。
-- **桌面安全基线**：上下文隔离、沙箱渲染器、严格 CSP、IPC 校验与显式导出边界。
+- **本地 MCP**：18 个工具，其中 13 个只读，5 个负责写入基础规则、时间线事件与 AI 任务结果。
+- **桌面安全基线**：上下文隔离、沙箱渲染器、严格 CSP 与 IPC 校验。
 - **无账号、无遥测**：不依赖云端服务。
 
 ## 小说导入
@@ -94,19 +93,16 @@ bun run studio:package
 
 产物写入 `release/`。应用数据保存在系统应用数据目录，不会进入 Git。
 
-## MCP 与改编
+## MCP
 
 打开顶栏 **MCP**，复制自动生成的 stdio 配置。打包版 MCP 直接复用应用内的 Electron 运行时，不要求用户另装 Node.js。
 
 - [MCP 接入说明](docs/mcp.md)
-- [ArcReel 交接格式](docs/arcreel-handoff.md)
 - [架构与数据模型](docs/architecture.md)
-
-这里的 ArcReel 仅表示兼容的交接目标，本项目不是 ArcReel 官方产品，也不声称存在官方集成。
 
 ## 边界
 
-- 本应用负责创作与交接，不直接生成图片或视频。
+- 本应用负责本地 IP 数据管理与创作组织，不直接生成图片或视频。
 - 自动拆出的场景和镜头只是导演草案，必须由作者核对。
 - 没有云同步、协作服务器、遥测或账号系统。
 - 工作区是本地 JSON；请备份，并对私密材料使用全盘加密。

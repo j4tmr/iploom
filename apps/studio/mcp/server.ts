@@ -1,4 +1,3 @@
-import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
   McpServer,
@@ -8,7 +7,6 @@ import {
 } from "@modelcontextprotocol/server";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
-import { buildArcReelBundle } from "../src/core/arcreel.ts";
 import { countWords, createId, displayText } from "../src/core/factory.ts";
 import { evaluateUniverseFoundation } from "../src/core/foundation-readiness.ts";
 import { buildRelationshipGraph } from "../src/core/graph.ts";
@@ -61,10 +59,6 @@ import {
 } from "../src/core/types.ts";
 import { APP_VERSION } from "../src/core/version.ts";
 import {
-  isWithin,
-  realPathWithExistingAncestor,
-} from "../src/node/desktop-guards.ts";
-import {
   WorkspaceStore,
   type LoadedWorkspace,
 } from "../src/node/workspace-store.ts";
@@ -105,10 +99,6 @@ const RESULT_EXCERPT_CHARS = 200;
 const COMPACT_STRING_CHARS = 240;
 /** Arrays longer than this are clipped in compact list views. */
 const COMPACT_ARRAY_ITEMS = 20;
-/** Chapter previews and file paths echoed by an export report. */
-const EXPORT_PREVIEW_ITEMS = 50;
-/** Export warnings echoed before the rest are only counted. */
-const EXPORT_WARNING_ITEMS = 20;
 /** Unfinished dependencies listed per workflow task; the rest are counted. */
 const BLOCKER_PREVIEW_ITEMS = 10;
 
@@ -116,12 +106,6 @@ const READ_ONLY_ANNOTATIONS: ToolAnnotations = {
   readOnlyHint: true,
   destructiveHint: false,
   idempotentHint: true,
-  openWorldHint: false,
-};
-const EXPORT_ANNOTATIONS: ToolAnnotations = {
-  readOnlyHint: false,
-  destructiveHint: false,
-  idempotentHint: false,
   openWorldHint: false,
 };
 const WORKSPACE_WRITE_ANNOTATIONS: ToolAnnotations = {
@@ -1380,47 +1364,15 @@ async function run(action: () => Promise<unknown>): Promise<CallToolResult> {
   }
 }
 
-export interface StudioMcpServerOptions {
-  /**
-   * Extra export roots explicitly enabled by the operator (repeatable
-   * `--export-root`). Tool arguments can narrow a root, never widen the set.
-   */
-  exportRoots?: readonly string[];
-}
-
-export function createStudioMcpServer(
-  workspaceFile: string,
-  options: StudioMcpServerOptions = {},
-): McpServer {
+export function createStudioMcpServer(workspaceFile: string): McpServer {
   const store = new WorkspaceStore(workspaceFile);
-  const workspaceDirectory = dirname(store.filePath);
-  const defaultExportRoot = join(workspaceDirectory, "exports");
-  const exportRoots = [
-    defaultExportRoot,
-    ...(options.exportRoots ?? []).map((root) => resolve(root)),
-  ];
-  const assertExportRoot = async (candidate: string): Promise<void> => {
-    const realCandidate = await realPathWithExistingAncestor(candidate);
-    for (const root of exportRoots) {
-      try {
-        if (isWithin(await realPathWithExistingAncestor(root), realCandidate)) {
-          return;
-        }
-      } catch {
-        // An unreadable root cannot authorize a write.
-      }
-    }
-    throw new Error(
-      `Export root is outside the allowed export directories: ${candidate}`,
-    );
-  };
-  const { total, read, write, export: exportCount } = MCP_TOOL_COUNTS;
+  const { total, read, write } = MCP_TOOL_COUNTS;
   const server = new McpServer(
     { name: "IPloom Studio", version: APP_VERSION },
     {
       instructions:
-        `IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节、关系、AI 工作流与项目基础规则；search_ip 支持中英双语子串检索。共 ${total} 个工具：前 ${read} 个只读查询、${write} 个工作区写入、${exportCount} 个本地导出。列表类工具统一返回分页对象 { total, offset, count, next_offset, truncated, items }，next_offset 为 null 表示已到末页，默认单次结果不超过 50 KB。create_standard 与 update_standard 修改基础规则；create_timeline_event 与 update_timeline_event 新建或修订故事时间线事件，canon_status 默认为 proposed，只有显式传 canon 才标记为正典；save_workflow_result 把中英文结果写回 AI 任务并置为 review 待审阅，已 done 的任务需先在应用内重新打开；export_arcreel_bundle 是唯一写盘导出工具，只能写入工作区同目录的 exports，或服务端启动时用 --export-root 显式允许的目录。\n` +
-        `IPloom Studio local IP memory: list story worlds before reading novels, chapters, relationships, AI workflow and foundation standards. ${total} tools: the first ${read} are read-only queries, ${write} write workspace records, ${exportCount} writes a local export. Every list tool returns a page object { total, offset, count, next_offset, truncated, items }; next_offset === null ends paging, and a default response stays under 50 KB. create_standard and update_standard change foundation standards; create_timeline_event and update_timeline_event create or revise story timeline events, with canon_status defaulting to proposed unless canon is explicit; save_workflow_result writes Chinese and/or English result text to a workflow task and moves it to review, while a done task must be reopened in the app first; export_arcreel_bundle is the only tool that writes files and may only write inside the exports directory beside workspace.json or a directory enabled with --export-root at server start.`,
+        `IPloom Studio 本地 IP 记忆库：先列故事世界，再读小说、章节、关系、AI 工作流与项目基础规则；search_ip 支持中英双语子串检索。共 ${total} 个工具：前 ${read} 个只读查询、${write} 个工作区写入。列表类工具统一返回分页对象 { total, offset, count, next_offset, truncated, items }，next_offset 为 null 表示已到末页，默认单次结果不超过 50 KB。create_standard 与 update_standard 修改基础规则；create_timeline_event 与 update_timeline_event 新建或修订故事时间线事件，canon_status 默认为 proposed，只有显式传 canon 才标记为正典；save_workflow_result 把中英文结果写回 AI 任务并置为 review 待审阅，已 done 的任务需先在应用内重新打开。\n` +
+        `IPloom Studio local IP memory: list story worlds before reading novels, chapters, relationships, AI workflow and foundation standards. ${total} tools: the first ${read} are read-only queries and ${write} write workspace records. Every list tool returns a page object { total, offset, count, next_offset, truncated, items }; next_offset === null ends paging, and a default response stays under 50 KB. create_standard and update_standard change foundation standards; create_timeline_event and update_timeline_event create or revise story timeline events, with canon_status defaulting to proposed unless canon is explicit; save_workflow_result writes Chinese and/or English result text to a workflow task and moves it to review, while a done task must be reopened in the app first.`,
     },
   );
 
@@ -2854,89 +2806,6 @@ export function createStudioMcpServer(
     },
   );
 
-  register(
-    "export_arcreel_bundle",
-    {
-      title: "导出 ArcReel 包 / Export ArcReel bundle",
-      description:
-        "构建并写入 ArcReel/3D 漫剧交接包。output_dir 必须位于工作区 exports 目录或服务端启动时用 --export-root 显式允许的目录内；省略时写入工作区同目录 exports。返回写入报告：files_written 与 bytes 是真实总数，chapters、paths、warnings 只回显前若干项，完整的清单在目录内的 manifest.json。Build and write an ArcReel / stylized 3D comic-drama handoff. output_dir must stay inside the workspace exports directory or a directory enabled with --export-root at server start; the default is exports beside workspace.json. Returns the write report: files_written and bytes are true totals while chapters, paths and warnings echo only the first few; the complete manifest is manifest.json inside the directory.",
-      annotations: EXPORT_ANNOTATIONS,
-    },
-    z.object({
-      novel_id: novelIdSchema,
-      chapter_ids: z
-        .array(chapterIdSchema)
-        .min(1)
-        .optional()
-        .describe(
-          "仅导出指定章节；省略则导出全部章节 / Optional chapter subset.",
-        ),
-      locale: localeSchema,
-      aspect_ratio: z
-        .enum(["9:16", "16:9", "1:1"])
-        .optional()
-        .describe("画幅；省略则使用工作区默认值 / Optional aspect ratio."),
-      approved_only: z
-        .boolean()
-        .optional()
-        .describe(
-          "只导出已批准章节；省略则使用工作区设置 / Export approved chapters only; defaults to the workspace setting.",
-        ),
-      output_dir: z
-        .string()
-        .trim()
-        .min(1)
-        .optional()
-        .describe(
-          "导出根目录，必须位于 exports 或 --export-root 允许的目录内；相对路径按工作区目录解析 / Export root inside exports or an allowed --export-root; relative paths resolve against the workspace directory.",
-        ),
-    }),
-    async (args) => {
-      const loaded = await store.load();
-      const { workspace } = loaded;
-      const novel = findNovel(workspace, args.novel_id);
-      const outputRoot = args.output_dir
-        ? resolve(workspaceDirectory, args.output_dir)
-        : defaultExportRoot;
-      await assertExportRoot(outputRoot);
-      const bundle = await buildArcReelBundle(workspace, {
-        workId: novel.id,
-        chapterIds: args.chapter_ids,
-        locale: args.locale,
-        aspectRatio: args.aspect_ratio,
-        approvedOnly:
-          args.approved_only ?? workspace.settings.exportApprovedOnly,
-      });
-      const written = await store.exportArcReel(bundle, outputRoot);
-      return {
-        schema: MCP_SCHEMA,
-        workspace: workspaceMeta(loaded),
-        directory: written.directory,
-        output_root: outputRoot,
-        files_written: written.files,
-        bytes: written.bytes,
-        manifest_sha256: bundle.manifestSha256,
-        novel_id: novel.id,
-        generated_at: bundle.generatedAt,
-        language: bundle.workLanguage,
-        aspect_ratio: bundle.aspectRatio,
-        chapters: bundle.chapters.slice(0, EXPORT_PREVIEW_ITEMS),
-        chapter_count: bundle.chapters.length,
-        totals: {
-          words: bundle.totalWords,
-          scenes: bundle.totalScenes,
-          shots: bundle.totalShots,
-        },
-        paths: bundle.files
-          .slice(0, EXPORT_PREVIEW_ITEMS)
-          .map((file) => file.path),
-        path_count: bundle.files.length,
-        warnings: bundle.warnings.slice(0, EXPORT_WARNING_ITEMS),
-        warning_count: bundle.warnings.length,
-      };
-    },
-  );
-
   // The registry in mcp-tools.ts drives the settings copy, so a drifted
   // registration order or a missing/extra tool must fail loudly at startup.
   if (
@@ -2955,7 +2824,6 @@ async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
       workspace: { type: "string", short: "w" },
-      "export-root": { type: "string", multiple: true },
     },
     strict: true,
   });
@@ -2963,9 +2831,7 @@ async function main(): Promise<void> {
     throw new Error(
       "Missing required --workspace <workspace.json> / 缺少 --workspace 参数。",
     );
-  const server = createStudioMcpServer(values.workspace, {
-    exportRoots: values["export-root"]?.map((root) => resolve(root)),
-  });
+  const server = createStudioMcpServer(values.workspace);
   await server.connect(new StdioServerTransport());
 }
 
