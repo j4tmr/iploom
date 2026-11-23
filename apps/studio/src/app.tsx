@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Sidebar, Topbar } from "./components/app-shell.tsx";
 import {
+  CardAiBatchModal,
   CardBatchModal,
   CardEdgeModal,
   CardModal,
@@ -161,6 +162,7 @@ type ModalState =
     }
   | { kind: "card"; typeId: string; initial?: Card }
   | { kind: "cardBatch"; typeId: string }
+  | { kind: "cardAiBatch"; typeId: string }
   | { kind: "cardEdge"; universeId: string; defaultSourceId?: string }
   | {
       kind: "construct";
@@ -558,6 +560,19 @@ export function App() {
     return applied;
   };
 
+  const saveCardTableChanges = (batch: Card[]): boolean => {
+    if (!batch.length) return false;
+    const applied = mutateChecked((draft) => {
+      for (const next of batch) {
+        const index = draft.cards.findIndex((item) => item.id === next.id);
+        if (index >= 0) draft.cards[index] = next;
+        else draft.cards.push(next);
+      }
+    });
+    if (applied) notify(t("cardsTableSaved"));
+    return applied;
+  };
+
   const deleteCard = (card: Card) => {
     if (!window.confirm(t("cardsDeleteCardConfirm"))) return;
     const applied = mutateChecked((draft) => {
@@ -630,7 +645,10 @@ export function App() {
   };
 
   const modalCardType =
-    modal && (modal.kind === "card" || modal.kind === "cardBatch")
+    modal &&
+    (modal.kind === "card" ||
+      modal.kind === "cardBatch" ||
+      modal.kind === "cardAiBatch")
       ? workspace.cardTypes.find((item) => item.id === modal.typeId)
       : undefined;
   const modalConstruct =
@@ -1041,6 +1059,11 @@ export function App() {
       const event = workspace.timelineEvents.find((item) => item.id === hit.id);
       navigate({ name: "universe", id: hit.universeId, tab: "timeline" });
       if (event) setModal({ kind: "timeline", initial: event });
+    } else if (hit.kind === "card") {
+      const card = workspace.cards.find((item) => item.id === hit.id);
+      if (hit.workId) navigate({ name: "work", workId: hit.workId });
+      else navigate({ name: "universe", id: hit.universeId, tab: "nodes" });
+      if (card) setModal({ kind: "card", typeId: card.typeId, initial: card });
     }
   };
 
@@ -1236,7 +1259,11 @@ export function App() {
                   initial: card,
                 })
               }
+              onSaveCards={saveCardTableChanges}
               onBatchCards={(typeId) => setModal({ kind: "cardBatch", typeId })}
+              onAiBatchCards={(typeId) =>
+                setModal({ kind: "cardAiBatch", typeId })
+              }
               onNewCardEdge={(defaultSourceId) =>
                 setModal({
                   kind: "cardEdge",
@@ -1327,7 +1354,11 @@ export function App() {
                       initial: card,
                     })
                   }
+                  onSaveCards={saveCardTableChanges}
                   onBatch={(typeId) => setModal({ kind: "cardBatch", typeId })}
+                  onAiBatch={(typeId) =>
+                    setModal({ kind: "cardAiBatch", typeId })
+                  }
                   onNewEdge={(defaultSourceId) =>
                     setModal({
                       kind: "cardEdge",
@@ -1613,6 +1644,18 @@ export function App() {
           onClose={() => setModal(null)}
           t={t}
           locale={locale}
+          type={modalCardType}
+          onSave={saveCardBatch}
+        />
+      ) : null}
+      {modal?.kind === "cardAiBatch" && modalCardType ? (
+        <CardAiBatchModal
+          key={`card-ai-batch-${modalCardType.id}`}
+          open
+          onClose={() => setModal(null)}
+          t={t}
+          locale={locale}
+          workspace={workspace}
           type={modalCardType}
           onSave={saveCardBatch}
         />

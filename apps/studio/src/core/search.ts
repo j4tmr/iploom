@@ -159,6 +159,12 @@ export function searchWorkspace(
       displayText(universe.name, locale),
     ]),
   );
+  const workNames = new Map(
+    workspace.works.map((work) => [work.id, displayText(work.title, locale)]),
+  );
+  const cardTypesById = new Map(
+    workspace.cardTypes.map((type) => [type.id, type]),
+  );
 
   for (const universe of workspace.universes) {
     const title = displayText(universe.name, locale);
@@ -435,6 +441,51 @@ export function searchWorkspace(
         ),
         score: rank,
       });
+  }
+
+  for (const card of workspace.cards) {
+    const type = cardTypesById.get(card.typeId);
+    if (!type) continue;
+    const title = displayText(card.title, locale);
+    const typeName = displayText(type.name, locale);
+    const fieldValuesText = type.fields
+      .map((field) => {
+        const value = card.values[field.key];
+        if (value === undefined || value === "") return "";
+        return `${displayText(field.label, locale)} ${value}${field.unit ? ` ${field.unit}` : ""}`;
+      })
+      .filter(Boolean)
+      .join(" · ");
+    const rawValuesText = Object.values(card.values).map(String).join(" ");
+    const rank = score(
+      [
+        ...localized(card.title, 6),
+        ...localized(type.name, 2),
+        { value: normalize(rawValuesText), weight: 2.5 },
+        { value: normalize(card.notes), weight: 1.5 },
+      ],
+      terms,
+    );
+    if (rank) {
+      const subtitle = [
+        universeNames.get(type.universeId),
+        type.workId ? workNames.get(type.workId) : undefined,
+        typeName,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      add({
+        kind: "card",
+        id: card.id,
+        universeId: type.universeId,
+        ...(type.workId ? { workId: type.workId } : {}),
+        cardTypeId: type.id,
+        title,
+        subtitle,
+        excerpt: excerpt(`${fieldValuesText} ${card.notes}`.trim(), terms),
+        score: rank,
+      });
+    }
   }
 
   const limit = Math.max(0, Math.trunc(options.limit ?? 40));

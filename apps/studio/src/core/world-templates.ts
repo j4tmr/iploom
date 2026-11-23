@@ -1543,7 +1543,121 @@ function gameLevel(now: string, universeId: string): WorldTemplateSeed {
   });
 }
 
+function novelStarter(now: string, universeId: string): WorldTemplateSeed {
+  return seedWorld(now, universeId, {
+    standards: [
+      {
+        kind: "continuity",
+        title: [
+          "小说事实与设定一致性（草案）",
+          "Novel facts and continuity guardrails (draft)",
+        ],
+        body: [
+          "开写前先核对已建人物、地点、势力与核心物件卡片；章节内新引入的事实先标为提案，确认后再升级为正典。",
+          "Check your cast, location, faction and object cards before drafting. Mark newly introduced facts as proposals before promoting them to canon.",
+        ],
+      },
+      {
+        kind: "style",
+        title: [
+          "叙事视角与文风基线（草案）",
+          "Narrative POV and voice baseline (draft)",
+        ],
+        body: [
+          "先约定本书的人称、叙事距离与对话语气，避免相邻章节无意切换视角或语域。",
+          "Record the book's point of view, narrative distance and dialogue register up front so voice stays coherent across chapters.",
+        ],
+      },
+    ],
+    storyObjects: [
+      {
+        name: ["主线信物草稿", "Plot Keepsake Draft"],
+        category: ["关键物件", "Key object"],
+        summary: [
+          "串联人物秘密或开篇冲突的物件占位，可随时改名或删除。",
+          "An editable placeholder prop linking the opening conflict or a character secret.",
+        ],
+        sourceNotes: "模板草稿占位：开写前按你的故事改写归属与线索。",
+      },
+    ],
+    lore: [
+      {
+        category: "rule",
+        title: ["核心法则草稿", "Core world rule draft"],
+        body: "在此写下决定冲突走向的底层规则（代价、禁忌或能力边界），一切内容均可自由修改或删除。\n\nWrite the core rule that drives conflict (cost, taboo or power limit). Everything here is an editable draft.",
+      },
+    ],
+    locations: [
+      {
+        name: ["起始据点", "Starting Hub"],
+        summary: [
+          "故事开篇的主要舞台，汇集各方人物与线索。",
+          "The opening stage where characters and leads first cross paths.",
+        ],
+        atmosphere: "日常表象之下的暗流",
+      },
+    ],
+    factions: [
+      {
+        name: ["主导势力", "Leading Faction"],
+        summary: [
+          "维持当前秩序的组织，也是故事核心矛盾的一极。",
+          "The organization holding the current order — and one pole of the central conflict.",
+        ],
+        goal: "守住既定规则并压下异常",
+        motif: "徽记、规章、档案",
+      },
+    ],
+    characters: [
+      {
+        name: ["主角草稿", "Protagonist Draft"],
+        role: ["主角", "Protagonist"],
+        summary: [
+          "带着未解疑问踏入主线的核心角色。",
+          "The lead pulled into the main conflict by an unanswered question.",
+        ],
+        color: "#2f7567",
+        tags: ["主角", "草稿"],
+      },
+      {
+        name: ["关键搭档", "Key Ally"],
+        role: ["盟友 / 对照角色", "Ally / foil"],
+        summary: [
+          "掌握主角缺失信息的同行者，立场随时可能变化。",
+          "A companion who holds the piece the protagonist is missing.",
+        ],
+        color: "#6f5a2f",
+        tags: ["搭档", "草稿"],
+      },
+    ],
+    relationships: [
+      {
+        source: 0,
+        target: 1,
+        type: "ally",
+        label: ["临时同盟", "Temporary allies"],
+        strength: 3,
+        notes: "因共同目标结伴，各自保留底牌。",
+      },
+    ],
+  });
+}
+
 export const WORLD_TEMPLATES: readonly WorldTemplate[] = [
+  {
+    id: "novel-starter",
+    name: localized("写小说", "Write a novel"),
+    summary: localized(
+      "一键生成空白世界基础骨架、草案规则与五类小说设定卡片（人物/地点/势力/物件/设定），全部为可改可删草稿。",
+      "Seeds an editable novel starter pack with draft rules and base character, location, faction, object and lore card types.",
+    ),
+    accent: "#2f7567",
+    genres: ["小说", "设定集"],
+    themes: ["人物", "世界观", "冲突"],
+    hasPowerScaffold: false,
+    constructId: "novel-bible",
+    build: novelStarter,
+  },
   {
     id: "generic-novel",
     name: localized("通用小说", "Generic fiction"),

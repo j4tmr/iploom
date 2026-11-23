@@ -41,7 +41,7 @@ The result is a small, inspectable IP graph instead of a folder of files whose r
 - **Manuscript editor** — chapters, summaries, outlines, beats, POV, cast, location, prose and approval state.
 - **Local persistence** — atomic `workspace.json` writes, a `.bak` recovery copy, schema migration, a save-before-close handshake and visible save state.
 - **Foundation standards** — project-wide language, format, naming, numeric, entity-prompt and continuity rules, optionally AI-drafted. Active standards and their current id/version are resolved when prompts and workflow briefs are composed; new tasks record the ids and versions present at creation as informational references.
-- **Local MCP server** — eighteen tools for IP queries, story timeline events, foundation rules, workflow briefs and full workflow results; thirteen are read-only and five write workspace records.
+- **Local MCP server** — twenty tools for IP queries, data-driven card types and cards, story timeline events, foundation rules, workflow briefs and full workflow results; fifteen are read-only and five write workspace records.
 - **Desktop security baseline** — context isolation, sandboxed renderer, strict CSP and validated IPC.
 - **No account and no telemetry** — the app does not require a cloud service.
 

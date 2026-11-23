@@ -250,17 +250,17 @@ describe("foundation readiness checklist and health", () => {
   });
 });
 
-describe("schema v13 migration and foundationBypass validation", () => {
-  test("migrates v12 workspaces to v13 without rewriting existing works or chapters", () => {
+describe("schema v14 migration and foundationBypass validation", () => {
+  test("migrates v13 workspaces to v14 without rewriting existing works or chapters", () => {
     const legacy = structuredClone(
       createDemoWorkspace("en", NOW),
     ) as unknown as Record<string, unknown>;
-    legacy.schema_version = 12;
+    legacy.schema_version = 13;
     legacy.revision = 15;
 
     const migrated = validateWorkspace(legacy);
     expect(migrated.schema_version).toBe(WORKSPACE_SCHEMA_VERSION);
-    expect(migrated.schema_version).toBe(13);
+    expect(migrated.schema_version).toBe(14);
     expect(migrated.revision).toBe(16);
     expect(migrated.works[0]?.foundationBypass).toBeUndefined();
     expect(migrated.works[0]?.chapters[0]?.foundationBypass).toBeUndefined();

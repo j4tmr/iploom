@@ -1,11 +1,26 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  buildCardBatchPrompt,
+  candidatesToCards,
+  CARD_AI_LIMITS,
+  parseCardBatchOutput,
+  type CardDraftCandidate,
+} from "../core/card-ai.ts";
+import {
+  CARD_BEHAVIOR_REGISTRY,
   CARD_FIELD_KEY_PATTERN,
   createCardBatch,
+  isKnownCardBehavior,
+  parseCardFieldInput,
+  reorderCardFields,
+  resolveCardBehavior,
+  resolveCardIcon,
   type BuiltInConstruct,
 } from "../core/cards.ts";
 import { createId, displayText } from "../core/factory.ts";
 import {
+  BUILT_IN_CARD_BEHAVIORS,
+  CARD_TYPE_ICONS,
   MAX_LOCALIZED_LENGTH,
   type Card,
   type CardEdge,
@@ -16,6 +31,8 @@ import {
   type UiLocale,
 } from "../core/types.ts";
 import type { Translate } from "../i18n.ts";
+import { bridge } from "../platform.ts";
+import { Icon } from "./icon.tsx";
 import {
   Button,
   Field,
@@ -176,6 +193,7 @@ export function CardTypeModal({
   open,
   onClose,
   t,
+  locale,
   universeId,
   workId,
   initial,
@@ -191,18 +209,25 @@ export function CardTypeModal({
   const [nameEn, setNameEn] = useState(initial?.name.en ?? "");
   const [summaryZh, setSummaryZh] = useState(initial?.summary.zh ?? "");
   const [summaryEn, setSummaryEn] = useState(initial?.summary.en ?? "");
+  const [behavior, setBehavior] = useState(initial?.behavior ?? "generic");
+  const [icon, setIcon] = useState(
+    initial?.icon ?? resolveCardIcon(undefined, initial?.behavior),
+  );
   const [color, setColor] = useState(initial?.color ?? "#3f6f8f");
   const [fields, setFields] = useState<FieldDraft[]>(
     initial ? initial.fields.map(toDraft) : [newFieldDraft(1)],
   );
   const issue = typeIssue(fields);
   const named = Boolean(nameZh.trim() || nameEn.trim());
+  const customBehavior = !isKnownCardBehavior(behavior) ? behavior : null;
   const updateField = (index: number, patch: Partial<FieldDraft>) =>
     setFields((current) =>
       current.map((field, at) =>
         at === index ? { ...field, ...patch } : field,
       ),
     );
+  const moveField = (fromIndex: number, toIndex: number) =>
+    setFields((current) => reorderCardFields(current, fromIndex, toIndex));
   return (
     <Modal
       open={open}
@@ -228,7 +253,9 @@ export function CardTypeModal({
                 ...(workId ? { workId } : {}),
                 name: { zh: nameZh.trim(), en: nameEn.trim() },
                 summary: { zh: summaryZh.trim(), en: summaryEn.trim() },
+                icon,
                 color,
+                behavior,
                 fields: fields.map(draftToField),
                 createdAt: initial?.createdAt ?? now,
                 updatedAt: now,
@@ -273,6 +300,34 @@ export function CardTypeModal({
             onChange={(event) => setSummaryEn(event.target.value)}
           />
         </Field>
+        <Field
+          label={t("cardsTypeBehavior")}
+          hint={displayText(resolveCardBehavior(behavior).description, locale)}
+        >
+          <Select
+            value={behavior}
+            onChange={(event) => {
+              const nextBehavior = event.target.value;
+              setBehavior(nextBehavior);
+              if (!initial && isKnownCardBehavior(nextBehavior)) {
+                const descriptor = CARD_BEHAVIOR_REGISTRY[nextBehavior];
+                setIcon(descriptor.defaultIcon);
+                setColor(descriptor.defaultColor);
+              }
+            }}
+          >
+            {customBehavior ? (
+              <option value={customBehavior}>
+                {t("cardsTypeBehaviorCustom", { key: customBehavior })}
+              </option>
+            ) : null}
+            {BUILT_IN_CARD_BEHAVIORS.map((key) => (
+              <option key={key} value={key}>
+                {displayText(CARD_BEHAVIOR_REGISTRY[key].label, locale)}
+              </option>
+            ))}
+          </Select>
+        </Field>
         <Field label={t("coverColor")}>
           <input
             className="color-input"
@@ -280,6 +335,22 @@ export function CardTypeModal({
             value={color}
             onChange={(event) => setColor(event.target.value)}
           />
+        </Field>
+        <Field label={t("cardsTypeIcon")} wide group>
+          <div className="card-icon-picker">
+            {CARD_TYPE_ICONS.map((iconName) => (
+              <button
+                type="button"
+                key={iconName}
+                aria-label={iconName}
+                aria-pressed={icon === iconName}
+                className={`card-icon-option ${icon === iconName ? "active" : ""}`}
+                onClick={() => setIcon(iconName)}
+              >
+                <Icon name={iconName} size={16} />
+              </button>
+            ))}
+          </div>
         </Field>
       </FieldGrid>
 
@@ -394,15 +465,35 @@ export function CardTypeModal({
                 />
               </Field>
             ) : null}
-            <Button
-              variant="ghost"
-              icon="trash"
-              onClick={() =>
-                setFields((current) => current.filter((_, at) => at !== index))
-              }
-            >
-              {t("cardsRemoveField")}
-            </Button>
+            <div className="card-field-row-controls">
+              <Button
+                variant="ghost"
+                disabled={index === 0}
+                aria-label={t("cardsMoveFieldUp")}
+                onClick={() => moveField(index, index - 1)}
+              >
+                ↑
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={index === fields.length - 1}
+                aria-label={t("cardsMoveFieldDown")}
+                onClick={() => moveField(index, index + 1)}
+              >
+                ↓
+              </Button>
+              <Button
+                variant="ghost"
+                icon="trash"
+                onClick={() =>
+                  setFields((current) =>
+                    current.filter((_, at) => at !== index),
+                  )
+                }
+              >
+                {t("cardsRemoveField")}
+              </Button>
+            </div>
           </div>
         ))}
         {issue ? <p className="hint">{t("cardsFieldInvalid")}</p> : null}
@@ -416,14 +507,8 @@ function cardValueIssue(
   values: Record<string, string>,
 ): string | null {
   for (const field of type.fields) {
-    const raw = values[field.key] ?? "";
-    if (field.type === "text" || field.type === "enum") continue;
-    if (!raw.trim()) continue;
-    const value = numeric(raw);
-    if (value === undefined) return field.key;
-    if (field.type === "integer" && !Number.isInteger(value)) return field.key;
-    if (field.min !== undefined && value < field.min) return field.key;
-    if (field.max !== undefined && value > field.max) return field.key;
+    const parsed = parseCardFieldInput(field, values[field.key] ?? "");
+    if (!parsed.ok) return field.key;
   }
   return null;
 }
@@ -434,13 +519,9 @@ function cardValuesForSave(
 ): Record<string, number | string> {
   const result: Record<string, number | string> = {};
   for (const field of type.fields) {
-    const raw = values[field.key] ?? "";
-    if (field.type === "integer" || field.type === "decimal") {
-      const value = numeric(raw);
-      if (value !== undefined) result[field.key] = value;
-    } else if (raw !== "") {
-      result[field.key] = raw;
-    }
+    const parsed = parseCardFieldInput(field, values[field.key] ?? "");
+    if (parsed.ok && parsed.value !== undefined)
+      result[field.key] = parsed.value;
   }
   return result;
 }
@@ -851,6 +932,269 @@ export function ConstructModal({
         ))}
       </ul>
       <p className="hint">{t("constructTemplateHint")}</p>
+    </Modal>
+  );
+}
+
+export function CardAiBatchModal({
+  open,
+  onClose,
+  t,
+  locale,
+  workspace,
+  type,
+  onSave,
+}: ModalBase & {
+  workspace: StudioWorkspace;
+  type: CardType;
+  onSave: (cards: Card[]) => boolean;
+}) {
+  const [count, setCount] = useState("5");
+  const [brief, setBrief] = useState("");
+  const [rawJson, setRawJson] = useState("");
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [candidates, setCandidates] = useState<
+    Array<CardDraftCandidate & { uid: string }>
+  >([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const activeRun = useRef("");
+  const mounted = useRef(true);
+
+  useEffect(
+    () => () => {
+      mounted.current = false;
+      if (activeRun.current) void bridge.cancelAi(activeRun.current);
+    },
+    [],
+  );
+
+  const parsedCount = Math.max(
+    CARD_AI_LIMITS.minCount,
+    Math.min(CARD_AI_LIMITS.maxCount, Math.floor(Number(count) || 1)),
+  );
+
+  const validateJson = (input: string) => {
+    setError("");
+    setStatus("");
+    const result = parseCardBatchOutput(input, type, locale);
+    if (!result.ok) {
+      setCandidates([]);
+      setSelected(new Set());
+      setError(result.error);
+      return;
+    }
+    const tagged = result.candidates.map((candidate) => ({
+      ...candidate,
+      uid: createId("cand"),
+    }));
+    setCandidates(tagged);
+    setSelected(new Set(tagged.map((item) => item.uid)));
+    setStatus(t("cardsAiCandidatesReady", { count: tagged.length }));
+  };
+
+  const copyPrompt = async () => {
+    const prompt = buildCardBatchPrompt(workspace, type, {
+      count: parsedCount,
+      brief,
+      locale,
+    });
+    await bridge.copyText(prompt);
+    setError("");
+    setStatus(t("cardsAiPromptCopied"));
+  };
+
+  const generateWithAi = async () => {
+    const info = await bridge.aiConfig().catch(() => null);
+    if (!info?.configured) {
+      setError(t("cardsAiNeedModel"));
+      return;
+    }
+    if (
+      !window.confirm(
+        t("cardsAiConfirm", { endpoint: info.endpoint, model: info.model }),
+      )
+    ) {
+      return;
+    }
+    const id = createId("ai");
+    activeRun.current = id;
+    setGenerating(true);
+    setError("");
+    setStatus(t("cardsAiGenerating"));
+    try {
+      const prompt = buildCardBatchPrompt(workspace, type, {
+        count: parsedCount,
+        brief,
+        locale,
+      });
+      const response = await bridge.runAi({
+        id,
+        prompt,
+        label: displayText(type.name, locale),
+      });
+      if (!mounted.current || activeRun.current !== id) return;
+      setRawJson(response.text);
+      validateJson(response.text);
+    } catch (reason) {
+      if (mounted.current && activeRun.current === id) {
+        setError(reason instanceof Error ? reason.message : String(reason));
+        setStatus("");
+      }
+    } finally {
+      if (mounted.current && activeRun.current === id) {
+        activeRun.current = "";
+        setGenerating(false);
+      }
+    }
+  };
+
+  const chosen = candidates.filter((candidate) => selected.has(candidate.uid));
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      closeLabel={t("close")}
+      title={`${t("cardsAiFill")} · ${displayText(type.name, locale)}`}
+      description={t("cardsAiFillLead")}
+      wide
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
+          <Button
+            variant="primary"
+            icon="check"
+            disabled={!chosen.length}
+            onClick={() => {
+              const saved = onSave(candidatesToCards(type, chosen));
+              if (saved) onClose();
+            }}
+          >
+            {t("cardsAiCommit", { count: chosen.length })}
+          </Button>
+        </>
+      }
+    >
+      <FieldGrid>
+        <Field label={t("cardsBatchCount")}>
+          <TextInput
+            type="number"
+            min={CARD_AI_LIMITS.minCount}
+            max={CARD_AI_LIMITS.maxCount}
+            step={1}
+            value={count}
+            onChange={(event) => setCount(event.target.value)}
+          />
+        </Field>
+        <Field label={t("cardsAiBrief")} wide>
+          <TextArea
+            rows={2}
+            maxLength={CARD_AI_LIMITS.maxBriefChars}
+            value={brief}
+            placeholder={t("cardsAiBriefPlaceholder")}
+            onChange={(event) => setBrief(event.target.value)}
+          />
+        </Field>
+      </FieldGrid>
+
+      <div className="card-ai-actions">
+        <Button
+          variant="primary"
+          icon="sparkles"
+          disabled={generating}
+          onClick={() => void generateWithAi()}
+        >
+          {generating ? t("cardsAiGenerating") : t("cardsAiGenerate")}
+        </Button>
+        <Button variant="ghost" icon="copy" onClick={() => void copyPrompt()}>
+          {t("cardsAiCopyPrompt")}
+        </Button>
+        <Button
+          variant="secondary"
+          icon="check"
+          disabled={!rawJson.trim()}
+          onClick={() => validateJson(rawJson)}
+        >
+          {t("cardsAiValidate")}
+        </Button>
+      </div>
+
+      <Field label={t("cardsAiJsonLabel")} wide>
+        <TextArea
+          rows={6}
+          value={rawJson}
+          placeholder='{"cards": [{"title": {"zh": "...", "en": "..."}, "values": {}}]}'
+          onChange={(event) => setRawJson(event.target.value)}
+        />
+      </Field>
+
+      {error ? <p className="card-ai-error">{error}</p> : null}
+      {status && !error ? <p className="hint">{status}</p> : null}
+
+      {candidates.length ? (
+        <div className="card-ai-review">
+          <div className="card-ai-review-head">
+            <strong>
+              {t("cardsAiCandidatesReady", { count: candidates.length })}
+            </strong>
+            <div className="card-ai-review-tools">
+              <Button
+                variant="ghost"
+                onClick={() =>
+                  setSelected(new Set(candidates.map((item) => item.uid)))
+                }
+              >
+                {t("cardsAiSelectAll")}
+              </Button>
+              <Button variant="ghost" onClick={() => setSelected(new Set())}>
+                {t("cardsAiSelectNone")}
+              </Button>
+            </div>
+          </div>
+          <ul className="card-ai-candidate-list">
+            {candidates.map((candidate) => {
+              const checked = selected.has(candidate.uid);
+              return (
+                <li key={candidate.uid}>
+                  <label className="card-ai-candidate-row">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        setSelected((current) => {
+                          const next = new Set(current);
+                          if (next.has(candidate.uid))
+                            next.delete(candidate.uid);
+                          else next.add(candidate.uid);
+                          return next;
+                        })
+                      }
+                    />
+                    <span className="card-ai-candidate-copy">
+                      <strong>{displayText(candidate.title, locale)}</strong>
+                      <small>
+                        {type.fields
+                          .map((field) => {
+                            const value = candidate.values[field.key];
+                            if (value === undefined || value === "")
+                              return null;
+                            return `${displayText(field.label, locale)} ${value}${field.unit ? ` ${field.unit}` : ""}`;
+                          })
+                          .filter(Boolean)
+                          .join(" · ") || t("cardsValueEmpty")}
+                      </small>
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
     </Modal>
   );
 }
