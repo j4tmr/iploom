@@ -101,6 +101,19 @@ test("inline MCP server exposes every tool and answers reads and writes", async 
     });
     expect(world.isError).toBe(false);
     expect((world.body.world as { id: string }).id).toBe("uni_mist_harbor");
+    const foundation = world.body.foundation as {
+      complete: boolean;
+      completed_count: number;
+      total_count: number;
+      incomplete_items: string[];
+      items: Array<{ id: string; status: string }>;
+      health: Array<{ axis: string; mode: string }>;
+    };
+    expect(foundation.complete).toBe(false);
+    expect(foundation.total_count).toBe(6);
+    expect(foundation.incomplete_items).toEqual(["activeRules"]);
+    expect(foundation.items).toHaveLength(6);
+    expect(foundation.health).toHaveLength(4);
     expect(Array.isArray(pageOf(world.body, "characters").items)).toBe(true);
 
     const novels = await call(inline, "list_novels");
@@ -786,6 +799,64 @@ test("get_workflow_brief injects approved ancestor outputs only when opted in", 
     expect((noDeps.body.markdown as { text: string }).text).not.toContain(
       "APPROVED DEPENDENCY OUTPUTS",
     );
+  } finally {
+    await inline.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("MCP exposes foundation_bypass on bypassed novels and chapters", async () => {
+  const root = mkdtempSync(join(tmpdir(), "iploom-mcp-bypass-"));
+  const workspacePath = join(root, "workspace.json");
+  const demo = createDemoWorkspace("en", "2026-11-23T12:00:00.000Z");
+  demo.works[0]!.foundationBypass = {
+    at: "2026-11-23T12:00:00.000Z",
+    missingItems: ["activeRules"],
+  };
+  demo.works[0]!.chapters[0]!.foundationBypass = {
+    at: "2026-11-23T12:05:00.000Z",
+    missingItems: ["activeRules", "items"],
+  };
+  await new WorkspaceStore(workspacePath).save(demo);
+  const inline = await connectInline(workspacePath);
+  try {
+    const novel = await call(inline, "get_novel", {
+      novel_id: "work_tide_clock",
+    });
+    expect(novel.isError).toBe(false);
+    expect(
+      (
+        novel.body.novel as {
+          foundation_bypass?: { at: string; missing_items: string[] };
+        }
+      ).foundation_bypass,
+    ).toEqual({
+      at: "2026-11-23T12:00:00.000Z",
+      missing_items: ["activeRules"],
+    });
+    const chapterList = pageOf(novel.body, "chapters").items as Array<{
+      id: string;
+      foundation_bypass?: { at: string; missing_items: string[] };
+    }>;
+    expect(chapterList[0]?.foundation_bypass).toEqual({
+      at: "2026-11-23T12:05:00.000Z",
+      missing_items: ["activeRules", "items"],
+    });
+
+    const chapter = await call(inline, "get_chapter", {
+      chapter_id: "chapter_tide_001",
+    });
+    expect(chapter.isError).toBe(false);
+    expect(
+      (
+        chapter.body.chapter as {
+          foundation_bypass?: { at: string; missing_items: string[] };
+        }
+      ).foundation_bypass,
+    ).toEqual({
+      at: "2026-11-23T12:05:00.000Z",
+      missing_items: ["activeRules", "items"],
+    });
   } finally {
     await inline.close();
     rmSync(root, { recursive: true, force: true });

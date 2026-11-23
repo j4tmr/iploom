@@ -1,4 +1,4 @@
-export const WORKSPACE_SCHEMA_VERSION = 13 as const;
+export const WORKSPACE_SCHEMA_VERSION = 14 as const;
 /** Longest result text the workspace stores per language. */
 export const MAX_WORKFLOW_RESULT_LENGTH = 200_000 as const;
 /** Longest text a localized name, tagline or summary field may hold per language. */
@@ -99,6 +99,30 @@ export type TimelineEventKind =
   | "other";
 export type TimelineCanonStatus = "proposed" | "canon";
 
+/**
+ * Checklist items derived for a world's foundation readiness. Stored only
+ * inside `FoundationBypassRecord` when the author deliberately proceeds before
+ * the checklist is complete; live completeness is always derived.
+ */
+export const FOUNDATION_CHECK_IDS = [
+  "summary",
+  "activeRules",
+  "cast",
+  "locationsFactions",
+  "items",
+  "canonStatus",
+] as const;
+export type FoundationCheckId = (typeof FOUNDATION_CHECK_IDS)[number];
+
+/**
+ * Point-in-time record attached to a work or chapter when the author
+ * deliberately creates it while the world's foundation checklist is unfinished.
+ */
+export interface FoundationBypassRecord {
+  at: string;
+  missingItems: FoundationCheckId[];
+}
+
 export interface LocalizedText {
   zh: string;
   en: string;
@@ -138,6 +162,8 @@ export interface Chapter {
   locationId?: string;
   adaptationNotes: string;
   scenes: StoryScene[];
+  /** Present when this chapter was created while the world foundation was unfinished. */
+  foundationBypass?: FoundationBypassRecord;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -164,6 +190,8 @@ export interface StoryWork {
   targetWords: number;
   coverColor: string;
   chapters: Chapter[];
+  /** Present when this work was created while the world foundation was unfinished. */
+  foundationBypass?: FoundationBypassRecord;
   createdAt: string;
   updatedAt: string;
 }

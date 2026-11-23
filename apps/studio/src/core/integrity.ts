@@ -805,3 +805,23 @@ export function reassignStandardUniverse(
     };
   });
 }
+
+/**
+ * Remove a structured rule system together with the ability and item-stat
+ * templates that reference it, so deleting a draft or active rule system never
+ * leaves dangling `ruleSystemId` references behind.
+ */
+export function deleteRuleSystemFromDraft(
+  draft: StudioWorkspace,
+  ruleSystemId: string,
+): void {
+  draft.ruleSystems = draft.ruleSystems.filter(
+    (system) => system.id !== ruleSystemId,
+  );
+  draft.abilityTemplates = draft.abilityTemplates.filter(
+    (ability) => ability.ruleSystemId !== ruleSystemId,
+  );
+  draft.itemStatTemplates = draft.itemStatTemplates.filter(
+    (item) => item.ruleSystemId !== ruleSystemId,
+  );
+}

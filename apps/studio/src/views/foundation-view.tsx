@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AiConfigInfo } from "../core/ai.ts";
 import { createId, displayText } from "../core/factory.ts";
 import {
+  evaluateUniverseFoundation,
+  type FoundationCheckTarget,
+} from "../core/foundation-readiness.ts";
+import {
   buildStandardDraftPrompt,
   parseStandardCandidates,
   standardBody,
@@ -13,6 +17,8 @@ import {
   type StandardCandidate,
 } from "../core/standards.ts";
 import type {
+  RuleStatus,
+  RuleSystem,
   StandardStatus,
   StudioWorkspace,
   UiLocale,
@@ -20,6 +26,10 @@ import type {
 } from "../core/types.ts";
 import type { Translate } from "../i18n.ts";
 import { bridge } from "../platform.ts";
+import {
+  FoundationChecklistCard,
+  FoundationHealthPanel,
+} from "../components/foundation-checklist.tsx";
 import { Icon } from "../components/icon.tsx";
 import { Badge, Button, EmptyState } from "../components/ui.tsx";
 
@@ -57,6 +67,9 @@ export function FoundationView({
   onNewStandard,
   onEditStandard,
   onStatusChange,
+  onRuleSystemStatusChange,
+  onDeleteRuleSystem,
+  onSelectChecklistTarget,
   onRegisterCandidates,
   onOpenWorkflow,
   onOpenSettings,
@@ -74,6 +87,9 @@ export function FoundationView({
   onNewStandard: () => void;
   onEditStandard: (standard: WorkspaceStandard) => void;
   onStatusChange: (standard: WorkspaceStandard, status: StandardStatus) => void;
+  onRuleSystemStatusChange?: (system: RuleSystem, status: RuleStatus) => void;
+  onDeleteRuleSystem?: (system: RuleSystem) => void;
+  onSelectChecklistTarget?: (target: FoundationCheckTarget) => void;
   onRegisterCandidates: (
     candidates: StandardCandidate[],
     universeId?: string,
@@ -307,6 +323,12 @@ export function FoundationView({
     </div>
   );
 
+  const foundationReport = useMemo(
+    () =>
+      universeId ? evaluateUniverseFoundation(workspace, universeId) : null,
+    [universeId, workspace],
+  );
+
   return (
     <div
       className={
@@ -330,6 +352,26 @@ export function FoundationView({
           {headingActions}
         </header>
       )}
+
+      {foundationReport && universeId ? (
+        <div className="foundation-world-panels">
+          <FoundationChecklistCard
+            report={foundationReport}
+            t={t}
+            onSelectTarget={onSelectChecklistTarget}
+            compact
+          />
+          <FoundationHealthPanel
+            workspace={workspace}
+            universeId={universeId}
+            report={foundationReport}
+            locale={locale}
+            t={t}
+            onRuleSystemStatusChange={onRuleSystemStatusChange}
+            onDeleteRuleSystem={onDeleteRuleSystem}
+          />
+        </div>
+      ) : null}
 
       {!aiInfo?.configured ? (
         <div className="foundation-model-note">

@@ -30,10 +30,10 @@ test("browser migrates v1 manuscripts without altering the stored original", () 
   const raw = JSON.stringify(legacy);
   const storage = storageWith(raw);
   const { workspace } = loadBrowserWorkspace(storage, "en");
-  expect(workspace.schema_version).toBe(13);
+  expect(workspace.schema_version).toBe(14);
   expect(workspace.workflowTasks).toEqual([]);
   expect(workspace.works).toEqual(original.works);
-  expect(workspace.revision).toBe(Number(legacy.revision) + 12);
+  expect(workspace.revision).toBe(Number(legacy.revision) + 13);
   expect(storage.getItem(browserWorkspaceKey)).toBe(raw);
 });
 

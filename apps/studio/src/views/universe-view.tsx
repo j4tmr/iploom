@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { FoundationChecklistCard } from "../components/foundation-checklist.tsx";
 import { Icon } from "../components/icon.tsx";
 import { RelationshipCanvas } from "../components/relationship-graph.tsx";
 import {
@@ -13,6 +14,10 @@ import {
 } from "../components/ui.tsx";
 import type { AiConfigInfo } from "../core/ai.ts";
 import { displayText, workWords } from "../core/factory.ts";
+import {
+  evaluateUniverseFoundation,
+  type FoundationCheckTarget,
+} from "../core/foundation-readiness.ts";
 import { buildRelationshipGraph } from "../core/graph.ts";
 import type { StandardCandidate } from "../core/standards.ts";
 import type {
@@ -22,6 +27,8 @@ import type {
   Character,
   LoreEntry,
   Relationship,
+  RuleStatus,
+  RuleSystem,
   StandardStatus,
   StoryFaction,
   StoryLocation,
@@ -82,6 +89,8 @@ export function UniverseView({
   onNewStandard,
   onEditStandard,
   onStatusChange,
+  onRuleSystemStatusChange,
+  onDeleteRuleSystem,
   onRegisterCandidates,
   onOpenWorkflow,
   onOpenSettings,
@@ -145,6 +154,8 @@ export function UniverseView({
   onNewStandard: () => void;
   onEditStandard: (standard: WorkspaceStandard) => void;
   onStatusChange: (standard: WorkspaceStandard, status: StandardStatus) => void;
+  onRuleSystemStatusChange?: (system: RuleSystem, status: RuleStatus) => void;
+  onDeleteRuleSystem?: (system: RuleSystem) => void;
   onRegisterCandidates: (candidates: StandardCandidate[]) => void;
   onOpenWorkflow: () => void;
   onOpenSettings: () => void;
@@ -194,6 +205,17 @@ export function UniverseView({
   const standardCount = workspace.standards.filter(
     (standard) => !standard.universeId || standard.universeId === universe.id,
   ).length;
+  const foundationReport = useMemo(
+    () => evaluateUniverseFoundation(workspace, universe.id),
+    [workspace, universe.id],
+  );
+  const handleChecklistTarget = (target: FoundationCheckTarget) => {
+    if (target === "edit-world") {
+      onEditUniverse();
+      return;
+    }
+    setTab(target);
+  };
   const nodeTypes = useMemo(
     () => workspace.cardTypes.filter((type) => type.universeId === universe.id),
     [workspace.cardTypes, universe.id],
@@ -299,6 +321,11 @@ export function UniverseView({
 
       {tab === "overview" ? (
         <div className="universe-overview">
+          <FoundationChecklistCard
+            report={foundationReport}
+            t={t}
+            onSelectTarget={handleChecklistTarget}
+          />
           <section className="prose-card world-summary-card">
             <span className="eyebrow">WORLD BIBLE / 世界圣经</span>
             <h2>{t("worldDetails")}</h2>
@@ -830,6 +857,9 @@ export function UniverseView({
           onNewStandard={onNewStandard}
           onEditStandard={onEditStandard}
           onStatusChange={onStatusChange}
+          onRuleSystemStatusChange={onRuleSystemStatusChange}
+          onDeleteRuleSystem={onDeleteRuleSystem}
+          onSelectChecklistTarget={handleChecklistTarget}
           onRegisterCandidates={(candidates) =>
             onRegisterCandidates(candidates)
           }

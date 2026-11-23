@@ -9,6 +9,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
 import { resolveCardBehavior, resolveCardIcon } from "../src/core/cards.ts";
 import { countWords, createId, displayText } from "../src/core/factory.ts";
+import { evaluateUniverseFoundation } from "../src/core/foundation-readiness.ts";
 import { buildRelationshipGraph } from "../src/core/graph.ts";
 import { reassignStandardUniverse } from "../src/core/integrity.ts";
 import {
@@ -664,6 +665,42 @@ function worldStats(workspace: StudioWorkspace, worldId: string) {
   };
 }
 
+function foundationBypassView(
+  bypass: StoryWork["foundationBypass"] | Chapter["foundationBypass"],
+) {
+  return bypass
+    ? {
+        foundation_bypass: {
+          at: bypass.at,
+          missing_items: bypass.missingItems,
+        },
+      }
+    : {};
+}
+
+function foundationView(workspace: StudioWorkspace, worldId: string) {
+  const report = evaluateUniverseFoundation(workspace, worldId);
+  return {
+    complete: report.complete,
+    completed_count: report.completedCount,
+    total_count: report.totalCount,
+    draft_count: report.draftCount,
+    missing_count: report.missingCount,
+    incomplete_items: report.incompleteIds,
+    items: report.items.map((item) => ({
+      id: item.id,
+      status: item.status,
+      counts: item.counts,
+    })),
+    health: report.health.map((item) => ({
+      axis: item.axis,
+      mode: item.mode,
+      structured_count: item.structuredCount,
+      prose_count: item.proseCount,
+    })),
+  };
+}
+
 function worldView(workspace: StudioWorkspace, world: StoryUniverse) {
   return {
     id: world.id,
@@ -726,6 +763,7 @@ function novelView(novel: StoryWork) {
         ),
       0,
     ),
+    ...foundationBypassView(novel.foundationBypass),
     updated_at: novel.updatedAt,
   };
 }
@@ -745,6 +783,7 @@ function chapterPlanView(chapter: Chapter) {
     character_id_count: chapter.characterIds.length,
     location_id: chapter.locationId,
     adaptation_notes: chapter.adaptationNotes,
+    ...foundationBypassView(chapter.foundationBypass),
     revision: chapter.revision,
     updated_at: chapter.updatedAt,
     ...chapterCounts(chapter),
@@ -767,6 +806,7 @@ function chapterListEntry(chapter: Chapter) {
     character_ids: chapter.characterIds.slice(0, COMPACT_ARRAY_ITEMS),
     character_id_count: chapter.characterIds.length,
     location_id: chapter.locationId ?? null,
+    ...foundationBypassView(chapter.foundationBypass),
     revision: chapter.revision,
     updated_at: chapter.updatedAt,
     ...chapterCounts(chapter),
@@ -1507,7 +1547,8 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
       // push the whole response past the budget on its own; include_details
       // returns every field in full.
       const worldPayload = compact(worldView(workspace, world));
-      let remaining = remainingBudget(meta, worldPayload);
+      const foundationPayload = foundationView(workspace, world.id);
+      let remaining = remainingBudget(meta, worldPayload, foundationPayload);
       const take = <T>(
         items: readonly T[],
         view: (item: T) => object,
@@ -1532,6 +1573,7 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
         schema: MCP_SCHEMA,
         workspace: meta,
         world: worldPayload,
+        foundation: foundationPayload,
         novels: take(
           workspace.works.filter((novel) => novel.universeId === world.id),
           novelView,
@@ -1794,6 +1836,7 @@ export function createStudioMcpServer(workspaceFile: string): McpServer {
         character_ids: chapter.characterIds.slice(0, COMPACT_ARRAY_ITEMS),
         character_id_count: chapter.characterIds.length,
         location_id: chapter.locationId ?? null,
+        ...foundationBypassView(chapter.foundationBypass),
         revision: chapter.revision,
         created_at: chapter.createdAt,
         updated_at: chapter.updatedAt,

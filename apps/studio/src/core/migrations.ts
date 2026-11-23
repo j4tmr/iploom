@@ -150,6 +150,16 @@ export function migrateWorkspace(value: unknown): unknown {
     return migrateWorkspace({
       ...value,
       cardTypes: withCardTypeBehaviorAndIcon(value.cardTypes),
+      schema_version: 13,
+      revision:
+        typeof value.revision === "number"
+          ? value.revision + 1
+          : value.revision,
+    });
+  }
+  if (value.schema_version === 13) {
+    return migrateWorkspace({
+      ...value,
       schema_version: WORKSPACE_SCHEMA_VERSION,
       revision:
         typeof value.revision === "number"

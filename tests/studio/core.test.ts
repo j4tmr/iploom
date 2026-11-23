@@ -109,8 +109,8 @@ describe("studio domain", () => {
     delete legacy.storyObjects;
     delete legacy.timelineEvents;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(13);
-    expect(migrated.revision).toBe(52);
+    expect(migrated.schema_version).toBe(14);
+    expect(migrated.revision).toBe(53);
     expect(migrated.workflowTasks).toEqual([]);
     expect(migrated.storyObjects).toEqual([]);
     expect(migrated.timelineEvents).toEqual([]);
@@ -126,8 +126,8 @@ describe("studio domain", () => {
     delete legacy.storyObjects;
     delete legacy.timelineEvents;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(13);
-    expect(migrated.revision).toBe(21);
+    expect(migrated.schema_version).toBe(14);
+    expect(migrated.revision).toBe(22);
     expect(migrated.storyObjects).toEqual([]);
     expect(migrated.timelineEvents).toEqual([]);
   });
@@ -153,8 +153,8 @@ describe("studio domain", () => {
       { id: "export_broken", workId: 4 },
     ];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(13);
-    expect(migrated.revision).toBe(16);
+    expect(migrated.schema_version).toBe(14);
+    expect(migrated.revision).toBe(17);
     expect(migrated.lastOpenedWorkId).toBeUndefined();
     expect("exports" in migrated).toBe(false);
   });
@@ -180,8 +180,8 @@ describe("studio domain", () => {
     };
     const cleanBrief = JSON.stringify(tasks[2]!.brief);
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(13);
-    expect(migrated.revision).toBe(15);
+    expect(migrated.schema_version).toBe(14);
+    expect(migrated.revision).toBe(16);
     expect(migrated.workflowTasks[0]!.brief.zh).toBe("");
     expect(migrated.workflowTasks[0]!.brief.en).toBe("");
     expect(migrated.workflowTasks[0]!.deliverable).toEqual({
@@ -235,8 +235,8 @@ describe("studio domain", () => {
       },
     ];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(13);
-    expect(migrated.revision).toBe(16);
+    expect(migrated.schema_version).toBe(14);
+    expect(migrated.revision).toBe(17);
     expect(migrated.settings).toEqual({ locale: "en", theme: "dark" });
     expect("exports" in migrated).toBe(false);
     expect("defaultAspectRatio" in migrated.settings).toBe(false);
@@ -436,15 +436,15 @@ describe("workspace store", () => {
       await Bun.write(file, JSON.stringify(legacy));
       const store = new WorkspaceStore(file);
       const loaded = await store.load();
-      expect(loaded.workspace.schema_version).toBe(13);
+      expect(loaded.workspace.schema_version).toBe(14);
       expect(loaded.workspace.workflowTasks).toEqual([]);
-      expect(loaded.workspace.revision).toBe(15);
+      expect(loaded.workspace.revision).toBe(16);
       await store.save(loaded.workspace);
       const persisted = JSON.parse(readFileSync(file, "utf8")) as {
         schema_version: number;
         workflowTasks: unknown[];
       };
-      expect(persisted.schema_version).toBe(13);
+      expect(persisted.schema_version).toBe(14);
       expect(persisted.workflowTasks).toEqual([]);
     } finally {
       rmSync(root, { recursive: true, force: true });

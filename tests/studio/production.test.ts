@@ -970,8 +970,8 @@ test("legacy workspaces without templates still validate and infer each stage", 
   legacy.schema_version = 6;
 
   const migrated = validateWorkspace(legacy);
-  expect(migrated.schema_version).toBe(13);
-  expect(migrated.revision).toBe(47);
+  expect(migrated.schema_version).toBe(14);
+  expect(migrated.revision).toBe(48);
   expect(migrated.workflowTasks.map((task) => task.template)).toEqual([
     "world",
     "character",
