@@ -3,12 +3,21 @@ import {
   appliedConstructs,
   applyConstruct,
   BUILT_IN_CONSTRUCTS,
+  cardExportRecord,
   cardUniverseId,
+  createCard,
   createCardBatch,
   defaultCardValues,
   deleteCardTypeFromDraft,
   duplicateCardType,
+  isKnownCardBehavior,
+  parseCardFieldInput,
+  previewFieldsForType,
   reconcileCardValues,
+  reorderCardFields,
+  resolveCardBehavior,
+  resolveCardIcon,
+  setLocalizedTitle,
 } from "../../apps/studio/src/core/cards.ts";
 import {
   createDemoWorkspace,
@@ -236,7 +245,9 @@ describe("reconciling values after a type edit", () => {
     universeId: "uni_mist_harbor",
     name: { zh: "测试", en: "Test" },
     summary: { zh: "", en: "" },
+    icon: "layers",
     color: "#336655",
+    behavior: "generic",
     fields: [
       {
         key: "hp",
@@ -565,7 +576,7 @@ describe("universe scoping migrations", () => {
     delete legacy.cardEdges;
     delete legacy.constructs;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(11);
+    expect(migrated.schema_version).toBe(12);
     expect(migrated.cardTypes).toEqual([]);
     expect(migrated.cards).toEqual([]);
     expect(migrated.cardEdges).toEqual([]);
@@ -597,9 +608,11 @@ describe("universe scoping migrations", () => {
       },
     ];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(11);
-    expect(migrated.revision).toBe(22);
+    expect(migrated.schema_version).toBe(12);
+    expect(migrated.revision).toBe(23);
     expect(migrated.cardTypes[0]!.universeId).toBe("uni_mist_harbor");
+    expect(migrated.cardTypes[0]!.icon).toBe("layers");
+    expect(migrated.cardTypes[0]!.behavior).toBe("generic");
     expect(migrated.constructs[0]!.universeId).toBe("uni_mist_harbor");
     expect(migrated.universes.map((universe) => universe.id)).toEqual([
       "uni_mist_harbor",
@@ -624,10 +637,12 @@ describe("universe scoping migrations", () => {
       },
     ];
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(11);
+    expect(migrated.schema_version).toBe(12);
     expect(migrated.universes).toHaveLength(1);
     expect(migrated.universes[0]!.id).toBe("universe_node_workshop");
     expect(migrated.cardTypes[0]!.universeId).toBe("universe_node_workshop");
+    expect(migrated.cardTypes[0]!.icon).toBe("layers");
+    expect(migrated.cardTypes[0]!.behavior).toBe("generic");
   });
 
   test("does not create a universe when v9 has no node data", () => {
@@ -636,7 +651,290 @@ describe("universe scoping migrations", () => {
     ) as unknown as Record<string, unknown>;
     legacy.schema_version = 9;
     const migrated = validateWorkspace(legacy);
-    expect(migrated.schema_version).toBe(11);
+    expect(migrated.schema_version).toBe(12);
     expect(migrated.universes).toEqual([]);
+  });
+
+  test("migrates v11 card types by backfilling default icon and behavior without clobbering custom keys", () => {
+    const legacy = structuredClone(
+      createDemoWorkspace("en", NOW),
+    ) as unknown as Record<string, unknown>;
+    legacy.schema_version = 11;
+    legacy.revision = 5;
+    legacy.cardTypes = [
+      {
+        id: "ctype_v11",
+        universeId: "uni_mist_harbor",
+        name: { zh: "旧节点", en: "Old node" },
+        summary: { zh: "", en: "" },
+        color: "#336655",
+        fields: [],
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+      {
+        id: "ctype_custom_behavior",
+        universeId: "uni_mist_harbor",
+        name: { zh: "任务节点", en: "Quest node" },
+        summary: { zh: "", en: "" },
+        icon: "timeline",
+        color: "#336655",
+        behavior: "quest_node",
+        fields: [],
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ];
+    const migrated = validateWorkspace(legacy);
+    expect(migrated.schema_version).toBe(12);
+    expect(migrated.revision).toBe(6);
+    expect(migrated.cardTypes[0]!.icon).toBe("layers");
+    expect(migrated.cardTypes[0]!.behavior).toBe("generic");
+    expect(migrated.cardTypes[1]!.icon).toBe("timeline");
+    expect(migrated.cardTypes[1]!.behavior).toBe("quest_node");
+  });
+});
+
+describe("card behaviors, icon fallback, field ordering and novel starter pack", () => {
+  test("resolves known behaviors and falls back cleanly to generic for unknown keys", () => {
+    expect(isKnownCardBehavior("character")).toBe(true);
+    expect(isKnownCardBehavior("future_plugin")).toBe(false);
+    expect(isKnownCardBehavior(undefined)).toBe(false);
+    expect(resolveCardBehavior("character").exportKind).toBe("character");
+    expect(resolveCardBehavior("future_plugin").key).toBe("generic");
+    expect(resolveCardBehavior("future_plugin").exportKind).toBe("card");
+    expect(resolveCardIcon("book", "generic")).toBe("book");
+    expect(resolveCardIcon("unknown_icon", "monster")).toBe("sparkles");
+    expect(resolveCardIcon(undefined, "future_plugin")).toBe("layers");
+  });
+
+  test("previewFieldsForType prioritizes behavior fields and falls back to declared order", () => {
+    const { workspace, universeId } = demo();
+    applyConstruct(workspace, "novel-bible", universeId, NOW);
+    const charType = typeIn(workspace, universeId, "Character");
+    expect(
+      previewFieldsForType(charType)
+        .map((f) => f.key)
+        .slice(0, 3),
+    ).toEqual(["role", "faction", "status"]);
+    const unknownType: CardType = {
+      ...charType,
+      id: "ctype_unknown_behavior",
+      behavior: "custom_plugin",
+    };
+    expect(previewFieldsForType(unknownType).map((f) => f.key)).toEqual(
+      unknownType.fields.map((f) => f.key),
+    );
+    const sampleCard = createCard(unknownType, {
+      title: localized("插件卡", "Plugin card"),
+      now: NOW,
+    });
+    const mapped = cardExportRecord(unknownType, sampleCard);
+    expect(mapped.behavior).toBe("custom_plugin");
+    expect(mapped.resolvedBehavior).toBe("generic");
+    expect(mapped.exportKind).toBe("card");
+  });
+
+  test("novel-bible construct seeds 5 editable base types, sample cards and edges", () => {
+    const { workspace, universeId } = demo();
+    const applied = applyConstruct(workspace, "novel-bible", universeId, NOW);
+    expect(applied.status).toBe("applied");
+    expect(workspace.cardTypes.map((type) => type.behavior)).toEqual([
+      "character",
+      "location",
+      "faction",
+      "object",
+      "lore",
+    ]);
+    expect(workspace.cards).toHaveLength(5);
+    expect(workspace.cardEdges).toHaveLength(4);
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+    expect(
+      applyConstruct(workspace, "novel-bible", universeId, NOW).status,
+    ).toBe("already-applied");
+  });
+
+  test("reorderCardFields, parseCardFieldInput and setLocalizedTitle handle valid and invalid inputs", () => {
+    expect(reorderCardFields(["a", "b", "c"], 2, 0)).toEqual(["c", "a", "b"]);
+    expect(reorderCardFields(["a", "b"], 0, 0)).toEqual(["a", "b"]);
+    expect(reorderCardFields(["a", "b"], -1, 1)).toEqual(["a", "b"]);
+    expect(reorderCardFields(["a", "b"], 0, 5)).toEqual(["a", "b"]);
+
+    expect(
+      parseCardFieldInput(
+        {
+          key: "hp",
+          label: localized("生命", "HP"),
+          type: "integer",
+          unit: "",
+          min: 1,
+          max: 100,
+          enumValues: [],
+        },
+        "",
+      ),
+    ).toEqual({ ok: true });
+    expect(
+      parseCardFieldInput(
+        {
+          key: "hp",
+          label: localized("生命", "HP"),
+          type: "integer",
+          unit: "",
+          min: 1,
+          max: 100,
+          enumValues: [],
+        },
+        "abc",
+      ),
+    ).toEqual({ ok: false, reason: "number" });
+    expect(
+      parseCardFieldInput(
+        {
+          key: "hp",
+          label: localized("生命", "HP"),
+          type: "integer",
+          unit: "",
+          min: 1,
+          max: 100,
+          enumValues: [],
+        },
+        "12.5",
+      ),
+    ).toEqual({ ok: false, reason: "integer" });
+    expect(
+      parseCardFieldInput(
+        {
+          key: "hp",
+          label: localized("生命", "HP"),
+          type: "integer",
+          unit: "",
+          min: 1,
+          max: 100,
+          enumValues: [],
+        },
+        "0",
+      ),
+    ).toEqual({ ok: false, reason: "min" });
+    expect(
+      parseCardFieldInput(
+        {
+          key: "hp",
+          label: localized("生命", "HP"),
+          type: "integer",
+          unit: "",
+          min: 1,
+          max: 100,
+          enumValues: [],
+        },
+        "101",
+      ),
+    ).toEqual({ ok: false, reason: "max" });
+    expect(
+      parseCardFieldInput(
+        {
+          key: "hp",
+          label: localized("生命", "HP"),
+          type: "integer",
+          unit: "",
+          min: 1,
+          max: 100,
+          enumValues: [],
+        },
+        "50",
+      ),
+    ).toEqual({ ok: true, value: 50 });
+    expect(
+      parseCardFieldInput(
+        {
+          key: "tier",
+          label: localized("级别", "Tier"),
+          type: "enum",
+          unit: "",
+          enumValues: ["普通", "精英"],
+        },
+        "传说",
+      ),
+    ).toEqual({ ok: false, reason: "enum" });
+    expect(
+      parseCardFieldInput(
+        {
+          key: "tier",
+          label: localized("级别", "Tier"),
+          type: "enum",
+          unit: "",
+          enumValues: ["普通", "精英"],
+        },
+        "",
+      ),
+    ).toEqual({ ok: true });
+    expect(
+      parseCardFieldInput(
+        {
+          key: "tier",
+          label: localized("级别", "Tier"),
+          type: "enum",
+          unit: "",
+          enumValues: ["普通", "精英"],
+        },
+        "精英",
+      ),
+    ).toEqual({ ok: true, value: "精英" });
+    expect(
+      parseCardFieldInput(
+        {
+          key: "note",
+          label: localized("注", "Note"),
+          type: "text",
+          unit: "",
+          enumValues: [],
+        },
+        "",
+      ),
+    ).toEqual({ ok: true });
+    expect(
+      parseCardFieldInput(
+        {
+          key: "note",
+          label: localized("注", "Note"),
+          type: "text",
+          unit: "",
+          enumValues: [],
+        },
+        "hello",
+      ),
+    ).toEqual({ ok: true, value: "hello" });
+
+    expect(setLocalizedTitle({ zh: "旧", en: "Old" }, "en", "  New  ")).toEqual(
+      { zh: "旧", en: "New" },
+    );
+    expect(
+      setLocalizedTitle({ zh: "旧", en: "Old" }, "zh-CN", "  新  "),
+    ).toEqual({ zh: "新", en: "Old" });
+  });
+
+  test("rejects malformed card behavior or icon keys while accepting valid unknown behavior keys", () => {
+    const { workspace, universeId } = demo();
+    workspace.cardTypes.push({
+      id: "ctype_custom",
+      universeId,
+      name: localized("自定义", "Custom"),
+      summary: localized("", ""),
+      icon: "layers",
+      color: "#336655",
+      behavior: "custom_quest",
+      fields: [],
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    expect(() => validateWorkspace(workspace)).not.toThrow();
+
+    const badBehavior = structuredClone(workspace);
+    badBehavior.cardTypes[0]!.behavior = "BAD KEY!";
+    expect(() => validateWorkspace(badBehavior)).toThrow();
+
+    const badIcon = structuredClone(workspace);
+    badIcon.cardTypes[0]!.icon = "../evil";
+    expect(() => validateWorkspace(badIcon)).toThrow();
   });
 });

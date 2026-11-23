@@ -121,6 +121,22 @@ try {
   if (!briefText?.includes("task_chapter_three")) {
     throw new Error("Bundled MCP workflow brief did not include the task");
   }
+  const cardTypes = await client.callTool(
+    {
+      name: "list_card_types",
+      arguments: {},
+    },
+    requestOptions,
+  );
+  if (cardTypes.isError) throw new Error("Bundled MCP list_card_types failed");
+  const cards = await client.callTool(
+    {
+      name: "list_cards",
+      arguments: {},
+    },
+    requestOptions,
+  );
+  if (cards.isError) throw new Error("Bundled MCP list_cards failed");
   const exported = await client.callTool(
     {
       name: "export_arcreel_bundle",

@@ -245,6 +245,8 @@ const FIELD_LABELS: Record<string, MessageKey> = {
   voice: "voice",
   tags: "tags",
   color: "color",
+  icon: "cardsTypeIcon",
+  behavior: "cardsTypeBehavior",
   category: "loreCategory",
   body: "body",
   notes: "notes",

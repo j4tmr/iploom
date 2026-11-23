@@ -1,4 +1,4 @@
-export const WORKSPACE_SCHEMA_VERSION = 11 as const;
+export const WORKSPACE_SCHEMA_VERSION = 12 as const;
 export const ARC_REEL_SCHEMA = "iploom.arcreel/v1" as const;
 /** Longest result text the workspace stores per language. */
 export const MAX_WORKFLOW_RESULT_LENGTH = 200_000 as const;
@@ -387,6 +387,40 @@ export interface ItemStatTemplate {
 export type CardFieldType = "integer" | "decimal" | "text" | "enum";
 
 /**
+ * Built-in behavior keys understood by the renderer, validation and export
+ * mapping. A CardType may store any valid key string so unknown or future keys
+ * survive round-trips and safely fall back to `"generic"`.
+ */
+export const BUILT_IN_CARD_BEHAVIORS = [
+  "generic",
+  "character",
+  "location",
+  "faction",
+  "object",
+  "lore",
+  "scene",
+  "monster",
+  "equipment",
+] as const;
+export type BuiltInCardBehavior = (typeof BUILT_IN_CARD_BEHAVIORS)[number];
+
+/** Curated icon keys available for card types in the Studio UI. */
+export const CARD_TYPE_ICONS = [
+  "layers",
+  "users",
+  "world",
+  "grid",
+  "package",
+  "book",
+  "sparkles",
+  "file",
+  "timeline",
+  "graph",
+  "link",
+] as const;
+export type CardTypeIcon = (typeof CARD_TYPE_ICONS)[number];
+
+/**
  * One typed value a card type defines. Instances fill it by key, so the same
  * set of fields can describe many cards without a new entity kind per shape.
  */
@@ -402,9 +436,9 @@ export interface CardField {
 }
 
 /**
- * A user-defined card shape: a name plus the fields every card carries.
- * A type belongs to exactly one universe, so two worlds can have their own
- * node vocabulary without sharing records.
+ * A user-defined card shape: a name, visual icon/color, behavior key plus the
+ * ordered fields every card carries. A type belongs to exactly one universe,
+ * so two worlds can have their own node vocabulary without sharing records.
  */
 export interface CardType {
   id: string;
@@ -416,7 +450,9 @@ export interface CardType {
   workId?: string;
   name: LocalizedText;
   summary: LocalizedText;
+  icon: string;
   color: string;
+  behavior: string;
   fields: CardField[];
   createdAt: string;
   updatedAt: string;
@@ -629,7 +665,8 @@ export interface SearchHit {
     | "object"
     | "faction"
     | "lore"
-    | "timeline";
+    | "timeline"
+    | "card";
   id: string;
   universeId: string;
   /**
@@ -639,6 +676,7 @@ export interface SearchHit {
   universeIds?: string[];
   workId?: string;
   chapterId?: string;
+  cardTypeId?: string;
   title: string;
   subtitle: string;
   excerpt: string;

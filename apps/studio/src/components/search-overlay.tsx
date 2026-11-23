@@ -17,6 +17,7 @@ const kindLabels: Record<UiLocale, Record<SearchHit["kind"], string>> = {
     faction: "势力",
     lore: "设定",
     timeline: "时间线",
+    card: "节点卡片",
   },
   en: {
     universe: "IP world",
@@ -28,6 +29,7 @@ const kindLabels: Record<UiLocale, Record<SearchHit["kind"], string>> = {
     faction: "Faction",
     lore: "Lore",
     timeline: "Timeline",
+    card: "Node card",
   },
 };
 

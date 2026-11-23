@@ -3,7 +3,9 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { applyConstruct } from "../../apps/studio/src/core/cards.ts";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
+import { quickBuildWork } from "../../apps/studio/src/core/quick-build.ts";
 import { MCP_TOOL_COUNTS } from "../../apps/studio/src/core/mcp-tools.ts";
 import { WorkspaceStore } from "../../apps/studio/src/node/workspace-store.ts";
 import { createStudioMcpServer } from "../../apps/studio/mcp/server.ts";
@@ -862,6 +864,145 @@ test("get_workflow_brief injects approved ancestor outputs only when opted in", 
     expect((noDeps.body.markdown as { text: string }).text).not.toContain(
       "APPROVED DEPENDENCY OUTPUTS",
     );
+  } finally {
+    await inline.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inline MCP server lists card types, card instances with edges, unknown behavior fallback and card search", async () => {
+  const root = mkdtempSync(join(tmpdir(), "iploom-studio-inline-cards-mcp-"));
+  const workspacePath = join(root, "workspace.json");
+  const now = "2026-11-23T00:00:00.000Z";
+  const workspace = createDemoWorkspace("zh-CN", now);
+  applyConstruct(workspace, "novel-bible", "uni_mist_harbor", now);
+  const game = quickBuildWork(
+    workspace,
+    "uni_mist_harbor",
+    "game",
+    "zh-CN",
+    now,
+  );
+  workspace.cardTypes.push({
+    id: "ctype_custom_plugin",
+    universeId: "uni_ninth_station",
+    name: { zh: "异象", en: "Anomaly" },
+    summary: { zh: "未知行为键回退测试", en: "Fallback test" },
+    icon: "unknown_icon",
+    color: "#336655",
+    behavior: "plugin_anomaly",
+    fields: [
+      {
+        key: "detail",
+        label: { zh: "详情", en: "Detail" },
+        type: "text",
+        unit: "",
+        enumValues: [],
+      },
+    ],
+    createdAt: now,
+    updatedAt: now,
+  });
+  workspace.cards.push({
+    id: "card_anomaly_long",
+    typeId: "ctype_custom_plugin",
+    title: { zh: "零点七分回响", en: "00:07 Echo" },
+    values: { detail: "X".repeat(400) },
+    notes: "N".repeat(400),
+    createdAt: now,
+    updatedAt: now,
+  });
+  await new WorkspaceStore(workspacePath).save(workspace);
+  const inline = await connectInline(workspacePath);
+  try {
+    const allTypes = await call(inline, "list_card_types", { locale: "en" });
+    expect(allTypes.isError).toBe(false);
+    const typePage = pageOf<{
+      id: string;
+      behavior: string;
+      resolved_behavior: string;
+      resolved_icon: string;
+      work_id: string | null;
+      card_count: number;
+    }>(allTypes.body, "card_types");
+    // 5 novel-bible world types + 3 game looter types + 1 custom plugin type.
+    expect(typePage.total).toBe(9);
+    const custom = typePage.items.find(
+      (item) => item.id === "ctype_custom_plugin",
+    )!;
+    expect(custom.behavior).toBe("plugin_anomaly");
+    expect(custom.resolved_behavior).toBe("generic");
+    expect(custom.resolved_icon).toBe("layers");
+    expect(custom.card_count).toBe(1);
+
+    const worldOnlyTypes = await call(inline, "list_card_types", {
+      world_id: "uni_mist_harbor",
+      scope: "world",
+    });
+    expect(pageOf(worldOnlyTypes.body, "card_types").total).toBe(5);
+
+    const workOnlyTypes = await call(inline, "list_card_types", {
+      work_id: game.id,
+      scope: "work",
+    });
+    expect(pageOf(workOnlyTypes.body, "card_types").total).toBe(3);
+
+    const byBehaviorTypes = await call(inline, "list_card_types", {
+      behavior: "character",
+    });
+    expect(pageOf(byBehaviorTypes.body, "card_types").total).toBe(1);
+
+    const cardsWithEdges = await call(inline, "list_cards", {
+      world_id: "uni_mist_harbor",
+      behavior: "character",
+      include_edges: true,
+    });
+    expect(cardsWithEdges.isError).toBe(false);
+    const characterCards = pageOf<{
+      id: string;
+      edge_count: number;
+      edges?: Array<{ label: { zh: string; en: string } }>;
+    }>(cardsWithEdges.body, "cards");
+    expect(characterCards.total).toBe(1);
+    expect(characterCards.items[0]!.edge_count).toBe(2);
+    expect(characterCards.items[0]!.edges).toHaveLength(2);
+
+    const compactLong = await call(inline, "list_cards", {
+      type_id: "ctype_custom_plugin",
+      include_details: false,
+    });
+    const compactCard = pageOf<{
+      notes: string;
+      truncated_fields?: string[];
+    }>(compactLong.body, "cards").items[0]!;
+    expect(compactCard.truncated_fields).toContain("notes");
+
+    const fullLong = await call(inline, "list_cards", {
+      type_id: "ctype_custom_plugin",
+      include_details: true,
+    });
+    const fullCard = pageOf<{ notes: string }>(fullLong.body, "cards")
+      .items[0]!;
+    expect(fullCard.notes.length).toBe(400);
+
+    const missingType = await call(inline, "list_cards", {
+      type_id: "ctype_missing",
+    });
+    expect(missingType.isError).toBe(true);
+    expect((missingType.body.error as { code: string }).code).toBe("not_found");
+
+    const cardSearch = await call(inline, "search_ip", {
+      query: "零点七分回响",
+      kind: "card",
+    });
+    expect(cardSearch.isError).toBe(false);
+    const hits = pageOf<{ kind: string; card_type_id?: string }>(
+      cardSearch.body,
+      "hits",
+    );
+    expect(hits.total).toBe(1);
+    expect(hits.items[0]!.kind).toBe("card");
+    expect(hits.items[0]!.card_type_id).toBe("ctype_custom_plugin");
   } finally {
     await inline.close();
     rmSync(root, { recursive: true, force: true });

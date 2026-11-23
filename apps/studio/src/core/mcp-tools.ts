@@ -27,6 +27,8 @@ export const MCP_TOOLS = [
   { name: "get_workflow_result", access: "read" },
   { name: "list_standards", access: "read" },
   { name: "get_standard", access: "read" },
+  { name: "list_card_types", access: "read" },
+  { name: "list_cards", access: "read" },
   { name: "create_standard", access: "write" },
   { name: "update_standard", access: "write" },
   { name: "create_timeline_event", access: "write" },

@@ -110,6 +110,7 @@ export function Dashboard({
               type="button"
               className="template-card"
               key={template.id}
+              data-template-id={template.id}
               style={
                 { "--accent-card": template.accent } as React.CSSProperties
               }

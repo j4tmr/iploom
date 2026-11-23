@@ -9,6 +9,7 @@ import {
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
 import { buildArcReelBundle } from "../src/core/arcreel.ts";
+import { resolveCardBehavior, resolveCardIcon } from "../src/core/cards.ts";
 import { countWords, createId, displayText } from "../src/core/factory.ts";
 import { buildRelationshipGraph } from "../src/core/graph.ts";
 import { reassignStandardUniverse } from "../src/core/integrity.ts";
@@ -40,6 +41,9 @@ import {
 } from "../src/core/workflow.ts";
 import {
   MAX_WORKFLOW_RESULT_LENGTH,
+  type Card,
+  type CardEdge,
+  type CardType,
   type Chapter,
   type Character,
   type LocalizedText,
@@ -636,6 +640,12 @@ function findNovel(workspace: StudioWorkspace, novelId: string): StoryWork {
   return novel;
 }
 
+function findCardType(workspace: StudioWorkspace, typeId: string): CardType {
+  const type = workspace.cardTypes.find((item) => item.id === typeId);
+  if (!type) throw new ToolError("not_found", `Unknown card type: ${typeId}`);
+  return type;
+}
+
 function worldStats(workspace: StudioWorkspace, worldId: string) {
   const novels = workspace.works.filter(
     (novel) => novel.universeId === worldId,
@@ -1024,11 +1034,75 @@ function hitView(hit: SearchHit) {
     universe_ids: hit.universeIds ?? [hit.universeId],
     ...(hit.workId ? { work_id: hit.workId } : {}),
     ...(hit.chapterId ? { chapter_id: hit.chapterId } : {}),
+    ...(hit.cardTypeId ? { card_type_id: hit.cardTypeId } : {}),
     title: hit.title,
     subtitle: hit.subtitle,
     excerpt: hit.excerpt,
     score: hit.score,
   };
+}
+
+function cardTypeView(type: CardType, cardCount: number, locale: UiLocale) {
+  const resolved = resolveCardBehavior(type.behavior);
+  return {
+    id: type.id,
+    world_id: type.universeId,
+    work_id: type.workId ?? null,
+    name: type.name,
+    display_name: displayText(type.name, locale),
+    summary: type.summary,
+    icon: type.icon,
+    resolved_icon: resolveCardIcon(type.icon, type.behavior),
+    color: type.color,
+    behavior: type.behavior,
+    resolved_behavior: resolved.key,
+    export_kind: resolved.exportKind,
+    field_count: type.fields.length,
+    fields: type.fields,
+    card_count: cardCount,
+    created_at: type.createdAt,
+    updated_at: type.updatedAt,
+  };
+}
+
+function cardView(
+  card: Card,
+  type: CardType,
+  edges: readonly CardEdge[],
+  locale: UiLocale,
+  options: { includeDetails: boolean; includeEdges: boolean },
+) {
+  const resolved = resolveCardBehavior(type.behavior);
+  const base = {
+    id: card.id,
+    type_id: card.typeId,
+    type_name: type.name,
+    world_id: type.universeId,
+    work_id: type.workId ?? null,
+    behavior: type.behavior,
+    resolved_behavior: resolved.key,
+    export_kind: resolved.exportKind,
+    title: card.title,
+    display_title: displayText(card.title, locale),
+    values: card.values,
+    notes: card.notes,
+    edge_count: edges.length,
+    ...(options.includeEdges
+      ? {
+          edges: edges.slice(0, COMPACT_ARRAY_ITEMS).map((edge) => ({
+            id: edge.id,
+            source_id: edge.sourceId,
+            target_id: edge.targetId,
+            label: edge.label,
+            display_label: displayText(edge.label, locale),
+            notes: edge.notes,
+          })),
+        }
+      : {}),
+    created_at: card.createdAt,
+    updated_at: card.updatedAt,
+  };
+  return options.includeDetails ? base : compactRecord(base);
 }
 
 const STANDARD_KIND_RANK = new Map(
@@ -1806,7 +1880,7 @@ export function createStudioMcpServer(
     {
       title: "检索 IP / Search IP",
       description:
-        "跨故事世界、小说、章节、角色、地点、物件、势力、传说与故事时间线做中英子串检索；world_id 与 kind 在排序前过滤，分页用 offset 与 next_offset。Search the whole IP library, including props and story timeline events, with Chinese/English substring matching; world_id and kind filter before ranking, and offset/next_offset page the hits.",
+        "跨故事世界、小说、章节、角色、地点、物件、势力、传说、时间线与节点卡片做中英子串检索；world_id 与 kind 在排序前过滤，分页用 offset 与 next_offset。Search the whole IP library, including props, story timeline events and node cards, with Chinese/English substring matching; world_id and kind filter before ranking, and offset/next_offset page the hits.",
       annotations: READ_ONLY_ANNOTATIONS,
     },
     z.object({
@@ -1828,6 +1902,7 @@ export function createStudioMcpServer(
           "faction",
           "lore",
           "timeline",
+          "card",
         ])
         .optional()
         .describe("限定结果类型 / Optional result kind."),
@@ -2391,6 +2466,193 @@ export function createStudioMcpServer(
         applies_to: standard.universeId ?? "project",
         pinned_by_task_ids: pinnedBy.slice(0, COMPACT_ARRAY_ITEMS),
         pinned_by_task_count: pinnedBy.length,
+      };
+    },
+  );
+
+  register(
+    "list_card_types",
+    {
+      title: "节点卡片类型列表 / List card types",
+      description:
+        "分页只读列出工作区中的节点卡片类型（含字段定义、图标、颜色与行为键；未知行为键在 resolved_behavior 中回退为 generic），可按世界、作品、作用域或行为键过滤。List data-driven card types with their ordered fields, icon, color and behavior key (unknown keys report resolved_behavior: generic), optionally filtered by world, work, scope or behavior.",
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    z.object({
+      world_id: worldIdSchema.optional(),
+      work_id: novelIdSchema
+        .optional()
+        .describe("限定到某个作品（小说/游戏）/ Optional work ID."),
+      behavior: z
+        .string()
+        .trim()
+        .min(1)
+        .max(40)
+        .optional()
+        .describe("限定到指定行为键 / Optional behavior key."),
+      scope: z
+        .enum(["all", "world", "work"])
+        .default("all")
+        .describe(
+          "按归属过滤：all 全部，world 仅世界共享，work 仅作品专属 / Scope filter: all, world-shared only, or work-owned only.",
+        ),
+      offset: pageOffsetSchema,
+      limit: pageLimit,
+      locale: localeSchema,
+    }),
+    async (args) => {
+      const loaded = await store.load();
+      const { workspace } = loaded;
+      if (args.world_id) findWorld(workspace, args.world_id);
+      if (args.work_id) findNovel(workspace, args.work_id);
+      const locale: UiLocale = args.locale ?? workspace.settings.locale;
+      const cardCounts = new Map<string, number>();
+      for (const card of workspace.cards) {
+        cardCounts.set(card.typeId, (cardCounts.get(card.typeId) ?? 0) + 1);
+      }
+      const types = workspace.cardTypes
+        .filter((type) => {
+          if (args.world_id && type.universeId !== args.world_id) return false;
+          if (args.work_id && type.workId !== args.work_id) return false;
+          if (args.scope === "world" && type.workId !== undefined) return false;
+          if (args.scope === "work" && type.workId === undefined) return false;
+          if (args.behavior && type.behavior !== args.behavior) return false;
+          return true;
+        })
+        .slice()
+        .sort((left, right) => left.id.localeCompare(right.id));
+      const meta = workspaceMeta(loaded);
+      const echo = {
+        locale,
+        world_id: args.world_id ?? null,
+        work_id: args.work_id ?? null,
+        behavior: args.behavior ?? null,
+        scope: args.scope,
+      };
+      return {
+        schema: MCP_SCHEMA,
+        workspace: meta,
+        ...echo,
+        card_types: pageOf(
+          types.map((type) =>
+            cardTypeView(type, cardCounts.get(type.id) ?? 0, locale),
+          ),
+          {
+            offset: args.offset,
+            limit: args.limit,
+            budget: remainingBudget(meta, echo),
+          },
+        ),
+      };
+    },
+  );
+
+  register(
+    "list_cards",
+    {
+      title: "节点卡片实例列表 / List cards",
+      description:
+        "分页只读列出节点卡片实例及其字段值，可按世界、作品、类型或行为键过滤；传 include_edges 返回关联卡片边，传 include_details 返回未截断长文本。List card instances and their typed field values, optionally filtered by world, work, type or behavior; pass include_edges for connected card edges and include_details for unclipped long text.",
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    z.object({
+      world_id: worldIdSchema.optional(),
+      work_id: novelIdSchema
+        .optional()
+        .describe("限定到某个作品（小说/游戏）/ Optional work ID."),
+      type_id: z
+        .string()
+        .trim()
+        .min(1)
+        .optional()
+        .describe("限定到某个卡片类型 ID / Optional card type ID."),
+      behavior: z
+        .string()
+        .trim()
+        .min(1)
+        .max(40)
+        .optional()
+        .describe("限定到指定行为键 / Optional behavior key."),
+      include_edges: z
+        .boolean()
+        .default(false)
+        .describe(
+          "附带每张卡片关联的卡片关系边（最多预览 20 条）/ Include connected card edges (previewed up to 20 per card).",
+        ),
+      include_details: z
+        .boolean()
+        .default(false)
+        .describe(
+          "返回未截断的长字段值和备注 / Return full unclipped values and notes.",
+        ),
+      offset: pageOffsetSchema,
+      limit: pageLimit,
+      locale: localeSchema,
+    }),
+    async (args) => {
+      const loaded = await store.load();
+      const { workspace } = loaded;
+      if (args.world_id) findWorld(workspace, args.world_id);
+      if (args.work_id) findNovel(workspace, args.work_id);
+      if (args.type_id) findCardType(workspace, args.type_id);
+      const locale: UiLocale = args.locale ?? workspace.settings.locale;
+      const typesById = new Map(
+        workspace.cardTypes.map((type) => [type.id, type]),
+      );
+      const edgesByCard = new Map<string, CardEdge[]>();
+      for (const edge of workspace.cardEdges) {
+        const from = edgesByCard.get(edge.sourceId) ?? [];
+        from.push(edge);
+        edgesByCard.set(edge.sourceId, from);
+        if (edge.targetId !== edge.sourceId) {
+          const to = edgesByCard.get(edge.targetId) ?? [];
+          to.push(edge);
+          edgesByCard.set(edge.targetId, to);
+        }
+      }
+      const cards = workspace.cards
+        .filter((card) => {
+          const type = typesById.get(card.typeId);
+          if (!type) return false;
+          if (args.world_id && type.universeId !== args.world_id) return false;
+          if (args.work_id && type.workId !== args.work_id) return false;
+          if (args.type_id && card.typeId !== args.type_id) return false;
+          if (args.behavior && type.behavior !== args.behavior) return false;
+          return true;
+        })
+        .slice()
+        .sort((left, right) => left.id.localeCompare(right.id));
+      const meta = workspaceMeta(loaded);
+      const echo = {
+        locale,
+        world_id: args.world_id ?? null,
+        work_id: args.work_id ?? null,
+        type_id: args.type_id ?? null,
+        behavior: args.behavior ?? null,
+      };
+      return {
+        schema: MCP_SCHEMA,
+        workspace: meta,
+        ...echo,
+        cards: pageOf(
+          cards.map((card) =>
+            cardView(
+              card,
+              typesById.get(card.typeId)!,
+              edgesByCard.get(card.id) ?? [],
+              locale,
+              {
+                includeDetails: args.include_details,
+                includeEdges: args.include_edges,
+              },
+            ),
+          ),
+          {
+            offset: args.offset,
+            limit: args.limit,
+            budget: remainingBudget(meta, echo),
+          },
+        ),
       };
     },
   );

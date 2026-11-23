@@ -6157,6 +6157,205 @@ fieldset.field > legend {
   font-size: 11px;
 }
 
+.card-type-chip-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 7px;
+  color: #fff;
+}
+
+.card-type-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-view-toggle {
+  margin-right: 4px;
+}
+
+.card-icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.card-icon-option {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper-raised);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.card-icon-option.active {
+  border-color: var(--accent);
+  background: var(--accent-pale);
+  color: var(--accent);
+}
+
+.card-field-row-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.card-grid-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card-grid-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-grid-commit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-grid-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.card-grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.card-grid-table th,
+.card-grid-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.card-grid-table th {
+  background: var(--paper-raised);
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.card-grid-table th small {
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+.card-grid-table tr.dirty td {
+  background: var(--accent-pale);
+}
+
+.card-cell-input {
+  width: 100%;
+  min-width: 96px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.card-cell-input.invalid {
+  border-color: var(--danger, #c44536);
+  background: color-mix(in srgb, var(--danger, #c44536) 10%, var(--paper));
+}
+
+.card-grid-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.card-ai-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.card-ai-error {
+  margin: 8px 0;
+  color: var(--danger, #c44536);
+  font-size: 12px;
+}
+
+.card-ai-review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.card-ai-review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-ai-review-tools {
+  display: flex;
+  gap: 4px;
+}
+
+.card-ai-candidate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card-ai-candidate-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper-raised);
+  cursor: pointer;
+}
+
+.card-ai-candidate-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.card-ai-candidate-copy small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 @media (max-width: 900px) {
   .cards-layout {
     grid-template-columns: 1fr;

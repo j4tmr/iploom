@@ -1,4 +1,4 @@
-import { createDemoWorkspace } from "./core/factory.ts";
+import { createEmptyWorkspace } from "./core/factory.ts";
 import { loadWorkspace } from "./core/integrity.ts";
 import { validateWorkspace } from "./core/validate.ts";
 import {
@@ -17,16 +17,16 @@ export function loadBrowserWorkspace(
 ) {
   const raw = storage.getItem(browserWorkspaceKey);
   if (raw === null) {
-    const workspace = createDemoWorkspace(locale);
+    const workspace = createEmptyWorkspace("", locale);
     try {
-      // Persist the initial demo right away. Loading does not mark the
-      // workspace dirty, so no autosave would ever write it, and without a
+      // Persist the initial blank workspace right away. Loading does not mark
+      // the workspace dirty, so no autosave would ever write it, and without a
       // stored workspace the snapshot guard has nothing to protect and refuses
       // the first delete/import until some unrelated edit is saved.
       storage.setItem(browserWorkspaceKey, JSON.stringify(workspace));
     } catch {
-      // Read-only or full storage still opens the demo; the snapshot guard
-      // keeps refusing destructive actions, which is the safe outcome.
+      // Read-only or full storage still opens the blank workspace; the
+      // snapshot guard keeps refusing destructive actions, which is safe.
     }
     return {
       workspace,

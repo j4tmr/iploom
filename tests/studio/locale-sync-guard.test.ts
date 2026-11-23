@@ -20,8 +20,8 @@ export const LOCALE_ADOPTION_SITES: Array<[site: string, pattern: RegExp]> = [
     /const loaded = await store\.load\(\);[\s\S]{0,200}?applyMainLocale\(/,
   ],
   [
-    "demo fallback",
-    /createDemoWorkspace\(defaultLocale\(\)\);[\s\S]{0,160}?applyMainLocale\(workspace\.settings\.locale\)/,
+    "blank workspace fallback",
+    /createEmptyWorkspace\("", defaultLocale\(\)\);[\s\S]{0,160}?applyMainLocale\(workspace\.settings\.locale\)/,
   ],
   ["iploom:save", /"iploom:save",[\s\S]{0,2000}?applyMainLocale\(/],
   [
