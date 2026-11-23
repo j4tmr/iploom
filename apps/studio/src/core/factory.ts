@@ -147,6 +147,9 @@ export function emptyChapter(
     locationId: input.locationId,
     adaptationNotes: input.adaptationNotes ?? "",
     scenes: input.scenes ?? [],
+    ...(input.foundationBypass
+      ? { foundationBypass: input.foundationBypass }
+      : {}),
     revision: input.revision ?? 0,
     createdAt: input.createdAt ?? now,
     updatedAt: input.updatedAt ?? now,

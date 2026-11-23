@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   CHAPTER_LIMITS,
+  FOUNDATION_CHECK_IDS,
   MAX_LOCALIZED_LENGTH,
   MAX_WORKFLOW_RESULT_LENGTH,
   WORKFLOW_TASK_TEMPLATES,
@@ -123,6 +124,19 @@ export const storySceneSchema = z
   })
   .strict();
 
+export const foundationBypassSchema = z
+  .object({
+    at: isoDate,
+    missingItems: z
+      .array(z.enum(FOUNDATION_CHECK_IDS))
+      .min(1)
+      .max(FOUNDATION_CHECK_IDS.length)
+      .refine((items) => new Set(items).size === items.length, {
+        message: "duplicate foundation checklist item",
+      }),
+  })
+  .strict();
+
 export const chapterSchema = z
   .object({
     id: identifier,
@@ -142,6 +156,7 @@ export const chapterSchema = z
     locationId: identifier.optional(),
     adaptationNotes: z.string().max(CHAPTER_LIMITS.adaptationNotes).default(""),
     scenes: z.array(storySceneSchema).max(100).default([]),
+    foundationBypass: foundationBypassSchema.optional(),
     revision: nonNegativeInt,
     createdAt: isoDate,
     updatedAt: isoDate,
@@ -163,6 +178,7 @@ export const workSchema = z
     targetWords: positiveInt,
     coverColor: color,
     chapters: z.array(chapterSchema).max(1_000).default([]),
+    foundationBypass: foundationBypassSchema.optional(),
     createdAt: isoDate,
     updatedAt: isoDate,
   })

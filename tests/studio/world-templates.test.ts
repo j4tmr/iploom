@@ -77,11 +77,43 @@ describe("world templates", () => {
       expect(workspace.locations.length).toBeGreaterThan(0);
       expect(workspace.factions.length).toBeGreaterThan(0);
       expect(workspace.characters.length).toBeGreaterThan(0);
+      expect(workspace.storyObjects.length).toBeGreaterThan(0);
+      const worldStandards = workspace.standards.filter(
+        (standard) => standard.universeId === universeId,
+      );
+      expect(worldStandards.length).toBeGreaterThan(0);
+      // Seeded rules are always editable drafts, never locked canon.
+      expect(
+        worldStandards.every((standard) => standard.status === "draft"),
+      ).toBe(true);
+      const worldRuleSystems = workspace.ruleSystems.filter(
+        (system) => system.universeId === universeId,
+      );
+      if (template.hasPowerScaffold) {
+        expect(worldRuleSystems.length).toBeGreaterThan(0);
+        expect(
+          worldRuleSystems.every((system) => system.status === "draft"),
+        ).toBe(true);
+        expect(
+          workspace.abilityTemplates.filter(
+            (ability) => ability.universeId === universeId,
+          ).length,
+        ).toBeGreaterThan(0);
+        expect(
+          workspace.itemStatTemplates.filter(
+            (item) => item.universeId === universeId,
+          ).length,
+        ).toBeGreaterThan(0);
+      } else {
+        expect(worldRuleSystems).toHaveLength(0);
+      }
       for (const entry of workspace.lore)
         expect(entry.universeId).toBe(universeId);
       for (const entry of workspace.locations)
         expect(entry.universeId).toBe(universeId);
       for (const entry of workspace.factions)
+        expect(entry.universeId).toBe(universeId);
+      for (const entry of workspace.storyObjects)
         expect(entry.universeId).toBe(universeId);
       for (const entry of workspace.characters)
         expect(entry.universeIds).toEqual([universeId]);
@@ -169,6 +201,11 @@ describe("world templates", () => {
       applyWorldTemplate(workspace, "starfarer", universeIds[1]!, NOW),
     ).toBe(true);
     const ids = [
+      ...workspace.standards.filter((item) => item.universeId),
+      ...workspace.ruleSystems,
+      ...workspace.abilityTemplates,
+      ...workspace.itemStatTemplates,
+      ...workspace.storyObjects,
       ...workspace.lore,
       ...workspace.locations,
       ...workspace.factions,

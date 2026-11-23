@@ -1,15 +1,22 @@
 import { displayText } from "../core/factory.ts";
+import { evaluateUniverseFoundation } from "../core/foundation-readiness.ts";
 import type {
   StoryUniverse,
   StudioWorkspace,
   UiLocale,
 } from "../core/types.ts";
 import { WORLD_TEMPLATES } from "../core/world-templates.ts";
+import {
+  foundationBadgeLabel,
+  foundationBadgeTone,
+} from "../components/foundation-checklist.tsx";
 import { Icon } from "../components/icon.tsx";
 import type { Translate } from "../i18n.ts";
 import {
+  Badge,
   Button,
   EmptyState,
+  ProgressBar,
   SectionTitle,
   TagList,
 } from "../components/ui.tsx";
@@ -86,7 +93,9 @@ export function Dashboard({
 
       <section>
         <SectionTitle eyebrow="TEMPLATES / 起点" title={t("templates")} />
-        <p className="template-gallery-lead">{t("templateLead")}</p>
+        <p className="template-gallery-lead">
+          {t("templateLead")} {t("templateDraftOnly")}
+        </p>
         <div className="template-gallery">
           <button
             type="button"
@@ -124,6 +133,9 @@ export function Dashboard({
               </span>
               <span className="template-card-tags">
                 <TagList values={template.genres} max={3} />
+                {template.hasPowerScaffold ? (
+                  <Badge tone="amber">{t("templateScaffoldBadge")}</Badge>
+                ) : null}
               </span>
               <span className="template-card-go">
                 {t("templateUse")}
@@ -173,6 +185,10 @@ export function Dashboard({
               const nodeCount = workspace.cards.filter((card) =>
                 typeIds.has(card.typeId),
               ).length;
+              const foundation = evaluateUniverseFoundation(
+                workspace,
+                universe.id,
+              );
               return (
                 <button
                   type="button"
@@ -197,6 +213,27 @@ export function Dashboard({
                     <p>{displayText(universe.tagline, locale)}</p>
                   </div>
                   <TagList values={universe.genres} max={3} />
+                  <div
+                    className="world-card-foundation"
+                    data-testid={`world-foundation-${universe.id}`}
+                  >
+                    <div className="world-card-foundation-head">
+                      <Badge tone={foundationBadgeTone(foundation)} dot>
+                        {foundationBadgeLabel(foundation, t)}
+                      </Badge>
+                      <small>
+                        {t("foundationChecklistProgress", {
+                          done: foundation.completedCount,
+                          total: foundation.totalCount,
+                        })}
+                      </small>
+                    </div>
+                    <ProgressBar
+                      value={foundation.completedCount}
+                      max={foundation.totalCount}
+                      color={foundation.complete ? universe.accent : undefined}
+                    />
+                  </div>
                   <div className="world-card-foot">
                     <span>
                       <strong>{works.length}</strong> {t("works")}

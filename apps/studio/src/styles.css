@@ -6166,3 +6166,316 @@ fieldset.field > legend {
     position: static;
   }
 }
+
+/* Foundation completeness, health and writing gate ----------------------- */
+
+.template-draft-note {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.world-card-foundation {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-raised);
+}
+
+.world-card-foundation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.world-card-foundation-head small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.foundation-world-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.foundation-checklist-card,
+.foundation-health-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper-raised);
+}
+
+.foundation-checklist-card.compact {
+  padding: 14px 16px;
+}
+
+.foundation-checklist-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.foundation-checklist-head h2 {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+
+.foundation-checklist-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.foundation-checklist-count {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.foundation-checklist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.foundation-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+button.foundation-check-row {
+  cursor: pointer;
+}
+
+button.foundation-check-row:hover {
+  border-color: var(--accent);
+  background: var(--accent-pale);
+}
+
+.foundation-check-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--paper-raised);
+  color: var(--muted);
+}
+
+.foundation-check-dot.done {
+  background: var(--accent-pale);
+  color: var(--accent-strong);
+}
+
+.foundation-check-dot.draft {
+  background: color-mix(in srgb, var(--amber, #b7791f) 16%, transparent);
+  color: var(--amber, #b7791f);
+}
+
+.foundation-check-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.foundation-check-copy strong {
+  font-size: 13px;
+}
+
+.foundation-check-copy small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.foundation-health-lead {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.foundation-health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.foundation-health-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.foundation-health-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.foundation-health-item small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.foundation-rule-systems {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.foundation-rule-system-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.foundation-rule-system-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.foundation-rule-system-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.foundation-rule-system-head strong {
+  display: block;
+  font-size: 14px;
+}
+
+.foundation-rule-system-head small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.foundation-rule-system-summary,
+.foundation-rule-systems-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.foundation-rule-system-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.foundation-warning-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--amber, #b7791f) 45%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--amber, #b7791f) 10%, var(--paper));
+}
+
+.foundation-warning-copy {
+  display: flex;
+  flex: 1;
+  min-width: 220px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.foundation-warning-copy p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.foundation-warning-copy small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.foundation-gate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.foundation-gate-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-raised);
+}
+
+.foundation-gate-row strong {
+  display: block;
+  font-size: 13px;
+}
+
+.foundation-gate-row small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.chapter-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

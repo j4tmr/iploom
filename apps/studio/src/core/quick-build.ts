@@ -1,6 +1,7 @@
 import { applyConstruct } from "./cards.ts";
 import { createId, emptyChapter, localized } from "./factory.ts";
 import type {
+  FoundationBypassRecord,
   StoryWork,
   StudioWorkspace,
   UiLocale,
@@ -28,9 +29,11 @@ export function quickBuildWork(
   kind: WorkKind,
   locale: UiLocale,
   now = new Date().toISOString(),
+  options: { foundationBypass?: FoundationBypassRecord } = {},
 ): StoryWork {
   if (!draft.universes.some((universe) => universe.id === universeId))
     throw new Error("unknown world");
+  const bypass = options.foundationBypass;
   const work: StoryWork = {
     id: createId("work"),
     universeId,
@@ -54,10 +57,12 @@ export function quickBuildWork(
               title: locale === "en" ? "Chapter 1" : "第一章",
               number: 1,
               status: "outline",
+              ...(bypass ? { foundationBypass: bypass } : {}),
               now,
             }),
           ]
         : [],
+    ...(bypass ? { foundationBypass: bypass } : {}),
     createdAt: now,
     updatedAt: now,
   };
