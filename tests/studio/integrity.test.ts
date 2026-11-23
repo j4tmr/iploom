@@ -443,19 +443,9 @@ describe("workspace integrity", () => {
     expect(before).toEqual(snapshot);
   });
 
-  test("deleting a novel removes its events, tasks and exports", () => {
+  test("deleting a novel removes its events and tasks", () => {
     const workspace = demo();
     workspace.lastOpenedWorkId = "work_tide_clock";
-    workspace.exports.push({
-      id: "export_tide",
-      workId: "work_tide_clock",
-      workTitle: "The Tide Clock",
-      createdAt: NOW,
-      chapterIds: ["chapter_tide_001"],
-      fileCount: 2,
-      bytes: 100,
-      manifestSha256: "a".repeat(64),
-    });
     workspace.workflowTasks.push({
       ...unscopedTask(),
       id: "task_train_after_tide",
@@ -486,7 +476,6 @@ describe("workspace integrity", () => {
     expect(dependent.parentId).toBeUndefined();
     expect(dependent.dependsOnIds).toEqual([]);
     expect(dependent.characterIds).toEqual(["char_echo"]);
-    expect(next.exports).toEqual([]);
     expect(next.lastOpenedWorkId).toBeUndefined();
     expect(workspace.works).toHaveLength(2);
     expect(() => validateWorkspace(next)).not.toThrow();
@@ -759,28 +748,6 @@ describe("workspace integrity", () => {
       relatedLocationIds: [],
       relatedObjectIds: [],
     });
-    workspace.exports.push(
-      {
-        id: "export_tide",
-        workId: "work_tide_clock",
-        workTitle: "The Tide Clock",
-        createdAt: NOW,
-        chapterIds: ["chapter_tide_001", "chapter_tide_002"],
-        fileCount: 2,
-        bytes: 100,
-        manifestSha256: "a".repeat(64),
-      },
-      {
-        id: "export_train",
-        workId: "work_last_train",
-        workTitle: "The Last Train",
-        createdAt: NOW,
-        chapterIds: ["chapter_train_001"],
-        fileCount: 1,
-        bytes: 10,
-        manifestSha256: "b".repeat(64),
-      },
-    );
     expect(() => validateWorkspace(workspace)).not.toThrow();
 
     const outcome = applyWorkspaceChange(workspace, (draft) => {
@@ -815,12 +782,6 @@ describe("workspace integrity", () => {
     expect(taskById(next, "task_chapter_three").parentId).toBe(
       "task_world_rules",
     );
-    expect(
-      next.exports.find((record) => record.id === "export_tide")?.chapterIds,
-    ).toEqual(["chapter_tide_002"]);
-    expect(
-      next.exports.find((record) => record.id === "export_train")?.chapterIds,
-    ).toEqual(["chapter_train_001"]);
     expect(() => validateWorkspace(next)).not.toThrow();
   });
 

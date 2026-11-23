@@ -1,5 +1,4 @@
-export const WORKSPACE_SCHEMA_VERSION = 11 as const;
-export const ARC_REEL_SCHEMA = "iploom.arcreel/v1" as const;
+export const WORKSPACE_SCHEMA_VERSION = 12 as const;
 /** Longest result text the workspace stores per language. */
 export const MAX_WORKFLOW_RESULT_LENGTH = 200_000 as const;
 /** Longest text a localized name, tagline or summary field may hold per language. */
@@ -495,20 +494,6 @@ export interface WorkflowTask {
 export interface WorkspaceSettings {
   locale: UiLocale;
   theme: ThemeMode;
-  defaultAspectRatio: "9:16" | "16:9" | "1:1";
-  exportApprovedOnly: boolean;
-}
-
-export interface ExportRecord {
-  id: string;
-  workId: string;
-  workTitle: string;
-  createdAt: string;
-  chapterIds: string[];
-  fileCount: number;
-  bytes: number;
-  manifestSha256: string;
-  outputPath?: string;
 }
 
 export interface StudioWorkspace {
@@ -538,7 +523,6 @@ export interface StudioWorkspace {
   timelineEvents: TimelineEvent[];
   workflowTasks: WorkflowTask[];
   works: StoryWork[];
-  exports: ExportRecord[];
 }
 
 export interface RelationshipNode {
@@ -582,41 +566,6 @@ export interface WorkspaceStats {
   relationships: number;
   timelineEvents: number;
   workflowTasks: number;
-}
-
-export interface ArcReelFile {
-  path: string;
-  content: string;
-  mediaType: "application/json" | "text/markdown" | "text/plain";
-}
-
-export interface ArcReelChapterPreview {
-  chapterId: string;
-  number: number;
-  title: string;
-  status: ChapterStatus;
-  words: number;
-  sceneCount: number;
-  shotCount: number;
-}
-
-export interface ArcReelBundle {
-  schema: typeof ARC_REEL_SCHEMA;
-  generatedAt: string;
-  workspaceRevision: number;
-  universeId: string;
-  workId: string;
-  workTitle: string;
-  workLanguage: UiLocale;
-  aspectRatio: string;
-  style: "stylized-3d-animation";
-  chapters: ArcReelChapterPreview[];
-  totalWords: number;
-  totalScenes: number;
-  totalShots: number;
-  warnings: string[];
-  files: ArcReelFile[];
-  manifestSha256: string;
 }
 
 export interface SearchHit {

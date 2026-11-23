@@ -10,8 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { constants, type Dirent } from "node:fs";
-import { basename, dirname, join, normalize, resolve, sep } from "node:path";
-import { arcReelSlug } from "../core/arcreel.ts";
+import { basename, dirname, join, resolve } from "node:path";
 import { createEmptyWorkspace } from "../core/factory.ts";
 import { loadWorkspace } from "../core/integrity.ts";
 import {
@@ -20,11 +19,9 @@ import {
 } from "../core/validate.ts";
 import {
   WORKSPACE_SCHEMA_VERSION,
-  type ArcReelBundle,
   type StudioWorkspace,
   type UiLocale,
 } from "../core/types.ts";
-import { parseArcReelBundle } from "./desktop-guards.ts";
 import {
   englishMainMessages,
   mainMessagesFor,
@@ -198,12 +195,6 @@ export interface WorkspaceSaveOptions {
   baseRevision?: number;
 }
 
-export interface WrittenBundle {
-  directory: string;
-  files: number;
-  bytes: number;
-}
-
 export interface WorkspaceSnapshot {
   path: string;
   name: string;
@@ -235,22 +226,6 @@ async function exists(path: string): Promise<boolean> {
 
 function backupPath(path: string): string {
   return `${path}.bak`;
-}
-
-function safeBundlePath(
-  value: string,
-  store: MainMessages["store"] = englishMainMessages.store,
-): string {
-  const normalized = normalize(value).replaceAll("\\", "/");
-  if (
-    !normalized ||
-    normalized.startsWith("/") ||
-    normalized.startsWith("../") ||
-    normalized.includes("/../") ||
-    normalized.includes("\0")
-  )
-    throw new Error(store.unsafeExportPath(value));
-  return normalized;
 }
 
 export class WorkspaceStore {
@@ -634,62 +609,6 @@ export class WorkspaceStore {
         )
         .map((snapshot) => rm(snapshot.path, { force: true })),
     );
-  }
-
-  async exportArcReel(
-    bundleInput: ArcReelBundle,
-    destinationRoot: string,
-  ): Promise<WrittenBundle> {
-    // Validate every field before creating anything. In particular the hash
-    // and timestamp feed the directory name, so a compromised renderer could
-    // otherwise escape the selected directory with `manifestSha256: "/../..//"`.
-    const bundle = parseArcReelBundle(bundleInput);
-    const destination = resolve(destinationRoot);
-    const timestamp = bundle.generatedAt
-      .replace(/[-:]/g, "")
-      .replace(/\..+$/, "")
-      .replace("T", "-");
-    const baseDirectory = join(
-      destination,
-      `${arcReelSlug(bundle.workTitle)}-${timestamp}-${bundle.manifestSha256.slice(0, 8)}-arcreel`,
-    );
-    let directory = baseDirectory;
-    for (let suffix = 2; await exists(directory); suffix += 1) {
-      directory = `${baseDirectory}-${suffix}`;
-    }
-    // The package must stay exactly one level below the selected destination.
-    if (dirname(directory) !== destination) {
-      throw new Error(this.messages.exportDirectoryEscapes);
-    }
-    await mkdir(destination, { recursive: true });
-    const staging = join(
-      destination,
-      `.iploom-staging-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    );
-    const seen = new Set<string>();
-    let bytes = 0;
-    try {
-      await mkdir(staging, { recursive: true });
-      for (const file of bundle.files) {
-        const relative = safeBundlePath(file.path, this.messages);
-        if (seen.has(relative))
-          throw new Error(this.messages.duplicateExportFile(relative));
-        seen.add(relative);
-        const target = resolve(staging, relative);
-        if (target !== staging && !target.startsWith(`${staging}${sep}`))
-          throw new Error(this.messages.exportPathEscapes(relative));
-        await mkdir(dirname(target), { recursive: true });
-        await writeFile(target, file.content, "utf8");
-        bytes += new TextEncoder().encode(file.content).byteLength;
-      }
-      await rename(staging, directory);
-    } catch (error) {
-      await rm(staging, { recursive: true, force: true }).catch(
-        () => undefined,
-      );
-      throw error;
-    }
-    return { directory, files: bundle.files.length, bytes };
   }
 }
 

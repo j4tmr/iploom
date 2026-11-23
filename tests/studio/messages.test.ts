@@ -2,8 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildArcReelBundle } from "../../apps/studio/src/core/arcreel.ts";
-import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import {
   aiConfigSchema,
   createAiConfigSchema,
@@ -21,10 +19,7 @@ import {
   rendererCrashDialog,
   type MainDialogOptions,
 } from "../../apps/studio/src/node/dialog-copy.ts";
-import {
-  parseArcReelBundle,
-  revealKnownPath,
-} from "../../apps/studio/src/node/desktop-guards.ts";
+import { revealKnownPath } from "../../apps/studio/src/node/desktop-guards.ts";
 import {
   englishMainMessages,
   mainMessagesFor,
@@ -142,9 +137,6 @@ describe("message catalog", () => {
     expect(englishMainMessages.ai.httpHint(429, 7)).toBe(
       "Rate limit or quota reached; retry after 7 seconds.",
     );
-    expect(englishMainMessages.guards.invalidArcReelBundle(" at a.b")).toBe(
-      "Invalid ArcReel bundle at a.b",
-    );
     expect(englishMainMessages.mcpConfig.bunMissing).toBe(
       "The development MCP server needs Bun, but no Bun executable was found.",
     );
@@ -202,48 +194,6 @@ describe("localized workspace store", () => {
     await expect(
       store.restoreSnapshot(join(root, "nope.json")),
     ).rejects.toThrow("不是工作区快照");
-  });
-
-  test("zh store localizes unsafe export paths; English default stays", async () => {
-    const workspace = createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z");
-    const bundle = await buildArcReelBundle(workspace, {
-      workId: "work_tide_clock",
-      generatedAt: "2026-11-06T03:00:00.000Z",
-    });
-    const tampered = {
-      ...bundle,
-      files: bundle.files.map((file, index) =>
-        index === 0 ? { ...file, path: "../escape.md" } : file,
-      ),
-    };
-    const root = mkdtempSync(join(tmpdir(), "iploom-messages-"));
-    await expect(
-      new WorkspaceStore(
-        join(root, "workspace.json"),
-        zhMainMessages,
-      ).exportArcReel(tampered, join(root, "exports")),
-    ).rejects.toThrow("不安全的导出路径");
-    await expect(
-      new WorkspaceStore(join(root, "workspace.json")).exportArcReel(
-        tampered,
-        join(root, "exports"),
-      ),
-    ).rejects.toThrow("Unsafe export path");
-  });
-
-  test("zh guards localize ArcReel bundle rejections", async () => {
-    const workspace = createDemoWorkspace("zh-CN", "2026-11-06T00:00:00.000Z");
-    const bundle = await buildArcReelBundle(workspace, {
-      workId: "work_tide_clock",
-      generatedAt: "2026-11-06T03:00:00.000Z",
-    });
-    const tampered = { ...bundle, files: [] };
-    expect(() => parseArcReelBundle(tampered, zhMainMessages.guards)).toThrow(
-      "无效的 ArcReel 交付包",
-    );
-    expect(() => parseArcReelBundle(tampered)).toThrow(
-      "Invalid ArcReel bundle",
-    );
   });
 });
 

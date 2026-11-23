@@ -98,7 +98,6 @@ const zh = {
   unsaved: "未保存",
   changeRejected: "更改未应用：",
   resultTooLong: "结果超过 {limit} 字符的保存上限，请先复制并精简后再保存。",
-  exportWorkMissing: "导出已完成，但小说已被删除，本次导出未记入历史。",
   local: "本地优先",
   desktop: "桌面端",
   browserPreview: "浏览器预览",
@@ -178,7 +177,7 @@ const zh = {
   adaptation: "漫剧改编",
   dashboardTitle: "让每一个世界都长出可以拍的故事。",
   dashboardLead:
-    "先建立 IP 的规则、人物与关系，再进入单本小说；章节、分镜草案与 ArcReel 交接包始终来自同一份世界事实。",
+    "先建立 IP 的规则、人物与关系，再进入单本作品；章节、设定与代理任务始终来自同一份世界事实。",
   buildWorld: "建立世界",
   writeNovel: "开始写小说",
   viewAll: "查看全部",
@@ -192,7 +191,7 @@ const zh = {
   worldCreatedFromTemplate: "世界「{name}」已创建，模板内容可以随意修改。",
   emptyDashboard: "从第一个世界开始。",
   emptyDashboardLead:
-    "新建 IP 宇宙，填入它的规则与人物。小说会继承这些资料，之后可一键生成 3D 漫剧交接包。",
+    "新建 IP 宇宙，填入它的规则与人物。小说与游戏都会继承这些世界资料，并通过本地 MCP 与外部代理共享。",
   createWorldTitle: "新建 IP 宇宙",
   createWorldLead: "一个宇宙可以承载多本小说、短篇和改编项目。",
   createNovelTitle: "新建小说",
@@ -270,7 +269,7 @@ const zh = {
   dataLocationNote: "桌面版以原子写入保存 workspace.json，并保留上一版备份。",
   mcpTitle: "MCP 连接",
   mcpLead:
-    "内置 stdio MCP 让 ArcReel、Claude、Codex 等客户端直接读取 IP 资料并生成交接包。",
+    "内置 stdio MCP 让 Claude、Codex 等客户端直接读取和更新本地 IP 工作区资料。",
   mcpConfig: "客户端配置",
   copyConfig: "复制配置",
   copied: "已复制",
@@ -310,7 +309,7 @@ const zh = {
   appModeBrowser: "浏览器版",
   recheckUpdates: "重新检查",
   aboutBody:
-    "IPloom Studio 是一个本地优先的开源 IP 创作工作台。内容不离开本机；MCP 与 ArcReel 交接包都由用户主动触发。",
+    "IPloom Studio 是一个本地优先的开源 IP 创作工作台。内容不离开本机，本地 MCP 连接完全由用户主动配置。",
   noResults: "没有找到结果。",
   searchHint: "试试“钥匙”“回声”或“00:07”。",
   selectUniverse: "选择宇宙",
@@ -322,8 +321,6 @@ const zh = {
   openNovel: "打开小说",
   createFirstChapter: "创建第一章",
   chapterStatus: "章节状态",
-  noAdaptationPreview: "生成预览后，这里会显示场景与文件结构。",
-  draftNote: "自动分镜是草案，必须由作者逐项核对后再进入生成与付费流程。",
   loreCategory: "设定类型",
   atmosphere: "氛围",
   goal: "目标",
@@ -365,11 +362,8 @@ const zh = {
   deleteNovel: "删除小说",
   deleteWork: "删除作品",
   confirmDeleteWorld:
-    "将删除该宇宙及其全部小说、章节、人物、地点、势力、关系与导出记录。此操作不可撤销，确定继续吗？",
-  confirmDeleteNovel:
-    "将删除该小说、全部章节与相关导出记录。此操作不可撤销，确定继续吗？",
-  bundleOutdated: "正文或世界资料已变化，当前预览已经过期。",
-  regenerateRequired: "请重新生成预览后再导出。",
+    "将删除该宇宙及其全部作品、章节、人物、地点、势力与关系。此操作不可撤销，确定继续吗？",
+  confirmDeleteNovel: "将删除该作品及全部章节。此操作不可撤销，确定继续吗？",
   duplicateChapterNumber: "该章节序号已被占用。",
 
   modelLabel: "模型",
@@ -423,7 +417,6 @@ const zh = {
   entityLocation: "地点",
   entityFaction: "势力",
   entityLore: "世界设定",
-  entityExport: "导出记录",
   entityCardType: "节点类型",
   entityCard: "节点卡片",
   entityCardEdge: "节点关系",
@@ -887,8 +880,6 @@ const en: Record<MessageKey, string> = {
   changeRejected: "Change not applied:",
   resultTooLong:
     "The result exceeds the {limit}-character save limit. Copy and shorten it before saving.",
-  exportWorkMissing:
-    "The export finished, but its novel was deleted; the export was not recorded.",
   local: "Local-first",
   desktop: "Desktop",
   browserPreview: "Browser preview",
@@ -969,7 +960,7 @@ const en: Record<MessageKey, string> = {
   adaptation: "Screen adaptation",
   dashboardTitle: "Grow worlds that are ready to be filmed.",
   dashboardLead:
-    "Define the IP's rules, cast and relationships before entering a single novel. Chapters, storyboard drafts and ArcReel handoffs all read from one source of world truth.",
+    "Define the IP's rules, cast and relationships before entering a single work. Chapters, notes and agent tasks all read from one source of world truth.",
   buildWorld: "Build a world",
   writeNovel: "Start a novel",
   viewAll: "View all",
@@ -984,7 +975,7 @@ const en: Record<MessageKey, string> = {
     'World "{name}" created; the template content is yours to edit.',
   emptyDashboard: "Start with the first world.",
   emptyDashboardLead:
-    "Create an IP universe with its rules and cast. Novels inherit this material and can generate a stylized 3D screen handoff in one step.",
+    "Create an IP universe with its rules and cast. Novels and games inherit this material and share it with external agents over local MCP.",
   createWorldTitle: "New IP universe",
   createWorldLead:
     "One world can hold many novels, short stories and adaptations.",
@@ -1071,7 +1062,7 @@ const en: Record<MessageKey, string> = {
     "The desktop app writes workspace.json atomically and retains the previous backup.",
   mcpTitle: "MCP connection",
   mcpLead:
-    "The built-in stdio MCP server lets ArcReel, Claude, Codex and other clients read IP data and build handoff packages.",
+    "The built-in stdio MCP server lets Claude, Codex and other clients read and update your local IP workspace.",
   mcpConfig: "Client config",
   copyConfig: "Copy config",
   copied: "Copied",
@@ -1112,7 +1103,7 @@ const en: Record<MessageKey, string> = {
   appModeBrowser: "Browser preview",
   recheckUpdates: "Check again",
   aboutBody:
-    "IPloom Studio is a local-first, open-source workspace for building IP. Content stays on your machine; MCP reads and ArcReel handoffs are user-initiated.",
+    "IPloom Studio is a local-first, open-source workspace for building IP. Content stays on your machine, and local MCP access is always user-configured.",
   noResults: "No results found.",
   searchHint: "Try “key”, “Echo” or “00:07”.",
   selectUniverse: "Select world",
@@ -1124,10 +1115,6 @@ const en: Record<MessageKey, string> = {
   openNovel: "Open novel",
   createFirstChapter: "Create first chapter",
   chapterStatus: "Chapter status",
-  noAdaptationPreview:
-    "Generate a preview to inspect scenes and the package file tree.",
-  draftNote:
-    "Automatic boards are drafts. The author must review them before generation or paid execution.",
   loreCategory: "Lore category",
   atmosphere: "Atmosphere",
   goal: "Goal",
@@ -1170,12 +1157,9 @@ const en: Record<MessageKey, string> = {
   deleteNovel: "Delete novel",
   deleteWork: "Delete work",
   confirmDeleteWorld:
-    "This deletes the world and all of its novels, chapters, characters, locations, factions, relationships and export records. This cannot be undone. Continue?",
+    "This deletes the world and all of its works, chapters, characters, locations, factions and relationships. This cannot be undone. Continue?",
   confirmDeleteNovel:
-    "This deletes the novel, all of its chapters and related export records. This cannot be undone. Continue?",
-  bundleOutdated:
-    "The manuscript or world material changed. This preview is outdated.",
-  regenerateRequired: "Regenerate the preview before exporting.",
+    "This deletes the work and all of its chapters. This cannot be undone. Continue?",
   duplicateChapterNumber: "That chapter number is already in use.",
 
   modelLabel: "Model",
@@ -1234,7 +1218,6 @@ const en: Record<MessageKey, string> = {
   entityLocation: "Location",
   entityFaction: "Faction",
   entityLore: "World lore",
-  entityExport: "Export record",
   entityCardType: "Node type",
   entityCard: "Node card",
   entityCardEdge: "Node relation",

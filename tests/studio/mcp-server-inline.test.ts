@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { join } from "node:path";
 import { createDemoWorkspace } from "../../apps/studio/src/core/factory.ts";
 import { MCP_TOOL_COUNTS } from "../../apps/studio/src/core/mcp-tools.ts";
 import { WorkspaceStore } from "../../apps/studio/src/node/workspace-store.ts";
@@ -20,15 +20,12 @@ interface InlineServer {
   close: () => Promise<void>;
 }
 
-async function connectInline(
-  workspacePath: string,
-  options: Parameters<typeof createStudioMcpServer>[1] = {},
-): Promise<InlineServer> {
+async function connectInline(workspacePath: string): Promise<InlineServer> {
   const client = new Client({
     name: "iploom-studio-inline-test",
     version: "0.3.0",
   });
-  const server = createStudioMcpServer(workspacePath, options);
+  const server = createStudioMcpServer(workspacePath);
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
   await Promise.all([
@@ -79,7 +76,7 @@ async function call(
   };
 }
 
-test("inline MCP server exposes every tool and answers reads, writes and exports", async () => {
+test("inline MCP server exposes every tool and answers reads and writes", async () => {
   const root = mkdtempSync(join(tmpdir(), "iploom-studio-inline-mcp-"));
   const workspacePath = join(root, "workspace.json");
   await new WorkspaceStore(workspacePath).save(
@@ -267,84 +264,9 @@ test("inline MCP server exposes every tool and answers reads, writes and exports
     expect((unanchoredEvent.body.error as { code: string }).code).toBe(
       "invalid_arguments",
     );
-
-    const exported = await call(inline, "export_arcreel_bundle", {
-      novel_id: "work_tide_clock",
-      chapter_ids: ["chapter_tide_001"],
-      approved_only: true,
-      output_dir: "exports/inline",
-    });
-    expect(exported.isError).toBe(false);
-    const directory = exported.body.directory as string;
-    expect(dirname(directory)).toBe(join(root, "exports", "inline"));
-    expect(existsSync(join(directory, "manifest.json"))).toBe(true);
-    expect(readdirSync(join(root, "exports"))).toEqual(["inline"]);
   } finally {
     await inline.close();
     rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("inline MCP server confines exports to allowed roots and honours exportRoots", async () => {
-  const root = mkdtempSync(join(tmpdir(), "iploom-studio-inline-root-"));
-  const outside = mkdtempSync(join(tmpdir(), "iploom-studio-inline-out-"));
-  const extra = mkdtempSync(join(tmpdir(), "iploom-studio-inline-extra-"));
-  const workspacePath = join(root, "workspace.json");
-  await new WorkspaceStore(workspacePath).save(
-    createDemoWorkspace("en", "2026-11-06T00:00:00.000Z"),
-  );
-  try {
-    const inline = await connectInline(workspacePath);
-    try {
-      const escaped = await call(inline, "export_arcreel_bundle", {
-        novel_id: "work_tide_clock",
-        approved_only: true,
-        output_dir: outside,
-      });
-      expect(escaped.isError).toBe(true);
-      expect(escaped.text).toContain("allowed export directories");
-      expect(readdirSync(outside)).toEqual([]);
-
-      const traversed = await call(inline, "export_arcreel_bundle", {
-        novel_id: "work_tide_clock",
-        approved_only: true,
-        output_dir: `../${basename(root)}-escape`,
-      });
-      expect(traversed.isError).toBe(true);
-      expect(existsSync(join(root, "..", `${basename(root)}-escape`))).toBe(
-        false,
-      );
-    } finally {
-      await inline.close();
-    }
-
-    const widened = await connectInline(workspacePath, {
-      exportRoots: [extra],
-    });
-    try {
-      const inExtra = await call(widened, "export_arcreel_bundle", {
-        novel_id: "work_tide_clock",
-        approved_only: true,
-        output_dir: extra,
-      });
-      expect(inExtra.isError).toBe(false);
-      expect(dirname(inExtra.body.directory as string)).toBe(extra);
-      expect(existsSync(join(root, "exports"))).toBe(false);
-
-      const stillOutside = await call(widened, "export_arcreel_bundle", {
-        novel_id: "work_tide_clock",
-        approved_only: true,
-        output_dir: outside,
-      });
-      expect(stillOutside.isError).toBe(true);
-      expect(stillOutside.text).toContain("allowed export directories");
-    } finally {
-      await widened.close();
-    }
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
-    rmSync(extra, { recursive: true, force: true });
   }
 });
 
